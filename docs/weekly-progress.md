@@ -31,7 +31,7 @@ None faced.
 ## Week 2
 
 **Branch:** `zarawar-week-02` 
-**PR link:** [Add link after opening PR]
+**PR link:** (https://github.com/AI-Security-Internships-2026/09-edge-iot-security-monitoring/pull/2)
 
 ### Completed this week
 
