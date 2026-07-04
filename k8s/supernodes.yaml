@@ -1,0 +1,399 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-1
+spec:
+  selector:
+    app: supernode-1
+  ports:
+    - port: 9094
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-1
+  template:
+    metadata:
+      labels:
+        app: supernode-1
+    spec:
+      containers:
+        - name: supernode-1
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=0 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9094"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9094
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-2
+spec:
+  selector:
+    app: supernode-2
+  ports:
+    - port: 9095
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-2
+  template:
+    metadata:
+      labels:
+        app: supernode-2
+    spec:
+      containers:
+        - name: supernode-2
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=1 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9095"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9095
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-3
+spec:
+  selector:
+    app: supernode-3
+  ports:
+    - port: 9096
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-3
+  template:
+    metadata:
+      labels:
+        app: supernode-3
+    spec:
+      containers:
+        - name: supernode-3
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=2 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9096"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9096
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-4
+spec:
+  selector:
+    app: supernode-4
+  ports:
+    - port: 9097
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-4
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-4
+  template:
+    metadata:
+      labels:
+        app: supernode-4
+    spec:
+      containers:
+        - name: supernode-4
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=3 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9097"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9097
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-5
+spec:
+  selector:
+    app: supernode-5
+  ports:
+    - port: 9098
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-5
+  template:
+    metadata:
+      labels:
+        app: supernode-5
+    spec:
+      containers:
+        - name: supernode-5
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=4 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9098"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9098
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-6
+spec:
+  selector:
+    app: supernode-6
+  ports:
+    - port: 9099
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-6
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-6
+  template:
+    metadata:
+      labels:
+        app: supernode-6
+    spec:
+      containers:
+        - name: supernode-6
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=5 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9099"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9099
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-7
+spec:
+  selector:
+    app: supernode-7
+  ports:
+    - port: 9100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-7
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-7
+  template:
+    metadata:
+      labels:
+        app: supernode-7
+    spec:
+      containers:
+        - name: supernode-7
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=6 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9100"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-8
+spec:
+  selector:
+    app: supernode-8
+  ports:
+    - port: 9101
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-8
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-8
+  template:
+    metadata:
+      labels:
+        app: supernode-8
+    spec:
+      containers:
+        - name: supernode-8
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=7 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9101"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9101
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-9
+spec:
+  selector:
+    app: supernode-9
+  ports:
+    - port: 9102
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-9
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-9
+  template:
+    metadata:
+      labels:
+        app: supernode-9
+    spec:
+      containers:
+        - name: supernode-9
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=8 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9102"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9102
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supernode-10
+spec:
+  selector:
+    app: supernode-10
+  ports:
+    - port: 9103
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supernode-10
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supernode-10
+  template:
+    metadata:
+      labels:
+        app: supernode-10
+    spec:
+      containers:
+        - name: supernode-10
+          image: flwr/supernode:1.31.0
+          args:
+            - "--insecure"
+            - "--superlink"
+            - "superlink:9092"
+            - "--node-config"
+            - "partition-id=9 num-partitions=10"
+            - "--clientappio-api-address"
+            - "0.0.0.0:9103"
+            - "--isolation"
+            - "process"
+          ports:
+            - containerPort: 9103

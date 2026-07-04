@@ -1,0 +1,369 @@
+services:
+  superlink:
+    image: flwr/superlink:1.31.0
+    restart: unless-stopped
+    command: ["--insecure", "--isolation", "process"]
+    ports:
+      - "9091:9091"
+      - "9092:9092"
+      - "9093:9093"
+    networks:
+      - flwr-network
+
+  supernode-1:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=0 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9094"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9094:9094"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-2:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=1 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9095"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9095:9095"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-3:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=2 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9096"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9096:9096"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-4:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=3 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9097"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9097:9097"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-5:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=4 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9098"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9098:9098"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-6:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=5 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9099"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9099:9099"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-7:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=6 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9100"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9100:9100"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-8:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=7 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9101"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9101:9101"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-9:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=8 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9102"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9102:9102"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  supernode-10:
+    image: flwr/supernode:1.31.0
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--superlink"
+      - "superlink:9092"
+      - "--node-config"
+      - "partition-id=9 num-partitions=10"
+      - "--clientappio-api-address"
+      - "0.0.0.0:9103"
+      - "--isolation"
+      - "process"
+    ports:
+      - "9103:9103"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  superexec-serverapp:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "serverapp"
+      - "--appio-api-address"
+      - "superlink:9091"
+    depends_on:
+      - superlink
+    networks:
+      - flwr-network
+
+  superexec-clientapp-1:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-1:9094"
+    depends_on:
+      - supernode-1
+    networks:
+      - flwr-network
+
+  superexec-clientapp-2:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-2:9095"
+    depends_on:
+      - supernode-2
+    networks:
+      - flwr-network
+
+  superexec-clientapp-3:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-3:9096"
+    depends_on:
+      - supernode-3
+    networks:
+      - flwr-network
+
+  superexec-clientapp-4:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-4:9097"
+    depends_on:
+      - supernode-4
+    networks:
+      - flwr-network
+
+  superexec-clientapp-5:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-5:9098"
+    depends_on:
+      - supernode-5
+    networks:
+      - flwr-network
+
+  superexec-clientapp-6:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-6:9099"
+    depends_on:
+      - supernode-6
+    networks:
+      - flwr-network
+
+  superexec-clientapp-7:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-7:9100"
+    depends_on:
+      - supernode-7
+    networks:
+      - flwr-network
+
+  superexec-clientapp-8:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-8:9101"
+    depends_on:
+      - supernode-8
+    networks:
+      - flwr-network
+
+  superexec-clientapp-9:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-9:9102"
+    depends_on:
+      - supernode-9
+    networks:
+      - flwr-network
+
+  superexec-clientapp-10:
+    image: flwr_superexec:0.0.1
+    restart: unless-stopped
+    command:
+      - "--insecure"
+      - "--plugin-type"
+      - "clientapp"
+      - "--appio-api-address"
+      - "supernode-10:9103"
+    depends_on:
+      - supernode-10
+    networks:
+      - flwr-network
+
+networks:
+  flwr-network:
+    driver: bridge
