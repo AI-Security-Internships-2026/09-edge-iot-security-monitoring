@@ -74,6 +74,38 @@ None faced.
 
 - Plug in the real Edge-IIoTset dataset (replacing the random placeholder data in `client_app.py`) and partition it across the 10 simulated clients
 - Re-run the 10-client FL loop with real data and record accuracy against the 92.49% Rashid et al. benchmark
+<<<<<<< Updated upstream
 =======
 >>>>>>> origin/dev
 - Begin implementing Krum aggregation as the first defence baseline
+=======
+- Begin implementing Krum aggregation as the first defence baseline
+
+## Week 4
+
+**Branch:** `zarawar-week-04`
+**PR link:** (https://github.com/AI-Security-Internships-2026/09-edge-iot-security-monitoring/pull/4)
+
+### Completed this week
+
+- Integrated the full Edge-IIoTset DNN feature set (1.2GB CSV) into the FL pipeline with `.npz` disk caching so the CSV is only parsed once per machine
+- Discovered and fixed a critical silent preprocessing bug: `VarianceThreshold(1e-6)` was dropping all HTTP and UDP features (29 of 52 columns) because they have low variance across the full dataset — destroying the only signal distinguishing Backdoor, XSS, Password, SQL_injection, and Uploading, and causing DDoS_UDP to sit at F1=0.0000 permanently for 20+ rounds
+- Applied the fix per-model rather than globally: the network model retains `VarianceThreshold` (reducing to ~40 features) while the application model skips it entirely, preserving all HTTP features (`http.request.uri.query`, `http.file_data`, `http.content_length`, etc.) that are essential for application-layer attack separation
+- Applied a VARS-FL-style dataset cap, reducing DDoS_TCP from 72.8% of total rows down to 18% to remove a lab-generation artefact; all other classes left at natural counts
+- Updated class weights in both `build_criterion_network()` and `build_criterion_application()` using real per-class sample counts from the preprocessed cache, with manual overrides for feature-confused classes (Backdoor ×5, XSS ×4, Password ×3, Fingerprinting ×3)
+- Split the 15-class problem into two specialised 8-class models controlled by a single CLI flag (`python src/main.py network` / `python src/main.py application`): a network-layer model covering volumetric and protocol attacks, and an application-layer model covering stealth and payload attacks, each with its own Focal Loss criterion, feature set, class weights, and output files
+- Implemented FedProx (`μ=0.01`) as the local training algorithm
+- Added gradient clipping (`max_norm=1.0`) and switched the LR scheduler to a gentler decay (`StepLR step_size=3, gamma=0.95`) to prevent the training collapses observed in earlier runs
+- Established pre-defence baselines for both models across 25 rounds — locking in per-class F1 numbers that serve as the comparison point for all subsequent Krum, FLDetector, and DP-SGD experiments
+- Expanded literature review from 10 to 12 papers — replaced McMahan FedAvg with FedProx (Li et al., NeurIPS 2020) and added VARS-FL (Lakas & Ferrag, 2026) and Alsaleh et al. (Sensors, 2025), both of which benchmark FL on the same 15-class Edge-IIoTset dataset, I consulted both these papers for guidance and so it was necessary to add them
+
+### Problems / Blockers
+
+- The application-layer model initially produced diverging loss (rounds 18–22) when `PROX_MU=0.1` was used — the proximal term was anchoring clients too strongly to a biased global model. Resolved by reducing to `PROX_MU=0.01`, which stabilised training.
+
+### Next week plan
+
+- Begin implementing Multi-Krum (`m=7`) by writing `src/defences/krum.py` and uncommenting the existing `DEFENCE HOOK` in `main.py`
+- Inject simulated Byzantine clients (2 of 10 sending scaled-negative updates) to give Krum something to actually defend against and record detection rate vs. accuracy tradeoff
+- Begin FLDetector implementation using per-client update history tracking
+>>>>>>> Stashed changes

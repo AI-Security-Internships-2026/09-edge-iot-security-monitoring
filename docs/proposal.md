@@ -15,15 +15,15 @@ This project is carried out within the AI Security research agenda of CNIT/PNTLa
 
 ## 2. Problem Statement
 
-IoT deployments are increasingly targeted by sophisticated cyberattacks, yet existing intrusion detection systems require raw traffic data to be sent to a central server, creating unacceptable privacy risks and bandwidth costs for industrial operators. Federated Learning solves the data-locality problem but opens a new attack surface: compromised edge nodes can poison the global model, inject hidden backdoors, or leak training data through gradient inversion. No existing solution combines Byzantine-robust aggregation, backdoor defence, and differential privacy into a single hardened system, and no prior work quantifies how these defences interact when composed together or identifies the minimum viable configuration that satisfies formal privacy, detection, and accuracy constraints simultaneously. This project builds and evaluates exactly that system.
+IoT deployments are increasingly targeted by sophisticated cyberattacks, yet existing intrusion detection systems require raw traffic data to be sent to a central server, creating unacceptable privacy risks and bandwidth costs for industrial operators. Federated Learning solves the data-locality problem but opens a new attack surface: compromised edge nodes can poison the global model, inject hidden backdoors, or leak training data through gradient inversion. A further challenge specific to IoT IDS is that network traffic datasets exhibit severe class imbalance and device heterogeneity, network-layer attacks such as DDoS variants are orders of magnitude more frequent than application-layer attacks such as SQL injection, backdoors, and fingerprinting. Under non-IID federated conditions, standard single-model architectures systematically suppress minority attack class detection, a penalty documented in recent literature (Lakas and Ferrag, 2026; Alsaleh et al., 2025) but not yet addressed through architectural specialisation. No existing solution combines a dual-model architecture separating network-layer and application-layer attack detection, Byzantine-robust aggregation, backdoor defence, and differential privacy into a single hardened system, and no prior work quantifies how these defences interact when composed together across both model types or identifies the minimum viable configuration that satisfies formal privacy, detection, and accuracy constraints simultaneously. This project builds and evaluates exactly that system.
 
 ---
 
 ## 3. Research Questions
 
-1. _RQ1: Under device-heterogeneous non-IID data distributions on Edge-IIoTset, what is the per-attack-class F1 and recall gap between the proposed FL-IDS and a centralised supervised baseline, and do minority attack categories incur a disproportionately larger federated performance penalty than majority classes?_
-2. _RQ2: When Krum, FLDetector, and DP-SGD are composed into a single unified pipeline, does the combined system achieve strictly lower attack success rate and higher poisoning detection rate than any individual defence in isolation, and at what privacy budget ε does DP noise begin to measurably degrade FLDetector's client-level anomaly detection?_
-3. _RQ3: What is the minimum viable defence configuration, in terms of privacy budget ε, client participation rate, and aggregation rounds, that simultaneously satisfies a formal DP guarantee, a poisoning detection rate above a defined threshold, and per-class F1 and recall within an acceptable margin of the undefended FedAvg baseline?_
+1. _RQ1: Under device-heterogeneous non-IID data distributions on Edge-IIoTset, what per-attack-class F1 and recall does a dual-model CNN-LSTM FL-IDS achieve under undefended FedProx, with one model specialised for network-layer attacks and one for application-layer attacks, and does this architectural separation reduce the known non-IID minority class performance penalty compared to a unified single-model baseline?_
+2. _RQ2: When Multi-Krum, FLDetector, and DP-SGD are composed into a single unified defence pipeline and applied to the dual-model FL-IDS, does the combined system achieve consistently lower attack success rate and higher poisoning detection rate than any individual defence in isolation, and at what privacy budget ε does DP noise begin to measurably degrade FLDetector's client-level anomaly detection, particularly for minority attack classes whose gradient signal is already sparse under non-IID conditions?_
+3. _RQ3: What is the minimum viable defence configuration in terms of privacy budget ε, client participation rate, and aggregation rounds that simultaneously satisfies a formal DP guarantee (ε ≤ 10), a poisoning detection rate above 80%, and per-class F1 within 10 percentage points of the undefended FedProx baseline for all attack categories including minority classes?_
 
 ---
 
@@ -56,9 +56,11 @@ The dataset files are stored strictly on local scratch space and are systematica
 
 ### 4.2 Approach
 
-The core contribution of this project is not any single defence technique, since each exists in prior work, but their composition into one unified and configurable system evaluated against the full attack surface simultaneously. Results are analysed at the per-class level to expose minority-category recall degradation that aggregate accuracy metrics would otherwise hide.
-
-Phase 1 trains a supervised PyTorch MLP on the full Edge-IIoTset training split in a centralised setting, recording per-attack-class F1 and recall across all 14 categories to establish the performance ceiling (RQ1). Phase 2 replicates training using Flower with data partitioned across simulated edge clients via Dirichlet Non-IID sharding (α = 0.5) and standard FedAvg aggregation, computing the per-class F1 and recall gap versus the centralised baseline with particular attention to minority attack categories (RQ1). Phase 3 introduces a configurable fraction of malicious clients injecting simultaneous model poisoning and backdoor attacks (Bagdasaryan et al. 2020 constrain-and-scale), then applies each defence in isolation and all three composed, recording attack success rate (ASR), poisoning detection rate (PDR), per-class F1, and per-class recall for each configuration, with ε varied across {3.0, 10.0, ∞} to identify the point at which DP noise degrades FLDetector detection (RQ2). Phase 4 sweeps ε ∈ {1.0, 3.0, 5.0, 10.0, ∞}, client participation rates ∈ {20%, 40%, 60%, 80%, 100%}, and aggregation rounds ∈ {10, 20, 50, 100} to find the minimum viable (ε, participation, rounds) triple satisfying formal DP, PDR threshold, and per-class F1 and recall constraints simultaneously (RQ3).
+The core contribution of this project is not any single defence technique as each exists in prior work, but their composition into one unified configurable system built on a dual-model architecture that separates network-layer and application-layer intrusion detection, evaluated against the full attack surface simultaneously. Results are analysed at the per-class level to expose minority-category recall degradation that aggregate accuracy metrics would otherwise hide.
+Phase 1 — Centralised baseline: Trains a supervised CNN-LSTM on the full Edge-IIoTset training split in a centralised setting, recording per-attack-class F1 and recall across all 15 classes to establish the performance ceiling.
+Phase 2 — Federated baseline with dual-model architecture: Deploys two specialised FL models using Flower with FedProx (μ=0.1) aggregation and Dirichlet non-IID sharding (α=0.7) across 10 simulated edge clients. Model 1 trains on network-layer attacks (Normal, DDoS variants, Ransomware, Vulnerability_scanner, MITM). Model 2 trains on application-layer attacks (Normal, SQL_injection, Uploading, Backdoor, Port_Scanning, XSS, Password, Fingerprinting). Per-class F1 and recall gaps versus the centralised baseline are computed for both models, with particular attention to minority classes (RQ1).
+Phase 3 — Defence composition: Introduces a configurable fraction of malicious clients injecting model poisoning and backdoor attacks (Bagdasaryan et al. 2020), then applies Multi-Krum, FLDetector, and DP-SGD each in isolation and all three composed, recording ASR, PDR, per-class F1, and per-class recall. ε is varied across {3.0, 10.0, ∞} to identify the point at which DP noise degrades FLDetector detection (RQ2).
+Phase 4 — Minimum viable configuration sweep: Sweeps ε ∈ {1.0, 3.0, 5.0, 10.0, ∞}, client participation rates ∈ {20%, 40%, 60%, 80%, 100%}, and aggregation rounds ∈ {10, 20, 50} to find the minimum viable (ε, participation, rounds) triple satisfying formal DP, PDR threshold, and per-class F1 constraints simultaneously (RQ3).
 
 ### 4.3 Evaluation Metrics
 
@@ -81,10 +83,13 @@ Phase 1 trains a supervised PyTorch MLP on the full Edge-IIoTset training split 
 | Python 3.10+ | Primary implementation language |
 | Flower (`flwr`) | FL client-server orchestration and round management |
 | PyTorch (`torch`) | Local model definition, training, and weight update computation |
-| TensorFlow Privacy | DP-SGD implementation and Rényi privacy accountant |
 | Pandas / NumPy | Dataset loading, preprocessing, and Dirichlet shard partitioning |
 | Scikit-learn | Per-class F1, recall, confusion matrix, and classification report |
 | Matplotlib / Seaborn | Per-class result visualisation, recall heatmaps, and experiment plots |
+| Opacus | DP-SGD implementation with PyTorch (replaces TensorFlow Privacy — compatible with your CNN-LSTM) |
+| Imbalanced-learn | Targeted SMOTE for extreme minority classes if needed |
+| Docker Compose | Multi-container deployment of FL system for product demonstration |
+| Kubernetes (minikube) | Orchestrated production deployment — final product demo |
 
 All pinned versions are specified in `requirements.txt`.
 
