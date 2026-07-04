@@ -48,6 +48,7 @@ None faced.
 
 - Implement `task.py` (MLP model, Edge-IIoTset data loading) and `client_app.py` (Flower ClientApp with local training and evaluation)
 - Run first end-to-end FL training loop and record accuracy against the 92.49% Rashid et al. benchmark
+<<<<<<< HEAD
 - Begin implementing Krum aggregation as the first defence baseline
 
 
@@ -73,4 +74,6 @@ None faced.
 
 - Plug in the real Edge-IIoTset dataset (replacing the random placeholder data in `client_app.py`) and partition it across the 10 simulated clients
 - Re-run the 10-client FL loop with real data and record accuracy against the 92.49% Rashid et al. benchmark
+=======
+>>>>>>> origin/dev
 - Begin implementing Krum aggregation as the first defence baseline
