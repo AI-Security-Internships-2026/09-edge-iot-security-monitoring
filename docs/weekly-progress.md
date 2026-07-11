@@ -109,3 +109,26 @@ None faced.
 - Inject simulated Byzantine clients (2 of 10 sending scaled-negative updates) to give Krum something to actually defend against and record detection rate vs. accuracy tradeoff
 - Begin FLDetector implementation using per-client update history tracking
 >>>>>>> Stashed changes
+
+
+## Week 5
+
+**Branch:** `zarawar-week-05`
+**PR link:** (https://github.com/AI-Security-Internships-2026/09-edge-iot-security-monitoring/pull/5)
+
+### Completed this week
+
+- Implemented a complete Multi-Krum Byzantine-robust aggregation engine (src/defences/krum.py) that evaluates pairwise squared Euclidean distance metrics to safely select m = 6 normal client updates per training round (n = 10, f = 2)
+-Built an inline numerical overflow validation guard within the Multi-Krum engine to automatically isolate high-scale sign-flip anomalies by intercepting NaN/Inf values before distance calculation and assigning them an infinite distance score
+- Executed comprehensive Round 25 benchmark experiments across all four experimental conditions, proving that Multi-Krum completely prevents catastrophic network model collapse (recovering F1-Macro from 0.012 to 0.857) and partially restores application model performance under attack (recovering F1-Macro from 0.471 to 0.570)
+-Deployed a parallel localized penetration testing lab environment using Oracle VirtualBox, bridging a Kali Linux attacker node and a vulnerable Metasploitable 2 target appliance inside a dedicated private Host-Only network configuration (192.168.56.0/24).
+-Did a deep dive into all 15 attack types being used in the dataset and demosntrated how a potential attacker might use them to take advantage of our FL system on metasploitable using Kali Linux.
+
+### Problems / Blockers
+
+- none faced.
+
+### Next week plan
+
+- Going to start focsuing more on the privacy part of FL.
+- Implement either HE or DP(or anything similar) after choosing what's better suited.
