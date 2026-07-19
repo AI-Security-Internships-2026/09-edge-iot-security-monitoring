@@ -132,3 +132,59 @@ None faced.
 
 - Going to start focsuing more on the privacy part of FL.
 - Implement either HE or DP(or anything similar) after choosing what's better suited.
+
+
+## Week 6
+
+**Branch:** `zarawar-week-6`
+**PR link:** (https://github.com/AI-Security-Internships-2026/09-edge-iot-security-monitoring/pull/6)
+
+### Completed this week
+
+**Privacy stack architecture — design and critique**
+- Architected a three-layer quantum-safe privacy stack for the multi-user shared IoT gateway scenario, addressing both intra-client privacy (protecting concurrent edge users on the same gateway from each other) and inter-client privacy (server blindness to raw parameters)
+- Identified and corrected three flaws in an earlier architecture draft:
+  - Trimmed Mean under homomorphic encryption is computationally infeasible (requires 15-30 multiplicative depth levels per comparison across a 50,000-parameter model — days of CPU time). Replaced with homomorphic FedAvg (ciphertext addition + scalar multiplication only), moving outlier protection to the ZKP/commitment layer
+  - The ZKP wasn't bound to the ciphertext — a Byzantine client could prove a clean gradient while transmitting a poisoned encrypted payload. Fixed with an HMAC-SHA256 Pedersen-style commitment scheme binding the proof to the actual encrypted data
+  - Proving DP noise was correctly sampled is infeasible in a standard ZKP (gigabyte-sized proofs for a 50k-parameter network). Removed from ZKP scope; DP guarantee now rests on correct implementation rather than cryptographic proof
+
+**Layer 1 — Local Differential Privacy (`src/privacy/dp_training.py`)**
+- Implemented Opacus-backed DP-SGD wrapper (`PrivacyEngine.make_private_with_epsilon()`), clipping per-sample gradients to `max_grad_norm=1.0` before adding calibrated Gaussian noise
+- Replaced `BatchNorm1d` with `GroupNorm` via `ModuleValidator.fix(model)`, since BatchNorm's cross-sample dependencies are incompatible with per-sample DP-SGD tracking
+
+**Layer 2 — Cryptographic commitment (`src/privacy/commitment.py`)**
+- Implemented HMAC-SHA256 commitment scheme: `C = Hash(δ || salt)` over the noise-perturbed local update
+- Implemented server-side `verify_norm_proof()` checking the update respects a dimensionally-calibrated safety ceiling, and `verify_commitment_opening()` as an audit hook confirming updates match their commitment — mitigates gradient-bomb/parameter-overflow attacks
+- Quantum-safe by construction: SHA-256 preimage resistance means Grover's algorithm only halves effective key security
+
+**Layer 3 — Homomorphic Encryption (`src/privacy/he_aggregation.py`, `he_local.py`)**
+- Fixed a critical cryptographic bug: clients were generating independent HE keypairs, which breaks the mathematical validity of homomorphic addition across clients. Corrected so the server generates and distributes a single shared public context, keeping the decryption key private
+- Implemented partial HE: only the classifier head (~4,680 of 80,074 parameters, 5.8%) is CKKS-encrypted; preceding feature-extraction layers are sent as DP-noised plaintext, cutting server HE workload ~94%
+
+**Resource-constrained optimization / Docker edge emulation**
+- Built containerized emulation (`fl_server`, `fl_client_0`, `fl_client_1`) on an isolated Docker bridge network, replicating factory gateway hardware limits
+- Diagnosed initial silent memory crashes (`RuntimeError: Training subprocess failed`, kernel SIGKILL) under a 200MB cgroup limit and resolved via five optimization layers:
+  - Subprocess training isolation (`train_worker.py`) — PyTorch training runs in a child process that exits after training, forcing full OS memory reclamation; parent client process holds flat at 61-62MB
+  - Dependency stripping — moved model definitions to a dependency-free `model_defs.py` after finding `task.py` imports were pulling in pandas/scikit-learn/scipy (80-150MB) inside the training subprocess unnecessarily; also throttled BLAS threading to a single core (`OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS=1`)
+  - CKKS context pruning — removed unused Galois/relinearization keys (pipeline only uses ciphertext-ciphertext addition and ciphertext-scalar multiplication), shortened the coefficient-modulus chain from depth-2/4-level to depth-1/3-level, reduced `poly_modulus_degree` 8192→4096
+  - Binary wire format (`wire_format.py`) — replaced JSON float-list serialization (6-8x memory blowup from unpacking numpy arrays into Python objects) with base64-encoded raw `float32` bytes, cutting transmission overhead 33%
+  - I/O storage calibration — removed redundant per-round dataset re-serialization; clients now write their training partition to disk once instead of every round
+- Established the edge RAM floor: CKKS at n=4096 on this model requires roughly 210-245MB for cryptographic steps alone; combined with the PyTorch runtime, the effective container floor sits around 340-350MB
+
+**Production run validation and debugging**
+- Fixed two JSON serialization crashes in the client→server payload: raw `bytes` salt field, and `numpy.bool_` validation state (neither is JSON-serializable)
+- Found and fixed a stray `×0.01` scaling bug in `zkp.py`'s norm-threshold formula that made validation ~100x too strict, causing the server to reject every legitimate update; corrected with a proper `NOISE_NORM_SAFETY_FACTOR = 1.15` applied to the theoretically correct `σ × √n_params` formula
+- Achieved a clean end-to-end 3-round production run: 100% update retention (2/2 clients per round, HTTP 200), server-side ZKP re-verification passing independently
+- Measured privacy-utility tradeoff directly: moving DP epsilon from 3.0 to 15.0 brought the noise-to-signal ratio down from ~450:1 to ~91:1, but this still manifests as non-monotonic loss between rounds (Client 0: round 1 ends at loss 1.4365, round 2 begins at loss 1.6583 before recovering to 1.4666) — confirms a real limitation of high-dimensional local DP at this model size
+- Profiled execution time: local training dominates at 40-60s/round (~60s round-1 CPU warmup, ~40s steady state); combined DP + commitment + partial CKKS encryption overhead is under 0.1s/round; server-side homomorphic decrypt+merge runs at 0.02s/round — cryptographic latency is not a deployment bottleneck
+-uploaded all results of tests which were previously done.
+
+### Problems / Blockers
+
+- The privacy-utility tradeoff is not fully resolved: even at ε=15.0 (noise-to-signal ~91:1), local DP noise is large enough to cause visible non-monotonic loss between rounds rather than steady convergence. Would appreciate supervisor input on whether to push epsilon further, move to central DP at the server aggregate, or restrict noise to the classifier head only, since this directly affects what accuracy numbers are achievable for the write-up.
+- The model cannot run to it's full potential on the 200mb limit which was given to me, after running tests the ideal ram limit would be 400 mb.
+
+### Next week plans
+
+- Scale the Docker validation run from 3 rounds to 10-15 rounds to determine whether the privacy-utility tradeoff stabilizes into steady convergence or remains an oscillatory plateau under sustained local DP noise
+- Decide on and implement one of the DP calibration fixes above, then re-run the full pipeline to quantify its effect on both the ZKP pass rate and the noise-to-signal ratio

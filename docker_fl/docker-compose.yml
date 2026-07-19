@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+
+  fl_server:
+    build: .
+    image: fl-ids:latest
+    container_name: fl_server
+    command: ["python", "server.py"]
+    environment:
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      USE_HE: "true"
+      MODEL_TYPE: "network"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./results:/results
+    mem_limit: 2g
+
+  fl_client_0:
+    image: fl-ids:latest
+    container_name: fl_client_0
+    command: ["python", "client.py"]
+    environment:
+      CLIENT_ID: "0"
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      LOCAL_EPOCHS: "2"
+      SERVER_URL: "http://fl_server:5000"
+      USE_LOCAL_DP: "true"
+      USE_ZKP: "true"
+      USE_HE: "true"
+      DP_EPSILON: "15.0"
+      MODEL_TYPE: "network"
+      DIRICHLET_ALPHA: "0.7"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ./results:/results
+    depends_on:
+      - fl_server
+    mem_limit: 500m
+    memswap_limit: 500m
+
+  fl_client_1:
+    image: fl-ids:latest
+    container_name: fl_client_1
+    command: ["python", "client.py"]
+    environment:
+      CLIENT_ID: "1"
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      LOCAL_EPOCHS: "2"
+      SERVER_URL: "http://fl_server:5000"
+      USE_LOCAL_DP: "true"
+      USE_ZKP: "true"
+      USE_HE: "true"
+      DP_EPSILON: "15.0"
+      MODEL_TYPE: "network"
+      DIRICHLET_ALPHA: "0.7"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ./results:/results
+    depends_on:
+      - fl_server
+    mem_limit: 500m
+    memswap_limit: 500m

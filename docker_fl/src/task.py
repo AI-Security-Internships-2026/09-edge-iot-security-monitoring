@@ -7,15 +7,19 @@ from data_loader import (
     NETWORK_NAMES, NUM_NETWORK_CLASSES, NETWORK_COUNTS,
     APP_NAMES,     NUM_APP_CLASSES,     APP_COUNTS
 )
-
-# Model architecture + parameter helpers now live in model_defs.py
-# (kept dependency-free so train_worker.py's subprocess doesn't have
-# to import pandas/sklearn along with this file — see model_defs.py's
-# docstring for why that mattered).
 from model_defs import (
-    CNN_LSTM, NUM_FEATURES, get_model,
-    get_model_parameters, get_model_parameter_keys, set_model_parameters
+    CNN_LSTM, get_model, get_model_parameters,
+    get_model_parameter_keys, set_model_parameters
 )
+
+# Re-exported for anything that still does `from task import CNN_LSTM`
+# etc. — keeps this a non-breaking change for the rest of the codebase.
+__all__ = [
+    "CNN_LSTM", "get_model", "get_model_parameters",
+    "get_model_parameter_keys", "set_model_parameters",
+    "FocalLoss", "build_criterion_network", "build_criterion_application",
+    "train", "test",
+]
 
 
 # ── Loss ─────────────────────────────────────────────────────────────
