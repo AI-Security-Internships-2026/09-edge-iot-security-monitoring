@@ -1,6 +1,10 @@
 """
 Lightweight Zero-Knowledge Proof module.
 
+Runs fine in both the local (main.py) and Docker (client.py) orchestrator
+processes — it only depends on numpy/hashlib/hmac, never forces a torch
+import, and is safe to call from a lightweight client process either way.
+
 What this implements
 --------------------
 A commitment scheme with a signed norm assertion — honest to call
@@ -92,7 +96,22 @@ def generate_norm_proof(params_flat, clip_norm=1.0, noise_sigma=0.0):
 
     After Local DP, the gradient norm may exceed clip_norm due to
     added noise. Expected upper bound:
-        threshold = clip_norm + sqrt(n_params) * noise_sigma * safety_factor
+        threshold = clip_norm + sqrt(n_params) * noise_sigma * safety_factor + margin
+
+    BUG FIXED HERE: the threshold used to include a stray `* 0.01`
+    "empirical factor" that made it ~100x too small. For a Gaussian
+    mechanism adding i.i.d. noise ~N(0, sigma^2) independently to
+    every one of n_params coordinates, the expected L2 norm of the
+    noise vector alone is sigma * sqrt(n_params) — NOT sigma * 0.01 *
+    sqrt(n_params). Verified by direct simulation: for n_params=80074,
+    sigma=1.6149 (project's DP_EPSILON=3.0 config at that param count),
+    the simulated noise-norm mean was 456.9 with std of only ~1.2 (<0.3%
+    relative) — i.e. this quantity is extremely concentrated, so a
+    small multiplicative safety factor is enough tail coverage; no
+    large additive fudge term is needed. With the old buggy formula,
+    every honestly DP-noised update would have been rejected as
+    "exceeding the norm bound" — the ZKP gate was effectively blocking
+    all real clients, not just Byzantine ones.
 
     A Byzantine client CANNOT:
       - Send a false norm (HMAC signature would fail)
@@ -106,24 +125,46 @@ def generate_norm_proof(params_flat, clip_norm=1.0, noise_sigma=0.0):
     In a full ZKP this would be a range proof (Bulletproofs or STARK).
     Here: signed norm value. The binding between this norm and the
     actual gradient is provided by the commitment scheme.
+
+    Fixed +0.2 additive safety margin (on top of the multiplicative
+    NOISE_NORM_SAFETY_FACTOR) absorbs small numerical drift at very low
+    noise_sigma (e.g. DP disabled or near-zero epsilon-noise edge cases)
+    where the multiplicative factor alone rounds to ~0 and a legitimate
+    client's norm could sit right at the boundary due to float rounding.
+
+    NOTE — a separate, real finding worth reporting even after this
+    fix: at DP_EPSILON=3.0 over an ~80k-parameter model, injected noise
+    (~457 in norm) can swamp the clipped signal (norm 1.0) by ~450x if
+    noise is applied once to the full flattened parameter vector
+    (the old local_dp.py post-hoc approach). The proof will correctly
+    PASS (it's honestly measuring what's happening), but the model is
+    very unlikely to learn anything useful at that noise-to-signal
+    ratio. That's a DP-calibration problem to solve separately (e.g.
+    DP-SGD with per-sample gradient clipping instead of one-shot output
+    perturbation, larger epsilon per round, or noising the server-side
+    aggregate instead of every client-per-coordinate) — not something a
+    norm-proof threshold fix can or should paper over.
     """
     norm = float(np.linalg.norm(params_flat))
 
-    # Conservative threshold: allows for DP noise while blocking bombs
+    # Expected noise-vector L2 norm for i.i.d. N(0, sigma^2) added to
+    # n_params coordinates is sigma * sqrt(n_params) (concentrated —
+    # see docstring). A modest multiplicative safety factor covers the
+    # small amount of tail variance without needing a large fudge term.
     n_params  = len(params_flat)
     NOISE_NORM_SAFETY_FACTOR = 1.15
     noise_contribution = np.sqrt(n_params) * noise_sigma * NOISE_NORM_SAFETY_FACTOR
-    threshold = clip_norm + noise_contribution + 0.2  # 0.2 safety margin
+    threshold = clip_norm + noise_contribution + 0.2  # additive safety margin
 
     # Sign the (norm, threshold) pair
     payload   = f"{norm:.8f}:{threshold:.8f}".encode()
     signature = _hmac(payload)
 
     return {
-        "norm":      norm,
-        "threshold": threshold,
+        "norm":      float(norm),
+        "threshold": float(threshold),
         "signature": signature,
-        "passes":    norm <= threshold,
+        "passes":    bool(norm <= threshold),
     }
 
 

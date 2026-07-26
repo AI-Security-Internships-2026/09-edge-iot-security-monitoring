@@ -1,4 +1,4 @@
-# Single image, used for both the server and the two clients.
+# Single image, used for both servers and all four clients.
 # Which one runs is decided by the `command:` in docker-compose.yml.
 FROM python:3.11-slim
 
@@ -21,11 +21,12 @@ RUN pip install --no-cache-dir torch==2.2.0 --index-url https://download.pytorch
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App code (client/server orchestration + shared crypto modules)
-COPY client.py server.py train_worker.py he_aggregation.py wire_format.py ./
+# App code (client/server orchestration + shared crypto modules +
+# offline partition builder)
+COPY client.py server.py train_worker.py he_aggregation.py wire_format.py build_partitions.py ./
 
 # Model + defence code goes to /app, matching the sys.path.insert(0,"/app")
-# used by client.py, server.py and train_worker.py
+# used by client.py, server.py, train_worker.py, and build_partitions.py
 COPY src/ /app/
 
 ENV PYTHONUNBUFFERED=1

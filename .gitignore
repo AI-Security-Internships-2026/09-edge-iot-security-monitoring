@@ -73,3 +73,15 @@ v e n v /
  . v e n v 3 1 1 / 
  
  .venv311/
+
+**/datasets/**/*.csv
+**/datasets/**/*.json
+**/datasets/**/*.parquet
+**/datasets/**/*.h5
+**/datasets/**/*.hdf5
+**/datasets/**/*.pkl
+**/datasets/**/*.npy
+**/datasets/**/*.npz
+**/datasets/**/*.zip
+**/datasets/**/*.tar.gz
+**/datasets/**/*.pcap

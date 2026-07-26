@@ -1,0 +1,26 @@
+{
+  "model_type": "network",
+  "num_rounds": 25,
+  "num_clients": 10,
+  "local_epochs": 5,
+  "prox_mu": 0.1,
+  "byzantine_attack": true,
+  "num_byzantine": 2,
+  "byzantine_clients": [
+    0,
+    1
+  ],
+  "attack_scale": 5.0,
+  "use_krum": true,
+  "krum_m": 6,
+  "use_he": false,
+  "use_dp": true,
+  "dp_epsilon": 15.0,
+  "dp_delta": 1e-05,
+  "dp_max_grad_norm": 1.0,
+  "use_zkp": false,
+  "zkp_max_norm": 10.0,
+  "byzantine_head_only": false,
+  "dp_safe": true,
+  "framework": "custom Python simulation (direct)"
+}

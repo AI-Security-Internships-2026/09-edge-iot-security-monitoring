@@ -1,3 +1,21 @@
+"""
+Local Differential Privacy module.
+
+Runs in both the local (main.py) and Docker (client.py) orchestrator
+processes — numpy only, no torch dependency.
+
+NOTE: this is the one-shot "noise the final flattened update" approach
+(Abadi et al. 2016 style output perturbation), applied to the WHOLE
+model at once. This is distinct from DP-SGD (per-sample gradient
+clipping + noise injected during training itself, see train_worker.py's
+Opacus integration for that approach). At high parameter counts and
+low epsilon, one-shot output perturbation can swamp the signal (see
+zkp.py's generate_norm_proof docstring for the measured noise-to-signal
+finding) — DP-SGD does not have this failure mode as badly, since noise
+is added per-sample before batch-averaging, which shrinks the effective
+noise on the aggregated update.
+"""
+
 import numpy as np
 
 
@@ -61,6 +79,10 @@ def apply_local_dp(params, epsilon=3.0, delta=1e-5, clip_norm=1.0):
       memory cannot reverse-engineer what another user's traffic
       contributed to the gradient. The guarantee holds for any
       adversary, including future quantum computers.
+
+    Default epsilon=3.0 matches this project's baseline configuration
+    (main.py's DP_EPSILON) — real call sites always pass epsilon=
+    explicitly, so this default is documentation-only, not load-bearing.
 
     Returns
     -------

@@ -1,6 +1,7 @@
 """
 Model architecture + parameter helpers — deliberately dependency-free
-beyond torch. Imported by BOTH:
+beyond torch (and opacus, needed only for the DPLSTM layer). Imported
+by BOTH:
   - train_worker.py (the RAM-constrained subprocess), which needs
     ONLY the model class and parameter helpers, never the loss
     functions, evaluation code, or data_loader/sklearn/pandas stack.
@@ -9,10 +10,27 @@ beyond torch. Imported by BOTH:
 
 Keeping this file free of sklearn/pandas/data_loader imports is what
 lets train_worker.py fit inside the 256MB cgroup alongside torch.
+
+DP-SGD COMPATIBILITY NOTE (added for Opacus per-sample gradients):
+  - nn.BatchNorm1d -> nn.GroupNorm
+        BatchNorm mixes statistics ACROSS samples in a batch (batch
+        mean/var), which breaks the per-sample gradient isolation
+        Opacus's hooks depend on. GroupNorm normalizes within each
+        sample independently, so it's DP-SGD-safe. num_groups=8 is a
+        conservative choice for channel counts of 64/128 (divides
+        evenly, small enough groups to still normalize meaningfully).
+  - nn.LSTM -> opacus.layers.DPLSTM
+        PyTorch's built-in LSTM uses a fused cuDNN/oneDNN backend that
+        Opacus's gradient hooks cannot instrument. DPLSTM is Opacus's
+        drop-in replacement built specifically to expose correct
+        per-sample gradients. Same constructor signature and
+        state_dict() key structure, so set_model_parameters/
+        get_model_parameters below need NO changes.
 """
 
 import torch
 import torch.nn as nn
+from opacus.layers import DPLSTM
 
 NUM_FEATURES = 52  # default — overridden dynamically via get_model(num_features=)
 
@@ -29,11 +47,11 @@ class CNN_LSTM(nn.Module):
 
         self.cnn = nn.Sequential(
             nn.Conv1d(1, 64, kernel_size=3, padding=1),
-            nn.BatchNorm1d(64),
+            nn.GroupNorm(8, 64),
             nn.ReLU(),
             nn.MaxPool1d(2),
             nn.Conv1d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm1d(128),
+            nn.GroupNorm(8, 128),
             nn.ReLU(),
             nn.MaxPool1d(2),
         )
@@ -43,7 +61,7 @@ class CNN_LSTM(nn.Module):
             cnn_out = self.cnn(dummy)
             lstm_in = cnn_out.shape[1]
 
-        self.lstm = nn.LSTM(
+        self.lstm = DPLSTM(
             input_size  = lstm_in,
             hidden_size = 64,
             num_layers  = 1,

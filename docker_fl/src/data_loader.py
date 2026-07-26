@@ -21,7 +21,6 @@ DROP_COLS = [
     'mqtt.protoname', 'mqtt.topic'
 ]
 
-# Full 15-class list — used only for encoding the raw CSV
 ALL_CLASSES = [
     'Normal', 'DDoS_UDP', 'DDoS_ICMP', 'Ransomware', 'DDoS_HTTP',
     'SQL_injection', 'Uploading', 'DDoS_TCP', 'Backdoor',
@@ -40,14 +39,7 @@ NETWORK_NAMES    = [
 NUM_NETWORK_CLASSES = len(NETWORK_ORIG_IDX)
 
 NETWORK_COUNTS = [
-     24862,   # Normal
-     49911,   # DDoS_UDP
-    116436,   # DDoS_ICMP
-     50062,   # Ransomware
-    121568,   # DDoS_HTTP
-    132488,   # DDoS_TCP  (capped from 1,615,643)
-     22564,   # Vulnerability_scanner
-     50110,   # MITM
+     24862, 49911, 116436, 50062, 121568, 132488, 22564, 50110,
 ]
 
 # ── Model 2: Application-layer attacks ───────────────────────────────
@@ -58,53 +50,56 @@ APP_NAMES    = [
 ]
 NUM_APP_CLASSES = len(APP_ORIG_IDX)
 
-# Counts within the APPLICATION MODEL SUBSET only
-# (verified by check_classes_split.py)
 APP_COUNTS = [
-    24862,   # Normal           12.89%
-     1001,   # SQL_injection     0.52%
-     1214,   # Uploading         0.63%
-    50153,   # Backdoor         26.00%
-    10925,   # Port_Scanning     5.66%
-    51203,   # XSS              26.54%
-    37634,   # Password         19.51%
-    15915,   # Fingerprinting    8.25%
+    24862, 1001, 1214, 50153, 10925, 51203, 37634, 15915,
 ]
 
-_cached_X = None
-_cached_y = None
+# Cache is keyed by max_rows so switching --max-rows between runs of
+# build_partitions.py doesn't silently reuse a stale, differently-sized
+# cache. Keeps the in-memory cache dict keyed the same way.
+_cache = {}
 
 
-def load_and_preprocess():
+def _cache_path_for(max_rows):
+    if max_rows is None:
+        return CACHE_PATH
+    return os.path.join(BASE_DIR, "datasets", f"dnn_preprocessed_cache_{max_rows}.npz")
+
+
+def load_and_preprocess(max_rows=None):
     """
-    Loads and preprocesses the full DNN-EdgeIIoT dataset ONCE.
+    Loads and preprocesses the full DNN-EdgeIIoT dataset ONCE, optionally
+    capped to a PORTION of it via max_rows.
 
     No VarianceThreshold applied here — it is applied per-model
-    in the partition functions so each model keeps its relevant features:
-      Network model:     applies VarianceThreshold (removes near-zero cols)
-      Application model: NO VarianceThreshold (keeps HTTP/UDP features
-                         that are critical for app-layer attack separation)
+    in the partition functions so each model keeps its relevant features.
 
     Steps:
       1. Drop non-numeric columns
       2. Encode Attack_type into 0-14
       3. Cap DDoS_TCP to 18% of total (VARS-FL methodology)
-      4. StandardScaler — zero mean, unit variance
-      5. Cache result to disk
+      4. [NEW] Optionally subsample to max_rows total, STRATIFIED by
+         Attack_type — a plain random sample would risk wiping out rare
+         classes (SQL_injection is only 1,001 of ~568k rows); stratified
+         sampling preserves per-class proportions at any max_rows size.
+      5. StandardScaler — zero mean, unit variance
+      6. Cache result to disk (cache path includes max_rows, so a full
+         run and a --max-rows 100000 run never collide or overwrite
+         each other's cache)
     """
-    global _cached_X, _cached_y
+    global _cache
+    key = max_rows if max_rows is not None else "full"
+    if key in _cache:
+        return _cache[key]
 
-    if _cached_X is not None:
-        return _cached_X, _cached_y
-
-    if os.path.exists(CACHE_PATH):
-        print("  Loading cached preprocessed data...")
-        data      = np.load(CACHE_PATH)
-        _cached_X = data['X']
-        _cached_y = data['y']
-        print(f"  Cache loaded: {_cached_X.shape[0]:,} rows, "
-              f"{_cached_X.shape[1]} features")
-        return _cached_X, _cached_y
+    cache_path = _cache_path_for(max_rows)
+    if os.path.exists(cache_path):
+        print(f"  Loading cached preprocessed data ({cache_path})...")
+        data = np.load(cache_path)
+        X, y = data['X'], data['y']
+        print(f"  Cache loaded: {X.shape[0]:,} rows, {X.shape[1]} features")
+        _cache[key] = (X, y)
+        return X, y
 
     print("  Loading DNN dataset (~1.2 GB, first run only)...")
     df = pd.read_csv(DATASET_PATH, low_memory=False)
@@ -124,9 +119,7 @@ def load_and_preprocess():
     ddos_tcp_idx  = np.where(y == 7)[0]
     other_idx     = np.where(y != 7)[0]
     ddos_tcp_cap  = int(len(other_idx) * 18 / 82)
-    ddos_tcp_keep = rng_bal.choice(
-        ddos_tcp_idx, size=ddos_tcp_cap, replace=False
-    )
+    ddos_tcp_keep = rng_bal.choice(ddos_tcp_idx, size=ddos_tcp_cap, replace=False)
     final_idx = np.concatenate([other_idx, ddos_tcp_keep])
     rng_bal.shuffle(final_idx)
     X = X[final_idx]
@@ -134,6 +127,18 @@ def load_and_preprocess():
 
     total = len(y)
     print(f"  Samples after capping: {total:,}")
+
+    # ── NEW: optional stratified subsample to a PORTION of the corpus ──
+    if max_rows is not None and total > max_rows:
+        print(f"  Subsampling to a portion of the dataset: {max_rows:,} of "
+              f"{total:,} rows (stratified by Attack_type so rare classes "
+              f"like SQL_injection aren't wiped out by a naive random sample)...")
+        X, _, y, _ = train_test_split(
+            X, y, train_size=max_rows, random_state=42, stratify=y
+        )
+        total = len(y)
+        print(f"  After subsampling: {total:,} rows")
+
     for i, name in enumerate(ALL_CLASSES):
         count = int((y == i).sum())
         pct   = 100 * count / total
@@ -141,20 +146,16 @@ def load_and_preprocess():
 
     X = StandardScaler().fit_transform(X)
 
-    print(f"\n  Saving cache → {CACHE_PATH}")
-    np.savez_compressed(CACHE_PATH, X=X, y=y)
+    print(f"\n  Saving cache → {cache_path}")
+    np.savez_compressed(cache_path, X=X, y=y)
 
-    _cached_X, _cached_y = X, y
+    _cache[key] = (X, y)
     return X, y
 
 
 def _dirichlet_partition(X_sub, y_sub, num_classes,
                          partition_id, num_partitions,
                          test_size, alpha, seed):
-    """
-    Shared Dirichlet non-IID partitioning logic used by both models.
-    alpha=0.7 → moderate heterogeneity (realistic IoT scenario).
-    """
     rng           = np.random.default_rng(seed)
     class_indices = [np.where(y_sub == c)[0] for c in range(num_classes)]
     client_idx    = [[] for _ in range(num_partitions)]
@@ -175,7 +176,6 @@ def _dirichlet_partition(X_sub, y_sub, num_classes,
     X_part = X_sub[idx]
     y_part = y_sub[idx]
 
-    # Drop classes with fewer than 2 samples — real non-IID behaviour
     counts_part = np.bincount(y_part.astype(int), minlength=num_classes)
     valid       = np.isin(y_part, np.where(counts_part >= 2)[0])
     X_part      = X_part[valid]
@@ -196,19 +196,14 @@ def load_partition_network(partition_id: int,
                            num_partitions: int = 10,
                            test_size: float    = 0.2,
                            alpha: float        = 0.7,
-                           seed: int           = 42):
-    """
-    Partition for Model 1 (network-layer attacks).
-    Applies VarianceThreshold to remove near-zero variance features
-    that add noise without helping network-level classification.
-    """
-    X, y = load_and_preprocess()
+                           seed: int           = 42,
+                           max_rows: int       = None):
+    X, y = load_and_preprocess(max_rows=max_rows)
 
-    mask      = np.isin(y, NETWORK_ORIG_IDX)
-    X_net     = X[mask].copy()
-    y_net     = y[mask].copy()
+    mask  = np.isin(y, NETWORK_ORIG_IDX)
+    X_net = X[mask].copy()
+    y_net = y[mask].copy()
 
-    # Apply VarianceThreshold for network model only
     vt    = VarianceThreshold(threshold=1e-6)
     X_net = vt.fit_transform(X_net)
 
@@ -225,29 +220,13 @@ def load_partition_application(partition_id: int,
                                num_partitions: int = 10,
                                test_size: float    = 0.2,
                                alpha: float        = 0.7,
-                               seed: int           = 42):
-    """
-    Partition for Model 2 (application-layer attacks).
+                               seed: int           = 42,
+                               max_rows: int       = None):
+    X, y = load_and_preprocess(max_rows=max_rows)
 
-    NO VarianceThreshold — HTTP and UDP features have low overall
-    variance across the full dataset but are the primary discriminative
-    signal between Backdoor, XSS, Password, SQL_injection, and Uploading.
-    Removing them (as VarianceThreshold was doing) makes these classes
-    impossible to separate — they all look identical at TCP level.
-
-    With HTTP features included:
-      http.file_data         → distinguishes Backdoor (file upload)
-      http.content_length    → distinguishes Uploading vs XSS
-      http.request.uri.query → distinguishes SQL_injection
-      http.request.method    → GET vs POST vs PUT
-      http.referer           → XSS-specific
-      http.request.full_uri  → Password attack paths
-    """
-    X, y = load_and_preprocess()
-
-    mask      = np.isin(y, APP_ORIG_IDX)
-    X_app     = X[mask].copy()
-    y_app     = y[mask].copy()
+    mask  = np.isin(y, APP_ORIG_IDX)
+    X_app = X[mask].copy()
+    y_app = y[mask].copy()
 
     label_map = {orig: new for new, orig in enumerate(APP_ORIG_IDX)}
     y_app     = np.array([label_map[yi] for yi in y_app])
@@ -256,3 +235,34 @@ def load_partition_application(partition_id: int,
         X_app, y_app, NUM_APP_CLASSES,
         partition_id, num_partitions, test_size, alpha, seed
     )
+
+
+# ── NEW: offline per-client partition builder (used by build_partitions.py)
+
+def save_client_partitions(model_type, num_clients, out_dir,
+                           max_rows=None, test_size=0.2,
+                           alpha=0.7, seed=42):
+    """
+    Build and save one .npz partition file per client, containing ONLY
+    that client's local train/test split. Called by build_partitions.py,
+    which runs OUTSIDE the RAM-constrained containers. client.py at
+    runtime never calls this or imports pandas/sklearn — it only ever
+    loads the resulting per-client file, matching what a real gateway
+    would actually have access to.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    fn = (load_partition_network if model_type == "network"
+          else load_partition_application)
+
+    for cid in range(num_clients):
+        X_tr, y_tr, X_te, y_te = fn(
+            partition_id=cid, num_partitions=num_clients,
+            test_size=test_size, alpha=alpha, seed=seed,
+            max_rows=max_rows,
+        )
+        out_path = os.path.join(out_dir, f"client_{cid}_{model_type}.npz")
+        np.savez_compressed(out_path, X_train=X_tr, y_train=y_tr,
+                            X_test=X_te, y_test=y_te)
+        print(f"  Saved {out_path}  train={len(X_tr):,} test={len(X_te):,} "
+              f"features={X_tr.shape[1]} "
+              f"({os.path.getsize(out_path) / 1024 / 1024:.2f}MB)")

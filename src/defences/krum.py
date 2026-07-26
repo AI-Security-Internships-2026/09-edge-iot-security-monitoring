@@ -29,6 +29,20 @@ def multi_krum(all_params, weights, num_byzantine=2):
     NaN guard: Byzantine updates with extreme scale values overflow to NaN.
     These clients are assigned score=inf before distance computation,
     ensuring they are always ranked last and discarded.
+
+    Returns
+    -------
+    (aggregated_params, selected_indices) : tuple
+        aggregated_params  : list[np.ndarray] — weighted average of
+                             selected (trusted) clients' parameters
+        selected_indices   : list[int] — 0-indexed client indices that
+                             were selected/trusted this round. Callers
+                             comparing against a 0-indexed Byzantine
+                             client list (e.g. BYZANTINE_CLIENTS=[0, 1])
+                             can check membership directly against this
+                             list to compute a per-round detection rate:
+                             any BYZANTINE_CLIENTS index NOT present in
+                             selected_indices was correctly discarded.
     """
     n = len(all_params)
     f = num_byzantine
@@ -66,7 +80,11 @@ def multi_krum(all_params, weights, num_byzantine=2):
 
     if len(finite_clients) < m:
         # Not enough finite clients to select m — fall back to
-        # averaging all finite clients to avoid total failure
+        # averaging all finite clients to avoid total failure.
+        # selected_indices here is every finite client, since all of
+        # them were used in the fallback average (no discarding based
+        # on distance score — the NaN guard already excluded the
+        # non-finite ones from finite_clients before we got here).
         print(f"  ⚠  Only {len(finite_clients)} finite clients available, "
               f"need {m}. Averaging all finite clients.")
         finite_params  = [all_params[i] for i in finite_clients]
@@ -79,7 +97,7 @@ def multi_krum(all_params, weights, num_byzantine=2):
                 for p, w in zip(finite_params, finite_weights)
             )
             result.append(layer_avg)
-        return result
+        return result, finite_clients
 
     # ── Step 3: pairwise squared distances (finite clients only) ──────
     distances = np.zeros((n, n))
@@ -132,4 +150,4 @@ def multi_krum(all_params, weights, num_byzantine=2):
         )
         result.append(layer_avg)
 
-    return result
+    return result, selected

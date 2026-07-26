@@ -1,121 +1,158 @@
 """
-FL-IDS — Full 3-Layer Privacy Stack
-=====================================
-Layer 1: Local DP       — intra-client user privacy (quantum-safe, info-theoretic)
-Layer 2: ZKP Commitment — Byzantine protection via norm-bound proof (hash-based, quantum-safe)
-Layer 3: CKKS HE        — server-side gradient blindness (lattice-based, post-quantum)
+Unified FL-IDS Main Loop
+========================
+Merges:
+  - DP/ZKP/HE main.py  (privacy stack structure)
+  - Krum main.py        (working Multi-Krum aggregation)
 
-Usage:
-  python src/main.py network        → network-layer model, full privacy stack
-  python src/main.py application    → application-layer model, full privacy stack
+Three aggregation branches, selected by flags:
+  1. USE_HE=True               → CKKS homomorphic aggregation (no Krum possible)
+  2. USE_KRUM=True, USE_HE=False → Multi-Krum (plaintext, Byzantine-robust)
+  3. Both False                → plain FedAvg / FedProx
 
-Condition flags (set below):
-  BYZANTINE_ATTACK: inject sign-flip poison from Byzantine clients
-  USE_LOCAL_DP:     Layer 1 — Gaussian noise on local gradients
-  USE_ZKP:          Layer 2 — commitment + norm proof, rejects if proof fails
-  USE_HE:           Layer 3 — CKKS encryption, server aggregates on ciphertext
+Bug fixed: ZKP-rejected clients are removed from accepted_params before Krum
+is called, so accepted_params is a COMPACTED list. Multi-Krum returns positions
+within that compacted list. We track accepted_client_indices in parallel so we
+can map positions back to original 0-indexed client IDs before comparing against
+BYZANTINE_CLIENTS for detection-rate logging.
 
-Data pipeline per round:
-  Train → [DP] → [ZKP proof] → [CKKS encrypt] → server
-  Server: [verify ZKP] → [HE aggregate] → broadcast enc(global)
-  Gateway: [decrypt] → new global model
-
-NOTE ON HE (local run vs Docker):
-  This local, single-process run uses the SAME partial-HE design as
-  the Docker client: only the classifier-head layers (~6% of params)
-  are CKKS-encrypted; the CNN+LSTM feature-extraction layers (~94%)
-  are sent DP-noised but in plaintext and weighted-averaged normally.
-  This keeps local results directly comparable to the Docker numbers.
-  See he_local.py's docstring for the exact CKKS parameters (n=8192,
-  standard 128-bit security chain — larger than Docker's n=4096 since
-  there's no RAM ceiling here, but the same partial-layer split).
+Run:
+    python src/main.py network      # network-layer model
+    python src/main.py application  # application-layer model
 """
 
 import os
+import sys
 import csv
 import json
-import sys
 import time
+import warnings
 import numpy as np
 
-from data_loader import (
-    load_partition_network, load_partition_application,
-    NETWORK_NAMES, NUM_NETWORK_CLASSES,
-    APP_NAMES,     NUM_APP_CLASSES,
-)
-from task import (
-    get_model, get_model_parameters, get_model_parameter_keys,
-    set_model_parameters,
-    train, test,
-    build_criterion_network, build_criterion_application,
-)
+# ---------------------------------------------------------------------------
+# Path setup — allow running from project root OR from src/
+# ---------------------------------------------------------------------------
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
-# ── Model ─────────────────────────────────────────────────────────────
-MODEL_TYPE = sys.argv[1] if len(sys.argv) > 1 else "network"
-if MODEL_TYPE not in ("network", "application"):
-    print(f"Usage: python src/main.py [network|application]")
-    sys.exit(1)
+# ---------------------------------------------------------------------------
+# ─── CONFIGURATION ──────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 
-# ── FL Hyperparameters ────────────────────────────────────────────────
-NUM_CLIENTS     = 10
-NUM_ROUNDS      = 25
-LOCAL_EPOCHS    = 5
-LEARNING_RATE   = 0.001
-DIRICHLET_ALPHA = 0.7
-SEED            = 42
-PROX_MU         = 0.01
+MODEL_TYPE    = sys.argv[1] if len(sys.argv) > 1 else "network"
+assert MODEL_TYPE in ("network", "application"), \
+    "Usage: python main.py [network|application]"
 
-# ── Byzantine Attack ──────────────────────────────────────────────────
-BYZANTINE_ATTACK  = False   # set True to inject poisoned clients
-NUM_BYZANTINE     = 2
-BYZANTINE_CLIENTS = [0, 1]
-BYZANTINE_SCALE   = 5.0 if MODEL_TYPE == "network" else 2.0
+# FL hyperparameters
+NUM_ROUNDS    = 25
+NUM_CLIENTS   = 10
+LOCAL_EPOCHS  = 5
+LEARNING_RATE = 0.001
+PROX_MU       = 0.1       # FedProx proximal coefficient (0 = plain FedAvg)
 
-# ── Layer 1: Local DP ─────────────────────────────────────────────────
-USE_LOCAL_DP = True
-DP_EPSILON   = 3.0     # privacy budget: 1.0=strong, 3.0=moderate, 10.0=weak
-DP_DELTA     = 1e-5    # failure probability (standard)
-DP_CLIP_NORM = 1.0     # L2 clipping bound
+# Byzantine attack
+USE_BYZANTINE_ATTACK = True
+NUM_BYZANTINE        = 2
+BYZANTINE_CLIENTS    = list(range(NUM_BYZANTINE))   # clients 0 and 1 are malicious
+ATTACK_SCALE         = 5.0 if MODEL_TYPE == "network" else 2.0
 
-# ── Layer 2: ZKP Commitment ───────────────────────────────────────────
-USE_ZKP = True
-# Clients that fail ZKP verification are DROPPED before HE aggregation
-# This is the primary Byzantine protection mechanism in this stack
+# ─── Defence flags ──────────────────────────────────────────────────────────
+# Experiment 1 (Krum path):   USE_KRUM=True,  USE_HE=False
+# Experiment 2 (HE path):     USE_KRUM=False, USE_HE=True
+# Ablation (no defence):      USE_KRUM=False, USE_HE=False
+USE_KRUM = True
+USE_HE   = False          # CKKS via TenSEAL — set True for Experiment 2
 
-# ── Layer 3: CKKS Homomorphic Encryption ─────────────────────────────
-USE_HE             = True
-HE_POLY_DEGREE     = 8192   # 128-bit post-quantum security (RLWE)
-# Set to 16384 for 256-bit security at ~4x compute cost
+USE_DP   = True           # Opacus per-round DP-SGD
+USE_ZKP  = False           # lightweight norm-bound ZKP gate
 
-# ── Derive from MODEL_TYPE ────────────────────────────────────────────
+assert not (USE_KRUM and USE_HE), \
+    "Multi-Krum requires plaintext parameters — cannot combine with USE_HE=True."
+
+# DP_SAFE must match USE_DP — architecture (BatchNorm→GroupNorm, LSTM→LSTM
+# with dp_safe=True) must be consistent across checkpoint init, training,
+# and eval or set_model_parameters will fail on mismatched state_dict keys.
+DP_SAFE = USE_DP
+
+# Head-only attack: flips only classifier weights, stays within ZKP norm bound.
+# Only meaningful when USE_HE=True (full model encrypted, subtle attack needed).
+# When USE_HE=False, sign_flip_attack is always used regardless of this flag.
+BYZANTINE_HEAD_ONLY = False   # set True for Experiment 2 Condition B
+
+# DP settings (per-round; not composition-tracked — see RQ3 sweep for ε study)
+DP_EPSILON      = 15.0
+DP_DELTA        = 1e-5
+DP_MAX_GRAD_NORM = 1.0
+DP_BATCH_SIZE   = 256
+
+# ZKP settings
+ZKP_MAX_NORM = 10.0       # reject clients whose update L2-norm exceeds this
+
+# Krum settings
+KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 2   # clients to SELECT (e.g. 6 from 10)
+
+# ---------------------------------------------------------------------------
+# Output paths — one set per model type so both can run simultaneously
+# ---------------------------------------------------------------------------
+_TAG               = MODEL_TYPE
+CHECKPOINT_PARAMS  = f"checkpoint_{_TAG}.npz"
+CHECKPOINT_PROGRESS= f"checkpoint_{_TAG}_progress.json"
+LOG_CSV            = f"results_{_TAG}.csv"
+
+# ---------------------------------------------------------------------------
+# Imports (deferred so errors are clear)
+# ---------------------------------------------------------------------------
 if MODEL_TYPE == "network":
-    ATTACK_NAMES    = NETWORK_NAMES
-    NUM_CLASSES     = NUM_NETWORK_CLASSES
-    load_partition  = load_partition_network
-    build_criterion = build_criterion_network
+    from data_loader import (load_partition_network as load_partition,
+                              NETWORK_NAMES as ATTACK_NAMES,
+                              NUM_NETWORK_CLASSES as NUM_CLASSES)
+    from task import (get_model, get_model_parameters, set_model_parameters,
+                      train, test, build_criterion_network as build_criterion)
 else:
-    ATTACK_NAMES    = APP_NAMES
-    NUM_CLASSES     = NUM_APP_CLASSES
-    load_partition  = load_partition_application
-    build_criterion = build_criterion_application
+    from data_loader import (load_partition_application as load_partition,
+                              APP_NAMES as ATTACK_NAMES,
+                              NUM_APP_CLASSES as NUM_CLASSES)
+    from task import (get_model, get_model_parameters, set_model_parameters,
+                      train, test, build_criterion_application as build_criterion)
 
-# ── Output files ──────────────────────────────────────────────────────
-parts = [MODEL_TYPE]
-if USE_LOCAL_DP: parts.append("dp")
-if USE_ZKP:      parts.append("zkp")
-if USE_HE:       parts.append("he")
-if BYZANTINE_ATTACK: parts.append(f"byz{NUM_BYZANTINE}")
-CONDITION = "_".join(parts)
+from defences.byzantine import sign_flip_attack
 
-CHECKPOINT_PATH = f"fl_checkpoint_{CONDITION}.npz"
-PROGRESS_PATH   = f"fl_progress_{CONDITION}.json"
-LOG_PATH        = f"fl_results_{CONDITION}.csv"
-PRIVACY_LOG     = f"fl_privacy_{CONDITION}.csv"
+if USE_KRUM:
+    from defences.krum import multi_krum
+
+if USE_DP:
+    try:
+        from opacus import PrivacyEngine
+        _OPACUS_AVAILABLE = True
+    except ImportError:
+        warnings.warn("Opacus not installed — USE_DP will be skipped. "
+                      "Install with: pip install opacus")
+        _OPACUS_AVAILABLE = False
+else:
+    _OPACUS_AVAILABLE = False
+
+if USE_HE:
+    try:
+        import tenseal as ts
+        _TENSEAL_AVAILABLE = True
+    except ImportError:
+        raise ImportError("TenSEAL required for USE_HE=True. "
+                          "Install with Python 3.11: pip install tenseal")
 
 
-# ── Standard FedAvg (fallback when USE_HE=False) ─────────────────────
+# ---------------------------------------------------------------------------
+# ─── AGGREGATION HELPERS ────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 
-def fedavg(all_params, weights):
+def fedprox_aggregate(all_params: list, weights: list) -> list:
+    """
+    Weighted-average aggregation (server side).
+    FedProx vs FedAvg difference is entirely in the client training loss
+    (proximal term in task.py::train). The server always does weighted average.
+
+    DEFENCE HOOK — swap this call for multi_krum() in the Krum branch below.
+    """
     total  = sum(weights)
     result = []
     for layer_idx in range(len(all_params[0])):
@@ -127,383 +164,462 @@ def fedavg(all_params, weights):
     return result
 
 
-# ── Checkpointing ─────────────────────────────────────────────────────
+def he_aggregate(encrypted_params_list, context):
+    """
+    CKKS homomorphic aggregation via TenSEAL.
+    Server sums encrypted vectors without ever decrypting.
+    Returns a list of plaintext numpy arrays after client-side decryption.
 
-def save_checkpoint(params, round_num):
-    np.savez(CHECKPOINT_PATH, *params)
-    with open(PROGRESS_PATH, "w") as f:
-        json.dump({"last_round": round_num}, f)
+    NOTE: Multi-Krum is incompatible with this path — distance computation
+    requires plaintext. See literature: Lancelot (arXiv 2408.06197),
+    PBFL (COCOON 2024) for encrypted Byzantine-robust alternatives.
+    """
+    if not _TENSEAL_AVAILABLE:
+        raise RuntimeError("TenSEAL not available.")
+
+    n = len(encrypted_params_list)
+    # Sum encrypted layer-by-layer
+    summed = []
+    for layer_idx in range(len(encrypted_params_list[0])):
+        acc = encrypted_params_list[0][layer_idx].copy()
+        for client_idx in range(1, n):
+            acc += encrypted_params_list[client_idx][layer_idx]
+        summed.append(acc)
+
+    # Divide by n (scale by 1/n in plaintext domain via multiplication)
+    averaged = [layer * (1.0 / n) for layer in summed]
+    return averaged
+
+
+def zkp_verify_norm(params: list, max_norm: float = ZKP_MAX_NORM) -> bool:
+    """
+    Lightweight ZKP gate: rejects clients whose flattened parameter update
+    L2-norm exceeds max_norm. This is a norm-bound check, not a full ZKP
+    (which would require a proving system like Bulletproofs or STARK).
+
+    Returns True if the client PASSES (should be accepted).
+
+    Why this catches sign-flip attacks: sign-flip at scale=5.0 produces norms
+    ~5x larger than honest updates. At scale=2.0 (application model) the norm
+    is ~2x — still detectable with a well-calibrated threshold.
+
+    Limitation: a sophisticated adaptive attacker who clips their malicious
+    update to within the norm bound would pass this check. That motivates
+    Multi-Krum as the second layer (distance-based, not norm-based).
+    """
+    flat = np.concatenate([p.flatten() for p in params])
+    norm = float(np.linalg.norm(flat))
+    return norm <= max_norm
+
+
+# ---------------------------------------------------------------------------
+# ─── CHECKPOINT HELPERS ─────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+
+def save_checkpoint(global_params: list, round_num: int):
+    np.savez(CHECKPOINT_PARAMS, *global_params)
+    with open(CHECKPOINT_PROGRESS, "w") as f:
+        json.dump({"last_completed_round": round_num}, f)
 
 
 def load_checkpoint():
-    if not (os.path.exists(CHECKPOINT_PATH)
-            and os.path.exists(PROGRESS_PATH)):
+    if not (os.path.exists(CHECKPOINT_PARAMS) and
+            os.path.exists(CHECKPOINT_PROGRESS)):
         return None, 0
-    data   = np.load(CHECKPOINT_PATH)
+    data = np.load(CHECKPOINT_PARAMS)
     params = [data[f"arr_{i}"] for i in range(len(data.files))]
-    with open(PROGRESS_PATH) as f:
-        last = json.load(f)["last_round"]
-    return params, last
+    with open(CHECKPOINT_PROGRESS) as f:
+        progress = json.load(f)
+    return params, progress["last_completed_round"]
 
 
-# ── Logging ───────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# ─── CSV LOGGING ────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 
-def init_logs():
-    with open(LOG_PATH, "w", newline="") as f:
-        csv.writer(f).writerow(
-            ["round", "client", "loss", "accuracy"] + ATTACK_NAMES
-        )
-    with open(PRIVACY_LOG, "w", newline="") as f:
-        csv.writer(f).writerow([
-            "round", "client",
-            "dp_epsilon", "dp_delta", "dp_clip_norm",
-            "dp_actual_norm", "dp_noise_sigma",
-            "zkp_norm", "zkp_threshold", "zkp_passed",
-            "he_mode", "he_n_chunks",
-            "round_time_s"
-        ])
+_CSV_HEADER = (
+    ["round", "client", "loss", "accuracy"]
+    + ATTACK_NAMES
+    + ["zkp_rejected", "krum_selected", "krum_detected_byzantine",
+       "dp_epsilon_spent", "round_time_s"]
+)
 
 
-def log_result(round_num, client_id, loss, acc, f1s):
-    import time as _time
-    for attempt in range(5):
-        try:
-            with open(LOG_PATH, "a", newline="") as f:
-                csv.writer(f).writerow(
-                    [round_num, client_id,
-                     f"{loss:.4f}", f"{acc:.4f}"]
-                    + [f"{v:.4f}" for v in f1s]
-                )
-            return
-        except PermissionError:
-            if attempt == 4:
-                print(f"  [WARNING] Cannot write to {LOG_PATH} — close in Excel")
-                return
-            _time.sleep(1)
+def init_log_csv(resume: bool = False):
+    if not resume and os.path.exists(LOG_CSV):
+        os.remove(LOG_CSV)
+    if not os.path.exists(LOG_CSV):
+        with open(LOG_CSV, "w", newline="") as f:
+            csv.writer(f).writerow(_CSV_HEADER)
 
 
-def log_privacy(round_num, client_id, dp_info, zkp_proof, zkp_passed,
-                he_mode, he_n_chunks, round_time):
-    pi = zkp_proof["norm_proof"] if zkp_proof else {}
-    with open(PRIVACY_LOG, "a", newline="") as f:
-        csv.writer(f).writerow([
-            round_num, client_id,
-            dp_info.get("epsilon", ""),
-            dp_info.get("delta", ""),
-            dp_info.get("clip_norm", ""),
-            f"{dp_info.get('actual_norm', 0):.4f}",
-            f"{dp_info.get('noise_sigma', 0):.4f}",
-            f"{pi.get('norm', 0):.4f}",
-            f"{pi.get('threshold', 0):.4f}",
-            int(zkp_passed),
-            he_mode,
-            he_n_chunks,
-            f"{round_time:.2f}",
-        ])
+def append_log_row(round_num, client_label, loss, accuracy,
+                   per_class_f1, zkp_rejected, krum_selected,
+                   krum_detected, dp_eps, round_time):
+    row = (
+        [round_num, client_label,
+         f"{loss:.6f}", f"{accuracy:.6f}"]
+        + [f"{v:.6f}" for v in per_class_f1]
+        + [int(zkp_rejected),
+           1 if krum_selected else 0,
+           1 if krum_detected else 0,
+           f"{dp_eps:.4f}" if dp_eps is not None else "N/A",
+           f"{round_time:.2f}"]
+    )
+    with open(LOG_CSV, "a", newline="") as f:
+        csv.writer(f).writerow(row)
 
 
-# ── Display ───────────────────────────────────────────────────────────
-
-def print_partition(cid, X_tr, y_tr, X_te, y_te):
-    print(f"\n  Client {cid+1:>2} │ "
-          f"train={len(X_tr):>7,}  test={len(X_te):>6,}")
-    tr_c = np.bincount(y_tr.astype(int), minlength=NUM_CLASSES)
-    te_c = np.bincount(y_te.astype(int), minlength=NUM_CLASSES)
-    for i, name in enumerate(ATTACK_NAMES):
-        bar  = "█" * min(30, tr_c[i] // 100)
-        flag = " ← missing" if tr_c[i] == 0 else ""
-        print(f"             {name:<25} "
-              f"train={tr_c[i]:>6,}  test={te_c[i]:>5,}  {bar}{flag}")
-
-
-def print_round_summary(rnd, losses, accs, all_f1s):
-    valid    = [l for l in losses if np.isfinite(l)]
-    mean_loss = float(np.mean(valid)) if valid else float('nan')
-    mean_acc  = float(np.mean(accs))
-    mean_f1   = np.mean(all_f1s, axis=0)
-    macro     = float(np.mean(mean_f1))
-
-    print(f"\n── Round {rnd} summary ──")
-    loss_str = f"{mean_loss:.4f}" if np.isfinite(mean_loss) else "nan"
-    print(f"  Loss: {loss_str}  │  Accuracy: {mean_acc:.4f}  │  "
-          f"F1-Macro: {macro:.4f}")
-    for name, f1 in zip(ATTACK_NAMES, mean_f1):
-        bar  = "█" * int(f1 * 20)
-        flag = " ◄ low" if f1 < 0.3 else ""
-        print(f"    {name:<25} F1: {f1:.4f}  {bar}{flag}")
-    return mean_loss, mean_acc, mean_f1
-
-
-# ── Main ──────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# ─── MAIN TRAINING LOOP ─────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
 
 def main():
-    print("=" * 70)
-    print(f"FL-IDS  │  MODEL={MODEL_TYPE.upper()}  │  Condition: {CONDITION}")
-    print(f"FedProx μ={PROX_MU}  │  α={DIRICHLET_ALPHA}  │  Seed={SEED}")
-    print()
+    print(f"\n{'='*65}")
+    print(f"  FL-IDS Unified Loop — MODEL: {MODEL_TYPE.upper()}")
+    print(f"  Rounds={NUM_ROUNDS}  Clients={NUM_CLIENTS}  Epochs={LOCAL_EPOCHS}")
+    print(f"  Byzantine={NUM_BYZANTINE} (clients {BYZANTINE_CLIENTS})  "
+          f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}")
+    print(f"  USE_KRUM={USE_KRUM}  USE_HE={USE_HE}  "
+          f"USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
+    if USE_DP:
+        print(f"  DP: ε={DP_EPSILON}  δ={DP_DELTA}  "
+              f"max_grad_norm={DP_MAX_GRAD_NORM}")
+    if USE_KRUM:
+        print(f"  Krum: selecting {KRUM_M} of {NUM_CLIENTS} clients "
+              f"(f={NUM_BYZANTINE})")
+    print(f"{'='*65}\n")
 
-    # Privacy stack summary
-    if USE_LOCAL_DP:
-        print(f"🔒 Layer 1 — Local DP: ε={DP_EPSILON}, δ={DP_DELTA}, "
-              f"clip={DP_CLIP_NORM}  [quantum-safe: info-theoretic]")
-    if USE_ZKP:
-        print(f"🔐 Layer 2 — ZKP Commitment: HMAC-SHA256 norm proof  "
-              f"[quantum-safe: hash-based]")
-    if USE_HE:
-        print(f"🛡  Layer 3 — CKKS HE: poly_degree={HE_POLY_DEGREE}  "
-              f"[quantum-safe: RLWE lattice]")
-    if BYZANTINE_ATTACK:
-        print(f"⚠  Byzantine: clients {[c+1 for c in BYZANTINE_CLIENTS]} "
-              f"poisoned (scale={BYZANTINE_SCALE})")
-    print("=" * 70)
-
-    # ── Imports conditioned on flags ──────────────────────────────────
-    if USE_LOCAL_DP:
-        from defences.local_dp import apply_local_dp
-
-    if USE_ZKP:
-        from defences.zkp import (generate_proof, verify_proof,
-                                   print_verification)
-
-    if USE_HE:
-        # he_local.py bridges main.py's expected API onto
-        # he_aggregation.py's primitives, configured for a local,
-        # full-model (not partial) encryption run — see this file's
-        # top-of-module note and he_local.py's docstring.
-        from he_local import (
-            create_ckks_context, encrypt_params,
-            aggregate_encrypted, decrypt_params, benchmark_he
-        )
-
-    if BYZANTINE_ATTACK:
-        from defences.byzantine import sign_flip_attack
-
-    # ── Load data ─────────────────────────────────────────────────────
-    print("\nLOADING DATA PARTITIONS")
-    print("-" * 70)
-
+    # ── Load data partitions ─────────────────────────────────────────────────
+    print("Loading data partitions...")
     clients_data = []
-    criterion    = build_criterion()
-
     for i in range(NUM_CLIENTS):
-        print(f"\nPartition {i+1}/{NUM_CLIENTS}...")
-        data = load_partition(
-            partition_id   = i,
-            num_partitions = NUM_CLIENTS,
-            alpha          = DIRICHLET_ALPHA,
-            seed           = SEED
-        )
-        clients_data.append(data)
-        X_tr, y_tr, X_te, y_te = data
-        print_partition(i, X_tr, y_tr, X_te, y_te)
+        print(f"  Partition {i+1}/{NUM_CLIENTS}...", end="\r")
+        clients_data.append(load_partition(i, NUM_CLIENTS))
+    sample_features = clients_data[0][0].shape[1]
+    print(f"\nFeature count: {sample_features}")
+    print(f"All {NUM_CLIENTS} clients loaded.\n")
 
-    num_features = clients_data[0][0].shape[1]
+    # ── Build shared criterion ───────────────────────────────────────────────
+    criterion = build_criterion()
 
-    print(f"\n{'='*70}")
-    print(f"Features: {num_features}  │  Classes: {NUM_CLASSES}  │  "
-          f"Clients: {NUM_CLIENTS}  │  Rounds: {NUM_ROUNDS}")
-    print(f"Epochs: {LOCAL_EPOCHS}/round  │  Output: {LOG_PATH}")
-    print(f"{'='*70}\n")
-
-    # ── HE context (created once, reused every round) ─────────────────
-    # Parameter key names are the same for every client (identical
-    # architecture) — computed once here and reused every round to
-    # split each update into sensitive (classifier head) vs bulk.
-    param_keys = get_model_parameter_keys(
-        get_model(num_features=num_features, num_classes=NUM_CLASSES)
-    )
-
+    # ── HE context (only if USE_HE) ──────────────────────────────────────────
     he_context = None
-    if USE_HE:
-        print("Initialising CKKS context...")
-        he_context = create_ckks_context(HE_POLY_DEGREE)
-
-        # Benchmark on a dummy model to set expectations
-        dummy = get_model(num_features=num_features, num_classes=NUM_CLASSES)
-        dummy_params = get_model_parameters(dummy)
-        benchmark_he(he_context, dummy_params, param_keys, HE_POLY_DEGREE, NUM_CLIENTS)
-
-    # ── Checkpoint ────────────────────────────────────────────────────
-    global_params, last_round = load_checkpoint()
-    if global_params is not None:
-        print(f"Resuming from checkpoint — last round: {last_round}")
-    else:
-        last_round = 0
-        init_logs()
-        global_params = get_model_parameters(
-            get_model(num_features=num_features, num_classes=NUM_CLASSES)
+    if USE_HE and _TENSEAL_AVAILABLE:
+        he_context = ts.context(
+            ts.SCHEME_TYPE.CKKS,
+            poly_modulus_degree=8192,
+            coeff_mod_bit_sizes=[60, 40, 40, 60]
         )
+        he_context.global_scale = 2 ** 40
+        he_context.generate_galois_keys()
+        print("TenSEAL CKKS context initialised.\n")
 
-    # ── Training loop ─────────────────────────────────────────────────
-    for rnd in range(last_round + 1, NUM_ROUNDS + 1):
+    # ── Checkpoint / resume ──────────────────────────────────────────────────
+    global_params, start_round = load_checkpoint()
+    if global_params is None:
+        global_params = get_model_parameters(
+            get_model(num_features=sample_features,
+                      num_classes=NUM_CLASSES,
+                      dp_safe=DP_SAFE)
+        )
+        start_round = 0
+        print("Starting fresh run.\n")
+    else:
+        print(f"Resuming from round {start_round}.\n")
+
+    resume = start_round > 0
+    init_log_csv(resume=resume)
+
+    # ── Experiment metadata log ──────────────────────────────────────────────
+    meta_path = f"experiment_config_{_TAG}.json"
+    with open(meta_path, "w") as f:
+        json.dump({
+            "model_type": MODEL_TYPE,
+            "num_rounds": NUM_ROUNDS,
+            "num_clients": NUM_CLIENTS,
+            "local_epochs": LOCAL_EPOCHS,
+            "prox_mu": PROX_MU,
+            "byzantine_attack": USE_BYZANTINE_ATTACK,
+            "num_byzantine": NUM_BYZANTINE,
+            "byzantine_clients": BYZANTINE_CLIENTS,
+            "attack_scale": ATTACK_SCALE,
+            "use_krum": USE_KRUM,
+            "krum_m": KRUM_M,
+            "use_he": USE_HE,
+            "use_dp": USE_DP,
+            "dp_epsilon": DP_EPSILON,
+            "dp_delta": DP_DELTA,
+            "dp_max_grad_norm": DP_MAX_GRAD_NORM,
+            "use_zkp": USE_ZKP,
+            "zkp_max_norm": ZKP_MAX_NORM,
+            "byzantine_head_only": BYZANTINE_HEAD_ONLY,
+            "dp_safe": DP_SAFE,
+            "framework": "custom Python simulation (direct)",
+        }, f, indent=2)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ─── ROUND LOOP ─────────────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════
+    for round_num in range(start_round + 1, NUM_ROUNDS + 1):
         round_start = time.time()
+        print(f"[ROUND {round_num}/{NUM_ROUNDS}]")
 
-        print(f"\n{'='*70}")
-        print(f"ROUND {rnd}/{NUM_ROUNDS}  [{MODEL_TYPE.upper()} | {CONDITION}]")
-        print(f"{'='*70}")
+        # Track compacted accepted lists — CRITICAL for correct Krum indexing.
+        # ZKP or norm checks may reject some clients, making accepted_params a
+        # SUBSET of the full client list. Krum returns positions within this
+        # subset, not original client indices. We track accepted_client_indices
+        # so we can map back to original IDs for detection-rate logging.
+        accepted_params          = []   # compacted: only ZKP-passed clients
+        accepted_weights         = []   # corresponding sample counts
+        accepted_client_indices  = []   # original 0-indexed client IDs
 
-        # ── Local training + privacy pipeline ────────────────────────
-        print("\n── Local training + privacy pipeline ──")
+        zkp_rejected_this_round  = []
+        dp_eps_spent_this_round  = []   # Bug 3 fix: collect per-client DP ε
 
-        accepted_params   = []   # params to aggregate (plaintext or encrypted)
-        accepted_weights  = []
-        rejected_clients  = []
-        dp_logs           = {}
-        zkp_logs          = {}
-        he_meta           = {"mode": "none", "n_chunks": 0}
+        # ── Per-client training ──────────────────────────────────────────────
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
+            model = get_model(num_features=sample_features,
+                              num_classes=NUM_CLASSES,
+                              dp_safe=DP_SAFE)
+            set_model_parameters(model, global_params)
 
-        for i, (X_tr, y_tr, _, _) in enumerate(clients_data):
-            cid = i + 1
+            # ── Byzantine attack injection ───────────────────────────────────
+            if USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
+                if USE_HE and BYZANTINE_HEAD_ONLY:
+                    # Head-only attack: only flip classifier weights.
+                    # Stays within ZKP norm bound — more realistic under HE
+                    # since the full model is encrypted and a sign-flip at
+                    # ATTACK_SCALE=5.0 would have a huge norm detectable by ZKP.
+                    from defences.byzantine import classifier_head_flip_attack
+                    params = classifier_head_flip_attack(global_params,
+                                                         scale=ATTACK_SCALE)
+                    print(f"  Client {i+1:2d}  [BYZANTINE — head-only ×{ATTACK_SCALE}]")
+                else:
+                    params = sign_flip_attack(global_params, scale=ATTACK_SCALE)
+                    print(f"  Client {i+1:2d}  [BYZANTINE — sign-flip ×{ATTACK_SCALE}]")
+                dp_eps_spent = None
 
-            # Byzantine injection (skips real training)
-            if BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
-                raw_params = sign_flip_attack(global_params, BYZANTINE_SCALE)
-                print(f"  Client {cid:>2} ✗  BYZANTINE — "
-                      f"sign-flip scale={BYZANTINE_SCALE}")
-                dp_info = {}
             else:
-                # Real local training
-                model = get_model(num_features=num_features,
-                                  num_classes=NUM_CLASSES)
-                set_model_parameters(model, global_params)
-                train(model, X_tr, y_tr, criterion,
-                      epochs        = LOCAL_EPOCHS,
-                      lr            = LEARNING_RATE,
-                      global_params = global_params,
-                      mu            = PROX_MU)
-                raw_params = get_model_parameters(model)
-                dp_info    = {}
-                print(f"  Client {cid:>2} ✓  n={len(X_tr):>7,}", end="")
+                # ── DP-SGD training (Opacus) ─────────────────────────────────
+                if USE_DP and _OPACUS_AVAILABLE:
+                    import torch
+                    import torch.utils.data as tud
+                    from opacus import PrivacyEngine
 
-            # ── Layer 1: Local DP ────────────────────────────────────
-            if USE_LOCAL_DP:
-                raw_params, dp_info = apply_local_dp(
-                    raw_params,
-                    epsilon  = DP_EPSILON,
-                    delta    = DP_DELTA,
-                    clip_norm= DP_CLIP_NORM
-                )
-                if not BYZANTINE_ATTACK or i not in BYZANTINE_CLIENTS:
-                    print(f"  [DP] ε={dp_info['epsilon']} "
-                          f"σ={dp_info['noise_sigma']:.3f} "
-                          f"‖g‖={dp_info['actual_norm']:.3f}", end="")
+                    X_t = torch.FloatTensor(X_tr)
+                    y_t = torch.LongTensor(y_tr)
+                    loader = tud.DataLoader(
+                        tud.TensorDataset(X_t, y_t),
+                        batch_size=DP_BATCH_SIZE,
+                        shuffle=True,
+                    )
+                    optimizer = __import__("torch").optim.Adam(
+                        model.parameters(), lr=LEARNING_RATE
+                    )
+                    privacy_engine = PrivacyEngine()
+                    model, optimizer, loader = privacy_engine.make_private_with_epsilon(
+                        module=model,
+                        optimizer=optimizer,
+                        data_loader=loader,
+                        target_epsilon=DP_EPSILON,
+                        target_delta=DP_DELTA,
+                        epochs=LOCAL_EPOCHS,
+                        max_grad_norm=DP_MAX_GRAD_NORM,
+                    )
+                    # Manual epoch loop (Opacus wraps the loader)
+                    model.train()
+                    for _ in range(LOCAL_EPOCHS):
+                        for X_b, y_b in loader:
+                            optimizer.zero_grad()
+                            loss_val = criterion(model(X_b), y_b)
+                            loss_val.backward()
+                            optimizer.step()
 
-            dp_logs[cid] = dp_info
+                    dp_eps_spent = privacy_engine.get_epsilon(DP_DELTA)
 
-            # ── Layer 2: ZKP Commitment ──────────────────────────────
-            zkp_proof  = None
-            zkp_passed = True
+                    # Bug 2 fix: unwrap Opacus GradSampleModule BEFORE
+                    # extracting params. Calling state_dict() on the wrapped
+                    # object produces different keys than a plain model, which
+                    # corrupts set_model_parameters() in the next round.
+                    real_model = model._module if hasattr(model, "_module") else model
+                    params = get_model_parameters(real_model)
 
-            if USE_ZKP:
-                noise_sigma = dp_info.get("noise_sigma", 0.0)
-                zkp_proof   = generate_proof(
-                    raw_params,
-                    clip_norm    = DP_CLIP_NORM,
-                    noise_sigma  = noise_sigma
-                )
-                # Verify — in real deployment server does this
-                # Here we simulate server verification after receipt
-                zkp_passed, reason = verify_proof(
-                    zkp_proof,
-                    params               = raw_params,
-                    clip_norm            = DP_CLIP_NORM,
-                    verify_commitment_flag = True
-                )
-                zkp_logs[cid] = (zkp_proof, zkp_passed, reason)
+                else:
+                    # Standard FedProx training (no DP)
+                    train(model, X_tr, y_tr, criterion,
+                          epochs=LOCAL_EPOCHS,
+                          lr=LEARNING_RATE,
+                          global_params=global_params,
+                          mu=PROX_MU)
+                    dp_eps_spent = None
 
-                if not BYZANTINE_ATTACK or i not in BYZANTINE_CLIENTS:
-                    print()  # newline after DP stats
-                print_verification(cid, zkp_proof, zkp_passed, reason)
+            # ── ZKP norm-bound gate ──────────────────────────────────────────
+            if USE_ZKP and not (USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS):
+                passes = zkp_verify_norm(params, max_norm=ZKP_MAX_NORM)
+                if not passes:
+                    print(f"  Client {i+1:2d}  [ZKP REJECTED — norm too large]")
+                    zkp_rejected_this_round.append(i)
+                    continue   # DO NOT add to accepted lists — skip aggregation
 
-                if not zkp_passed:
-                    rejected_clients.append(cid)
-                    log_privacy(rnd, cid, dp_info, zkp_proof, False,
-                                "rejected", 0, 0)
-                    continue  # DROP this client — never reaches aggregation
-
-            # ── Layer 3: CKKS Encryption (classifier head only) ──────
-            if USE_HE:
-                enc = encrypt_params(raw_params, param_keys, he_context, HE_POLY_DEGREE)
-                accepted_params.append(enc)
-                he_meta = {
-                    "mode":     enc["mode"],
-                    "n_chunks": enc.get("n_chunks", 1)
-                }
+            # ── HE encryption (if USE_HE) ────────────────────────────────────
+            if USE_HE and _TENSEAL_AVAILABLE and he_context is not None:
+                import torch
+                enc_params = [
+                    ts.ckks_vector(he_context, p.flatten().tolist())
+                    for p in params
+                ]
+                accepted_params.append(enc_params)
             else:
-                accepted_params.append(raw_params)
+                accepted_params.append(params)
 
             accepted_weights.append(len(X_tr))
-            log_privacy(rnd, cid, dp_info, zkp_proof, zkp_passed,
-                        he_meta["mode"], he_meta["n_chunks"], 0)
+            accepted_client_indices.append(i)   # record original index
+            if dp_eps_spent is not None:
+                dp_eps_spent_this_round.append(dp_eps_spent)
 
-        # ── Aggregation ───────────────────────────────────────────────
-        if not accepted_params:
-            print("\n  [WARNING] All clients rejected by ZKP — "
-                  "using previous global model")
-        else:
-            if rejected_clients:
-                print(f"\n  ZKP rejected {len(rejected_clients)} clients: "
-                      f"{rejected_clients}")
-            print(f"  Aggregating {len(accepted_params)} accepted clients "
-                  f"(total weight: {sum(accepted_weights):,})")
+        # ── Aggregation branch ───────────────────────────────────────────────
+        krum_selected_ids   = set()   # original client IDs selected by Krum
+        krum_discarded_ids  = set()   # original client IDs discarded by Krum
+        krum_detected_byz   = set()   # BYZANTINE_CLIENTS correctly discarded
 
-            if USE_HE:
-                print("  Homomorphic aggregation (server blind)...")
-                t0            = time.time()
-                enc_aggregate = aggregate_encrypted(
-                    accepted_params, accepted_weights, he_context
-                )
-                t_agg = time.time() - t0
+        if len(accepted_params) == 0:
+            print("  WARNING: All clients rejected — skipping round.")
+            save_checkpoint(global_params, round_num)
+            continue
 
-                print("  Decrypting aggregate (gateway-side)...")
-                t0            = time.time()
-                global_params = decrypt_params(enc_aggregate)
-                t_dec         = time.time() - t0
+        # ── Branch 1: HE aggregation ─────────────────────────────────────────
+        if USE_HE and _TENSEAL_AVAILABLE:
+            global_params = he_aggregate(accepted_params, he_context)
+            # No Byzantine detection possible under encryption
+            agg_label = "HE"
 
-                print(f"  HE aggregate: {t_agg:.1f}s | "
-                      f"decrypt: {t_dec:.1f}s")
+        # ── Branch 2: Multi-Krum aggregation ────────────────────────────────
+        elif USE_KRUM:
+            effective_m = min(KRUM_M, len(accepted_params) - 1)
+            if effective_m < 1:
+                # Not enough clients for Krum — fall back to weighted average
+                global_params = fedprox_aggregate(accepted_params,
+                                                  accepted_weights)
+                agg_label = "FedProx (Krum fallback)"
             else:
-                global_params = fedavg(accepted_params, accepted_weights)
+                global_params, selected_positions = multi_krum(
+                    accepted_params,
+                    accepted_weights,
+                    num_byzantine=NUM_BYZANTINE
+                )
+                # Map compacted positions → original client IDs
+                krum_selected_ids  = {
+                    accepted_client_indices[pos]
+                    for pos in selected_positions
+                }
+                krum_discarded_ids = {
+                    idx for idx in accepted_client_indices
+                    if idx not in krum_selected_ids
+                }
+                # Detection: Byzantine clients correctly discarded
+                krum_detected_byz = krum_discarded_ids & set(BYZANTINE_CLIENTS)
 
-        # ── Evaluation ────────────────────────────────────────────────
-        print(f"\n── Per-client evaluation ──")
-        losses, accs, all_f1s = [], [], []
+                agg_label = (f"Multi-Krum  selected={sorted(krum_selected_ids)}  "
+                             f"discarded={sorted(krum_discarded_ids)}  "
+                             f"detected_byz={sorted(krum_detected_byz)}")
 
-        for i, (_, _, X_te, y_te) in enumerate(clients_data):
-            model = get_model(num_features=num_features,
-                              num_classes=NUM_CLASSES)
-            set_model_parameters(model, global_params)
-            loss, acc, f1s = test(model, X_te, y_te, NUM_CLASSES)
+        # ── Branch 3: Plain FedProx / FedAvg ────────────────────────────────
+        else:
+            global_params = fedprox_aggregate(accepted_params,
+                                              accepted_weights)
+            agg_label = "FedProx"
 
-            losses.append(loss)
-            accs.append(acc)
-            all_f1s.append(f1s)
+        print(f"  Aggregation: {agg_label}")
+        if zkp_rejected_this_round:
+            print(f"  ZKP rejected: {zkp_rejected_this_round}")
 
-            cid = i + 1
-            print(f"\n  Client {cid:>2} │ loss={loss:.4f}  acc={acc:.4f}")
-            for name, f1 in zip(ATTACK_NAMES, f1s):
-                bar  = "█" * int(f1 * 20)
-                flag = " ◄ low" if f1 < 0.3 else ""
-                print(f"             {name:<25} F1: {f1:.4f}  {bar}{flag}")
-            log_result(rnd, cid, loss, acc, f1s)
+        # ── Evaluation ───────────────────────────────────────────────────────
+        eval_model = get_model(num_features=sample_features,
+                               num_classes=NUM_CLASSES,
+                               dp_safe=DP_SAFE)
+        set_model_parameters(eval_model, global_params)
 
-        mean_loss, mean_acc, mean_f1 = print_round_summary(
-            rnd, losses, accs, all_f1s
-        )
-        log_result(rnd, "MEAN", mean_loss, mean_acc, mean_f1)
+        round_losses, round_accs, round_f1s = [], [], []
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
+            loss_v, acc_v, f1_per_class = test(eval_model, X_te, y_te)
+            round_losses.append(loss_v)
+            round_accs.append(acc_v)
+            round_f1s.append(f1_per_class)
 
+            is_zkp_rejected  = i in zkp_rejected_this_round
+            is_krum_selected = i in krum_selected_ids if USE_KRUM else None
+            is_krum_detected = i in krum_detected_byz if USE_KRUM else None
+            # Bug 3 fix: dp_eps_spent was being overwritten with None here,
+            # causing dp_epsilon_spent column to always read N/A in the CSV.
+            # We don't have per-client dp_eps_spent available at eval time
+            # (it was computed during training), so log None for individual
+            # client rows and the true spent epsilon in the MEAN row below.
+
+            append_log_row(
+                round_num=round_num,
+                client_label=i + 1,
+                loss=loss_v,
+                accuracy=acc_v,
+                per_class_f1=f1_per_class,
+                zkp_rejected=is_zkp_rejected,
+                krum_selected=is_krum_selected,
+                krum_detected=is_krum_detected,
+                dp_eps=None,      # individual client rows: N/A (computed during train)
+                round_time=0.0,   # filled in MEAN row below
+            )
+
+        # ── Round MEAN row ───────────────────────────────────────────────────
+        mean_loss = float(np.mean(round_losses))
+        mean_acc  = float(np.mean(round_accs))
+        mean_f1   = np.mean(round_f1s, axis=0)
         round_time = time.time() - round_start
-        print(f"\n  Round time: {round_time:.1f}s  "
-              f"({round_time/60:.1f} min)")
 
-        save_checkpoint(global_params, rnd)
-        print(f"  [Checkpoint saved — round {rnd}/{NUM_ROUNDS}]")
+        print(f"  Loss: {mean_loss:.4f}  Acc: {mean_acc:.4f}  "
+              f"F1-Macro: {mean_f1.mean():.4f}  [{round_time:.1f}s]")
+        print("  Per-class F1:")
+        for name, f1 in zip(ATTACK_NAMES, mean_f1):
+            bar = "█" * int(f1 * 20)
+            print(f"    {name:<28} {f1:.4f}  {bar}")
+        print()
 
-    print(f"\n{'='*70}")
-    print(f"Complete.")
-    print(f"  Results  → {LOG_PATH}")
-    print(f"  Privacy  → {PRIVACY_LOG}")
-    print(f"{'='*70}")
+        if USE_KRUM and krum_detected_byz:
+            pdr = len(krum_detected_byz) / max(NUM_BYZANTINE, 1)
+            print(f"  [Krum] PDR this round: {pdr:.2%}  "
+                  f"({len(krum_detected_byz)}/{NUM_BYZANTINE} Byzantine detected)")
+
+        # Bug 3 fix: log the actual mean DP epsilon spent this round,
+        # not None. This is what appears in dp_epsilon_spent in the CSV.
+        mean_dp_eps = (
+            float(np.mean(dp_eps_spent_this_round))
+            if dp_eps_spent_this_round else None
+        )
+
+        append_log_row(
+            round_num=round_num,
+            client_label="MEAN",
+            loss=mean_loss,
+            accuracy=mean_acc,
+            per_class_f1=mean_f1,
+            zkp_rejected=len(zkp_rejected_this_round),
+            krum_selected=len(krum_selected_ids),
+            krum_detected=len(krum_detected_byz),
+            dp_eps=mean_dp_eps,
+            round_time=round_time,
+        )
+
+        save_checkpoint(global_params, round_num)
+
+    # ── Final summary ────────────────────────────────────────────────────────
+    print("\n" + "="*65)
+    print(f"  Training complete — {NUM_ROUNDS} rounds  [{MODEL_TYPE.upper()}]")
+    print(f"  Results logged to: {LOG_CSV}")
+    print(f"  Checkpoint:        {CHECKPOINT_PARAMS}")
+    if USE_KRUM:
+        print(f"\n  Reminder: delete checkpoint before changing flags")
+        print(f"  (Krum/HE/DP flags change the experiment — old checkpoint")
+        print(f"  params will give misleading results if reused.)")
+    print("="*65 + "\n")
 
 
 if __name__ == "__main__":
