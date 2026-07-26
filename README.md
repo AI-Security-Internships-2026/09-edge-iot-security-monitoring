@@ -99,6 +99,24 @@ python src/main.py
 
 ---
 
+## Roadmap to September 8, 2026
+
+**Current state:** the most technically ambitious pipeline in the cohort — Multi-Krum Byzantine-robust aggregation, DP-SGD, cryptographic commitment, and partial homomorphic encryption, all implemented (PR #8). Needs consolidation of duplicated code between `src/` and `docker_fl/src/` (issue #9) before merge.
+
+**Novel contribution target:** the plan in issue #10 — test whether privacy (DP/HE) and robustness (Krum) actually work *together*, not just side by side. This is a real open tension in FL-security research.
+
+| Date | Milestone |
+|---|---|
+| Aug 2 | Consolidate duplicated defense code (issue #9); get PR #8 merged |
+| Aug 9 | Experiment 1 (issue #10): DP vs. Krum detection rate across epsilon values |
+| Aug 16 | Experiment 2 (issue #10): does partial HE create a blind spot for Krum in the encrypted classifier head? |
+| Aug 23 | Experiment 3 (issue #10): checkpoint every privacy configuration; build the comparison table |
+| Aug 30 | Full analysis and write-up of the privacy-robustness tradeoff findings |
+| Sep 6 | Paper draft |
+| **Sep 8** | **Final submission** |
+
+---
+
 ## Supervisor Note
 
 This repository is managed by **CNIT/PNTLab Pisa, TECIP, Scuola Superiore Sant'Anna**.
