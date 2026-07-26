@@ -1,1 +1,0 @@
-round,client,loss,accuracy,Normal,DDoS_UDP,DDoS_ICMP,Ransomware,DDoS_HTTP,DDoS_TCP,Vulnerability_scanner,MITM,zkp_rejected,krum_selected,krum_detected_byzantine,dp_epsilon_spent,round_time_s

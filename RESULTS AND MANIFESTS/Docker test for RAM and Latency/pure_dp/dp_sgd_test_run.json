@@ -1,0 +1,272 @@
+{
+  "run_metadata": {
+    "run_label": "dp_sgd_test_run",
+    "condition": "pure_dp",
+    "date": "2026-07-25",
+    "time_window_utc_offset_note": "timestamps in log are local (UTC+5, PKT) based on server log lines",
+    "run_start": "2026-07-25T15:52:02",
+    "run_end": "2026-07-25T16:21:05",
+    "wall_clock_duration_minutes": 29.05,
+    "model_type": "network",
+    "num_clients": 2,
+    "num_rounds": 3,
+    "local_epochs_per_round": 2,
+    "global_model_total_params": 129352,
+    "data_source": "real_edge_iiotset_partition",
+    "num_features_actual": 35,
+    "num_features_hardcoded_previously": 40,
+    "note_on_features": "Feature count derived dynamically from actual partition data (post-VarianceThreshold), not hardcoded. Differs from the previously assumed 40 due to VarianceThreshold dropping near-zero-variance columns on real data."
+  },
+
+  "privacy_config": {
+    "mechanism": "DP-SGD (Opacus PrivacyEngine, per-sample gradient clipping + noise, applied during training inside train_worker.py subprocess)",
+    "target_epsilon_per_round": 3.0,
+    "delta": 1e-05,
+    "max_grad_norm": 1.0,
+    "zkp_enabled": false,
+    "he_enabled": false,
+    "IMPORTANT_CAVEAT": "achieved_eps is reported identically (~2.99) in every round because Opacus's PrivacyEngine is freshly instantiated in a new subprocess each round, with no cumulative accountant persisted across rounds. This is a PER-ROUND epsilon, not a composed total. Under basic composition, true cumulative privacy cost across 3 rounds is at least 3 x ~3.0 = ~9.0 (looser bound); tighter RDP/moments-accountant composition would give a smaller but still-elevated total. Reporting 'epsilon=3.0' as the overall guarantee for the full training run would overstate privacy. This should be explicitly caveated in any writeup, or fixed by persisting a single accountant across rounds."
+  },
+
+  "resource_limits": {
+    "declared_client_mem_limit_mb": 256,
+    "declared_client_memswap_limit_mb": 256,
+    "observed_peak_subprocess_ram_mb": 645,
+    "DISCREPANCY_NOTE": "Observed peak RAM (up to 645MB) substantially exceeds the declared 256MB mem_limit / memswap_limit with no OOM kill occurring. This strongly suggests the effective container memory limit at runtime was higher than 256MB when this run executed (e.g. limit raised during troubleshooting, or limit not enforced as expected on this Docker Desktop / WSL2 configuration). Results below should NOT be reported as '256MB-constrained IoT gateway' numbers until the actual enforced limit for this run is confirmed."
+  },
+
+  "clients": {
+    "client_0": {
+      "partition": {
+        "train_rows": 38440,
+        "test_rows": 9611,
+        "features": 35,
+        "partition_file_size_mb": 1.4,
+        "training_data_on_disk_mb": 10.6
+      },
+      "rounds": {
+        "1": {
+          "loss_per_epoch": [1.6045, 1.2349],
+          "noise_multiplier": 0.6458,
+          "achieved_epsilon_this_round": 2.9977,
+          "target_epsilon_this_round": 3.0,
+          "latency_seconds": {
+            "train_subprocess_total": 661.4,
+            "he_encrypt": 0.0,
+            "http_send": 0.43,
+            "round_total_client_side": 661.4
+          },
+          "ram_mb": {
+            "subprocess_start": 249,
+            "after_data_load": 261,
+            "peak": 624,
+            "avg": 532
+          },
+          "he_split": {
+            "sensitive_params": 4680,
+            "sensitive_pct": 3.6,
+            "bulk_params": 124672,
+            "bulk_mode": "plaintext (DP-SGD-trained, HE disabled this run)"
+          }
+        },
+        "2": {
+          "loss_per_epoch": [1.0582, 0.8792],
+          "noise_multiplier": 0.6458,
+          "achieved_epsilon_this_round": 2.9977,
+          "target_epsilon_this_round": 3.0,
+          "latency_seconds": {
+            "train_subprocess_total": 538.6,
+            "he_encrypt": 0.0,
+            "http_send": 0.04,
+            "round_total_client_side": 538.6
+          },
+          "ram_mb": {
+            "subprocess_start": 248,
+            "after_data_load": 260,
+            "peak": 645,
+            "avg": 546
+          },
+          "he_split": {
+            "sensitive_params": 4680,
+            "sensitive_pct": 3.6,
+            "bulk_params": 124672,
+            "bulk_mode": "plaintext (DP-SGD-trained, HE disabled this run)"
+          }
+        },
+        "3": {
+          "loss_per_epoch": [0.8209, 0.7616],
+          "noise_multiplier": 0.6458,
+          "achieved_epsilon_this_round": 2.9977,
+          "target_epsilon_this_round": 3.0,
+          "latency_seconds": {
+            "train_subprocess_total": 525.1,
+            "he_encrypt": 0.0,
+            "http_send": 0.04,
+            "round_total_client_side": 525.1
+          },
+          "ram_mb": {
+            "subprocess_start": 248,
+            "after_data_load": 259,
+            "peak": 634,
+            "avg": 551
+          },
+          "he_split": {
+            "sensitive_params": 4680,
+            "sensitive_pct": 3.6,
+            "bulk_params": 124672,
+            "bulk_mode": "plaintext (DP-SGD-trained, HE disabled this run)"
+          }
+        }
+      },
+      "summary": {
+        "total_train_time_seconds": 1725.1,
+        "peak_ram_mb_across_all_rounds": 645,
+        "avg_ram_mb_across_all_rounds": 543.0,
+        "final_loss": 0.7616,
+        "loss_trend": "monotonically decreasing across rounds (1.2349 -> 0.8792 -> 0.7616), model is learning under this DP-SGD configuration"
+      }
+    },
+
+    "client_1": {
+      "partition": {
+        "train_rows": 23294,
+        "test_rows": 5824,
+        "features": 35,
+        "partition_file_size_mb": 0.8,
+        "training_data_on_disk_mb": 6.4
+      },
+      "rounds": {
+        "1": {
+          "loss_per_epoch": [1.7246, 1.1372],
+          "noise_multiplier": 0.6934,
+          "achieved_epsilon_this_round": 2.9923,
+          "target_epsilon_this_round": 3.0,
+          "latency_seconds": {
+            "train_subprocess_total": 488.7,
+            "he_encrypt": 0.0,
+            "http_send": 1.36,
+            "round_total_client_side": 488.7
+          },
+          "ram_mb": {
+            "subprocess_start": 249,
+            "after_data_load": 256,
+            "peak": 585,
+            "avg": 496
+          },
+          "he_split": {
+            "sensitive_params": 4680,
+            "sensitive_pct": 3.6,
+            "bulk_params": 124672,
+            "bulk_mode": "plaintext (DP-SGD-trained, HE disabled this run)"
+          }
+        },
+        "2": {
+          "loss_per_epoch": [0.9509, 0.6883],
+          "noise_multiplier": 0.6934,
+          "achieved_epsilon_this_round": 2.9923,
+          "target_epsilon_this_round": 3.0,
+          "latency_seconds": {
+            "train_subprocess_total": 364.9,
+            "he_encrypt": 0.0,
+            "http_send": 0.12,
+            "round_total_client_side": 364.9
+          },
+          "ram_mb": {
+            "subprocess_start": 248,
+            "after_data_load": 256,
+            "peak": 613,
+            "avg": 513
+          },
+          "he_split": {
+            "sensitive_params": 4680,
+            "sensitive_pct": 3.6,
+            "bulk_params": 124672,
+            "bulk_mode": "plaintext (DP-SGD-trained, HE disabled this run)"
+          }
+        },
+        "3": {
+          "loss_per_epoch": [0.6339, 0.5810],
+          "noise_multiplier": 0.6934,
+          "achieved_epsilon_this_round": 2.9923,
+          "target_epsilon_this_round": 3.0,
+          "latency_seconds": {
+            "train_subprocess_total": 338.0,
+            "he_encrypt": 0.0,
+            "http_send": 0.03,
+            "round_total_client_side": 338.0
+          },
+          "ram_mb": {
+            "subprocess_start": 248,
+            "after_data_load": 255,
+            "peak": 609,
+            "avg": 518
+          },
+          "he_split": {
+            "sensitive_params": 4680,
+            "sensitive_pct": 3.6,
+            "bulk_params": 124672,
+            "bulk_mode": "plaintext (DP-SGD-trained, HE disabled this run)"
+          }
+        }
+      },
+      "summary": {
+        "total_train_time_seconds": 1191.6,
+        "peak_ram_mb_across_all_rounds": 613,
+        "avg_ram_mb_across_all_rounds": 509.0,
+        "final_loss": 0.5810,
+        "loss_trend": "monotonically decreasing across rounds (1.1372 -> 0.6883 -> 0.5810), model is learning under this DP-SGD configuration"
+      }
+    }
+  },
+
+  "server": {
+    "he_enabled": false,
+    "aggregation_method": "plaintext FedAvg of bulk layers (sensitive/HE path unused this run)",
+    "aggregate_latency_seconds": {
+      "round_1": 0.02,
+      "round_2": 0.00,
+      "round_3": 0.00
+    },
+    "mem_limit_gb_declared": 6
+  },
+
+  "cross_run_comparison_context": {
+    "prior_synthetic_data_no_dp_sgd_run": {
+      "description": "Earlier run on synthetic placeholder data (40,000 rows, no real dataset mounted), post-hoc local_dp.apply_local_dp() mechanism (not DP-SGD), classifier-head-only partial HE (6% coverage)",
+      "typical_train_time_seconds_per_round": "40-49",
+      "typical_peak_ram_mb": "~46-56"
+    },
+    "this_run_real_data_dp_sgd": {
+      "description": "Real Edge-IIoTset partitions (23k-38k rows/client), true Opacus DP-SGD (per-sample clipping+noise during training), HE fully disabled",
+      "typical_train_time_seconds_per_round": "338-661",
+      "typical_peak_ram_mb": "585-645"
+    },
+    "latency_increase_factor_approx": "10-16x",
+    "explanation": "The latency increase is attributable to both larger real-data volume AND, more dominantly, DP-SGD's need to compute per-sample (rather than batched) gradients, which is known to be significantly slower on CPU than standard batched training. Real-data row count alone (23k-38k vs 40k synthetic) would not explain a 10-16x slowdown; DP-SGD mechanism overhead is the primary driver."
+  },
+
+  "known_issues_and_caveats": [
+    {
+      "issue": "Per-round epsilon reported, not composed across rounds",
+      "detail": "achieved_eps is ~2.99 identically in every round for both clients. This reflects a fresh Opacus PrivacyEngine instantiated per-round (per-subprocess), not a cumulative accountant across all NUM_ROUNDS. True total privacy cost across 3 rounds is higher than 3.0 under any standard composition theorem (basic composition gives ~9.0 as a loose upper bound).",
+      "severity": "high - affects the validity of any 'epsilon=3.0' privacy claim for the full training run",
+      "recommended_fix": "Persist a single privacy accountant (RDP or PRV) across rounds via a state file read/written by train_worker.py, OR explicitly report per-round epsilon and the composed bound separately in any writeup."
+    },
+    {
+      "issue": "Observed RAM (up to 645MB) exceeds declared client mem_limit (256MB) with no OOM",
+      "detail": "Either the effective container memory limit during this run was higher than 256MB (e.g. changed during troubleshooting and not reverted), or the limit was not enforced as configured. Actual enforced limit for this specific run is unconfirmed.",
+      "severity": "medium - affects whether these RAM numbers can be labeled as '256MB-constrained device' results",
+      "recommended_fix": "Run `docker compose --profile pure_dp config | findstr mem_limit` immediately before future runs and record the confirmed value alongside results."
+    },
+    {
+      "issue": "HE/ZKP fully disabled this run (as intended for pure_dp condition)",
+      "detail": "he_encrypt latency and ZKP latency are correctly 0.0 across all rounds/clients, confirming isolation from the HE/ZKP stack for this ablation condition.",
+      "severity": "informational - expected and correct for this condition"
+    },
+    {
+      "issue": "Loss is decreasing, indicating DP-SGD at eps=3.0/round is NOT swamping the signal (unlike the earlier buggy post-hoc DP mechanism, which added noise ~450x the clipped signal norm per the zkp.py module's own documented finding)",
+      "detail": "Client 0: 1.2349 -> 0.8792 -> 0.7616. Client 1: 1.1372 -> 0.6883 -> 0.5810. Both trending down consistently.",
+      "severity": "informational - positive result, DP-SGD mechanism appears to be functioning correctly for utility at this per-round epsilon"
+    }
+  ]
+}

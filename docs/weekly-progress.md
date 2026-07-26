@@ -185,6 +185,3 @@ None faced.
 - The model cannot run to it's full potential on the 200mb limit which was given to me, after running tests the ideal ram limit would be 400 mb.
 
 ### Next week plans
-
-- Scale the Docker validation run from 3 rounds to 10-15 rounds to determine whether the privacy-utility tradeoff stabilizes into steady convergence or remains an oscillatory plateau under sustained local DP noise
-- Decide on and implement one of the DP calibration fixes above, then re-run the full pipeline to quantify its effect on both the ZKP pass rate and the noise-to-signal ratio
