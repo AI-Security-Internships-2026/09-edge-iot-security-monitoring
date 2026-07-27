@@ -7,80 +7,22 @@ from data_loader import (
     NETWORK_NAMES, NUM_NETWORK_CLASSES, NETWORK_COUNTS,
     APP_NAMES,     NUM_APP_CLASSES,     APP_COUNTS
 )
+from model_defs import (
+    CNN_LSTM, get_model, get_model_parameters,
+    get_model_parameter_keys, set_model_parameters
+)
 
-# Default — overridden dynamically in main.py via get_model(num_features=)
-NUM_FEATURES = 52
-
-
-# ── Model architecture ────────────────────────────────────────────────
-
-class CNN_LSTM(nn.Module):
-    """
-    1D CNN + LSTM for network traffic classification.
-    num_features is passed in dynamically so both models
-    (network=40 features, application=52 features) use the
-    same architecture class without hardcoding.
-    """
-    def __init__(self, num_features=NUM_FEATURES, num_classes=8):
-        super().__init__()
-
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, 64, kernel_size=3, padding=1),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-            nn.Conv1d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-        )
-
-        with torch.no_grad():
-            dummy   = torch.zeros(1, 1, num_features)
-            cnn_out = self.cnn(dummy)
-            lstm_in = cnn_out.shape[1]
-
-        self.lstm = nn.LSTM(
-            input_size  = lstm_in,
-            hidden_size = 64,
-            num_layers  = 1,
-            batch_first = True,
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(64, num_classes)
-        )
-
-    def forward(self, x):
-        x = x.unsqueeze(1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        _, (h_n, _) = self.lstm(x)
-        x = h_n.squeeze(0)
-        return self.classifier(x)
+# Re-exported for anything that still does `from task import CNN_LSTM`
+# etc. — keeps this a non-breaking change for the rest of the codebase.
+__all__ = [
+    "CNN_LSTM", "get_model", "get_model_parameters",
+    "get_model_parameter_keys", "set_model_parameters",
+    "FocalLoss", "build_criterion_network", "build_criterion_application",
+    "train", "test",
+]
 
 
-def get_model(num_features=NUM_FEATURES, num_classes=8):
-    return CNN_LSTM(num_features=num_features, num_classes=num_classes)
-
-
-# ── Parameter helpers ─────────────────────────────────────────────────
-
-def get_model_parameters(model):
-    return [v.cpu().numpy() for v in model.state_dict().values()]
-
-
-def set_model_parameters(model, parameters):
-    keys       = list(model.state_dict().keys())
-    state_dict = {k: torch.tensor(v) for k, v in zip(keys, parameters)}
-    model.load_state_dict(state_dict, strict=True)
-    return model
-
-
-# ── Loss ──────────────────────────────────────────────────────────────
+# ── Loss ─────────────────────────────────────────────────────────────
 
 class FocalLoss(nn.Module):
     """
@@ -143,9 +85,9 @@ def build_criterion_application():
     w = _inverse_sqrt_weights(APP_COUNTS)
 
     # Manual overrides for feature-confused classes
-    w[3] = w[3] * 5.0   # Backdoor      — 50k samples but was F1=0.28
-    w[5] = w[5] * 4.0   # XSS           — confused with Backdoor
-    w[6] = w[6] * 3.0   # Password      — HTTP-based, looks like XSS
+    w[3] = w[3] * 5.0   # Backdoor       — 50k samples but was F1=0.28
+    w[5] = w[5] * 4.0   # XSS            — confused with Backdoor
+    w[6] = w[6] * 3.0   # Password       — HTTP-based, looks like XSS
     w[7] = w[7] * 3.0   # Fingerprinting — underperforming
     w[4] = w[4] * 1.5   # Port_Scanning  — moderate boost
 
@@ -153,7 +95,7 @@ def build_criterion_application():
     return FocalLoss(gamma=3.0, weight=w)
 
 
-# ── FedProx proximal term ─────────────────────────────────────────────
+# ── FedProx proximal term ───────────────────────────────────────────
 
 def _proximal_term(model, global_params):
     """
@@ -175,7 +117,7 @@ def _proximal_term(model, global_params):
     return total
 
 
-# ── Training ──────────────────────────────────────────────────────────
+# ── Training ─────────────────────────────────────────────────────────
 
 def train(model, X_train, y_train, criterion,
           epochs=5, lr=0.001, global_params=None, mu=0.01):
@@ -223,7 +165,7 @@ def train(model, X_train, y_train, criterion,
     return model
 
 
-# ── Evaluation ────────────────────────────────────────────────────────
+# ── Evaluation ───────────────────────────────────────────────────────
 
 def test(model, X_test, y_test, num_classes):
     """

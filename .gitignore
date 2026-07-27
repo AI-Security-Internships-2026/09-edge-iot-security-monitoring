@@ -14,6 +14,7 @@ build/
 venv/
 env/
 ENV/
+.venv311/
 
 # IDE / editor
 .vscode/
@@ -65,3 +66,22 @@ credentials/
 # Results that can be reproduced
 experiments/results/*.png
 experiments/results/*.pdf
+v e n v / 
+ 
+ _ _ p y c a c h e _ _ / 
+ 
+ . v e n v 3 1 1 / 
+ 
+ .venv311/
+
+**/datasets/**/*.csv
+**/datasets/**/*.json
+**/datasets/**/*.parquet
+**/datasets/**/*.h5
+**/datasets/**/*.hdf5
+**/datasets/**/*.pkl
+**/datasets/**/*.npy
+**/datasets/**/*.npz
+**/datasets/**/*.zip
+**/datasets/**/*.tar.gz
+**/datasets/**/*.pcap

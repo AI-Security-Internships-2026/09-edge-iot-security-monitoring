@@ -1,0 +1,104 @@
+{
+  "client_id": 0,
+  "timing": {
+    "1": {
+      "train": 661.3639738559723,
+      "total": 661.3639738559723,
+      "http_send": 0.42781734466552734
+    },
+    "2": {
+      "train": 538.6051754951477,
+      "total": 538.6051754951477,
+      "http_send": 0.03591322898864746
+    },
+    "3": {
+      "train": 525.0610048770905,
+      "total": 525.0610048770905,
+      "http_send": 0.03661632537841797
+    }
+  },
+  "memory": {
+    "1": {
+      "before_round": 52.5859375,
+      "after_train": 41.5078125,
+      "peak": 41.5078125,
+      "round_peak_mb": 624.05078125,
+      "round_avg_mb": 531.7092383587037,
+      "stage_peaks": {
+        "train_subprocess": 624.05078125
+      },
+      "stage_avgs": {
+        "train_subprocess": 531.7092383587037
+      }
+    },
+    "2": {
+      "before_round": 44.078125,
+      "after_train": 42.34765625,
+      "peak": 42.34765625,
+      "round_peak_mb": 644.97265625,
+      "round_avg_mb": 546.0568941398924,
+      "stage_peaks": {
+        "train_subprocess": 644.97265625
+      },
+      "stage_avgs": {
+        "train_subprocess": 546.0568941398924
+      }
+    },
+    "3": {
+      "before_round": 43.125,
+      "after_train": 42.96484375,
+      "peak": 42.96484375,
+      "round_peak_mb": 633.7265625,
+      "round_avg_mb": 550.7175177632581,
+      "stage_peaks": {
+        "train_subprocess": 633.7265625
+      },
+      "stage_avgs": {
+        "train_subprocess": 550.7175177632581
+      }
+    }
+  },
+  "dp": {
+    "1": {
+      "target_epsilon": 3.0,
+      "achieved_epsilon": 2.997726998043279,
+      "delta": 1e-05,
+      "max_grad_norm": 1.0,
+      "noise_multiplier": 0.645751953125
+    },
+    "2": {
+      "target_epsilon": 3.0,
+      "achieved_epsilon": 2.997726998043279,
+      "delta": 1e-05,
+      "max_grad_norm": 1.0,
+      "noise_multiplier": 0.645751953125
+    },
+    "3": {
+      "target_epsilon": 3.0,
+      "achieved_epsilon": 2.997726998043279,
+      "delta": 1e-05,
+      "max_grad_norm": 1.0,
+      "noise_multiplier": 0.645751953125
+    }
+  },
+  "summary_ram": {
+    "overall_peak_mb": 644.97265625,
+    "overall_avg_mb": 542.827883420618
+  },
+  "config": {
+    "model_type": "network",
+    "use_dp": true,
+    "use_zkp": false,
+    "use_he": false,
+    "he_scope": "classifier_head_only",
+    "dp_epsilon_target": 3.0,
+    "dp_delta": 1e-05,
+    "dp_max_grad_norm": 1.0,
+    "dp_method": "opacus_dpsgd_per_step",
+    "he_poly_degree": 4096,
+    "mem_limit_mb": 200,
+    "local_epochs": 2,
+    "num_features": 35,
+    "data_source": "real_edge_iiotset_partition"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "1": {
+    "aggregate_s": 0.018075942993164062,
+    "sensitive_mode": "plaintext"
+  },
+  "2": {
+    "aggregate_s": 0.00152587890625,
+    "sensitive_mode": "plaintext"
+  },
+  "3": {
+    "aggregate_s": 0.0014736652374267578,
+    "sensitive_mode": "plaintext"
+  }
+}
