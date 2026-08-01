@@ -1,0 +1,161 @@
+{
+  "condition": "network_baseline",
+  "description": "Network-layer dual-model clean baseline. No attack, no privacy stack, no defence. FedProx on Edge-IIoTset network-layer partition.",
+  "timestamp_locked": "2026-07 (Week 5, locked before Byzantine experiments)",
+  "status": "LOCKED — do not re-run",
+
+  "model": {
+    "architecture": "CNN_LSTM",
+    "num_features": 40,
+    "num_classes": 8,
+    "class_names": [
+      "Normal",
+      "DDoS_UDP",
+      "DDoS_ICMP",
+      "Ransomware",
+      "DDoS_HTTP",
+      "DDoS_TCP",
+      "Vulnerability_scanner",
+      "MITM"
+    ],
+    "class_label_mapping": {
+      "Normal": 0,
+      "DDoS_UDP": 1,
+      "DDoS_ICMP": 2,
+      "Ransomware": 3,
+      "DDoS_HTTP": 4,
+      "DDoS_TCP": 5,
+      "Vulnerability_scanner": 6,
+      "MITM": 7
+    },
+    "original_dataset_indices": [0, 1, 2, 3, 4, 7, 9, 13],
+    "architecture_detail": {
+      "cnn_block_1": "Conv1d(1, 64, k=3, pad=1) -> BatchNorm1d(64) -> ReLU -> MaxPool1d(2)",
+      "cnn_block_2": "Conv1d(64, 128, k=3, pad=1) -> BatchNorm1d(128) -> ReLU -> MaxPool1d(2)",
+      "lstm": "LSTM(input=128, hidden=64, layers=1, batch_first=True)",
+      "classifier": "Linear(64->64) -> ReLU -> Dropout(0.3) -> Linear(64->8)",
+      "total_parameters": "~80074 (approximate)"
+    },
+    "dp_safe": false,
+    "note_on_batchnorm": "Standard BatchNorm1d used (not GroupNorm). Incompatible with Opacus DP-SGD — requires dp_safe=True for DP experiments."
+  },
+
+  "fl_config": {
+    "algorithm": "FedProx",
+    "framework": "Custom Flask-based (NOT Flower 2.x — Flower abandoned early due to SIGTERM/import timing bugs)",
+    "num_clients": 10,
+    "num_rounds": 25,
+    "local_epochs": 5,
+    "learning_rate": 0.001,
+    "prox_mu": 0.01,
+    "dirichlet_alpha": 0.7,
+    "seed": 42,
+    "batch_size": 256,
+    "lr_scheduler": "StepLR(step_size=2, gamma=0.9)",
+    "optimizer": "Adam"
+  },
+
+  "dataset": {
+    "name": "Edge-IIoTset DNN subset",
+    "csv_file": "DNN-EdgeIIoT-dataset.csv",
+    "cache_file": "datasets/dnn_preprocessed_cache.npz",
+    "preprocessing_steps": [
+      "Drop columns: frame.time, ip.src_host, ip.dst_host, tcp.options, tcp.payload, mqtt.conack.flags, mqtt.msg, mqtt.protoname, mqtt.topic, Attack_label",
+      "LabelEncoder on Attack_type",
+      "pd.to_numeric with coerce + nan_to_num",
+      "VarianceThreshold(1e-6) BEFORE StandardScaler: 52 -> 40 features",
+      "Cap DDoS_TCP to 18% of total (VARS-FL methodology)",
+      "StandardScaler"
+    ],
+    "features_raw": 52,
+    "features_after_variance_threshold": 40,
+    "ddos_tcp_raw_pct": 72.8,
+    "ddos_tcp_capped_pct": 18.0,
+    "total_samples_after_cap": 736046,
+    "partitioning": {
+      "method": "Dirichlet non-IID",
+      "alpha": 0.7,
+      "seed": 42,
+      "classes_dropped_threshold": "< 2 samples per client per class",
+      "train_test_split": 0.8,
+      "note": "alpha=0.7 gives moderate heterogeneity. Prior alpha=0.5 caused Client 3 to hold 49.6% of weight."
+    },
+    "class_counts_in_network_partition": {
+      "Normal": 24862,
+      "DDoS_UDP": 49911,
+      "DDoS_ICMP": 116436,
+      "Ransomware": 50062,
+      "DDoS_HTTP": 121568,
+      "DDoS_TCP": 132488,
+      "Vulnerability_scanner": 22564,
+      "MITM": 50110
+    }
+  },
+
+  "loss_function": {
+    "type": "FocalLoss",
+    "gamma": 2.0,
+    "class_weighting": "inverse_sqrt_frequency",
+    "weight_normalisation": "mean=1.0",
+    "note": "Focal Loss down-weights easy majority-class samples. Inverse-sqrt weights softer than raw inverse to avoid extreme gradient ratios."
+  },
+
+  "attack_config": {
+    "byzantine_attack": false
+  },
+
+  "defence_config": {
+    "use_krum": false,
+    "use_local_dp": false,
+    "use_zkp": false,
+    "use_he": false
+  },
+
+  "results": {
+    "data_source": "Round 24 MEAN row from fl_results_network_baseline.csv (locked as baseline — round 25 not needed)",
+    "final_round_used": 24,
+    "total_rounds_run": 25,
+    "loss": 0.2218,
+    "accuracy": 0.9210,
+    "f1_macro": 0.8386,
+    "f1_macro_reported": 0.839,
+    "f1_per_class": {
+      "Normal": 0.6436,
+      "DDoS_UDP": 0.7491,
+      "DDoS_ICMP": 0.9985,
+      "Ransomware": 0.9619,
+      "DDoS_HTTP": 0.9997,
+      "DDoS_TCP": 0.7850,
+      "Vulnerability_scanner": 0.6991,
+      "MITM": 0.8716
+    },
+    "convergence_notes": {
+      "stable_band_rounds": "17-24",
+      "f1_macro_stable_range": "0.835-0.849",
+      "best_classes": ["DDoS_HTTP (0.9997)", "DDoS_ICMP (0.9985)", "Ransomware (0.962)"],
+      "weakest_classes": ["Normal (0.644)", "Vulnerability_scanner (0.699)"],
+      "normal_weakness_reason": "Normal is only 3.38% of capped dataset (24,862 samples). Model has limited exposure to benign traffic.",
+      "vuln_scanner_weakness_reason": "Smallest class in network partition at 22,564 samples — Dirichlet leaves some clients with very few."
+    }
+  },
+
+  "comparison": {
+    "vars_fl_benchmark": {
+      "f1_macro": 0.6422,
+      "accuracy": 0.8185,
+      "num_clients": 100,
+      "num_rounds": 100,
+      "note": "VARS-FL (arxiv 2605.05896) best result on same dataset and preprocessing. This work exceeds benchmark with 10x fewer clients and 4x fewer rounds."
+    },
+    "rashid_et_al": {
+      "accuracy_claimed": 0.9249,
+      "note": "High number reflects DDoS_TCP majority-class prediction bias, not genuine multi-class detection. Uses near-IID split."
+    }
+  },
+
+  "file_references": {
+    "results_csv": "fl_results_network_baseline.csv",
+    "checkpoint": "fl_checkpoint_network_baseline.npz",
+    "progress": "fl_progress_network_baseline.json"
+  }
+}

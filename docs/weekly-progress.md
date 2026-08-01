@@ -171,8 +171,7 @@ None faced.
   - I/O storage calibration — removed redundant per-round dataset re-serialization; clients now write their training partition to disk once instead of every round
 - Established the edge RAM floor: CKKS at n=4096 on this model requires roughly 210-245MB for cryptographic steps alone; combined with the PyTorch runtime, the effective container floor sits around 340-350MB
 
-**Production run validation and debugging**
-- Fixed two JSON serialization crashes in the client→server payload: raw `bytes` salt field, and `numpy.bool_` validation state (neither is JSON-serializable)
+**Production run validation and debugging**)
 - Found and fixed a stray `×0.01` scaling bug in `zkp.py`'s norm-threshold formula that made validation ~100x too strict, causing the server to reject every legitimate update; corrected with a proper `NOISE_NORM_SAFETY_FACTOR = 1.15` applied to the theoretically correct `σ × √n_params` formula
 - Achieved a clean end-to-end 3-round production run: 100% update retention (2/2 clients per round, HTTP 200), server-side ZKP re-verification passing independently
 - Measured privacy-utility tradeoff directly: moving DP epsilon from 3.0 to 15.0 brought the noise-to-signal ratio down from ~450:1 to ~91:1, but this still manifests as non-monotonic loss between rounds (Client 0: round 1 ends at loss 1.4365, round 2 begins at loss 1.6583 before recovering to 1.4666) — confirms a real limitation of high-dimensional local DP at this model size
@@ -185,3 +184,68 @@ None faced.
 - The model cannot run to it's full potential on the 200mb limit which was given to me, after running tests the ideal ram limit would be 400 mb.
 
 ### Next week plans
+
+
+---
+
+## Week 7
+
+**Branch:** `zarawar-week-7`
+**PR link:**
+
+### Completed this week
+
+- **Pure-HE vs. Pure-DP ablation, finalized.** Built `docker-compose.ablation.yml` (independent `he_only_*`/`dp_only_*` groups, separate results volumes, distinct ports, seperate client memory ceiling). Fixed two validity problems: (1) unfair HE comparison — pure HE was only encrypting the 6% classifier head vs. DP's 100% coverage, fixed via a new `HE_FULL_COVERAGE` env var; (2) every prior run had used synthetic placeholder data — fixed via `build_partitions.py` (offline preprocessing into per-client `.npz` partitions), made `load_data()` hard-error instead of silently falling back to synthetic data, and fixed `NUM_FEATURES` being hardcoded to 40 instead of the real post-`VarianceThreshold` count (35)
+- Built a `RamSampler` (background-thread RSS polling) for continuous peak/average RAM tracking per stage/round
+- **`pure_dp` run completed on real data** (23k/38k-row partitions, 35 features); confirmed DP had been upgraded to real Opacus DP-SGD, a genuine improvement over the old post-hoc noise mechanism. Found the epsilon composition problem — flat ε≈2.99 every round, meaning no cross-round privacy accountant. Attempted composition-tracked DP and hit a utility wall (loss exploded 10x/round at composed ε=3.0); **decision made ("Option A"):** keep per-round DP-SGD, report the caveat honestly, defer a proper ε-sweep to RQ3
+- **`pure_he` results reviewed**: confirmed the full-coverage fix worked (CKKS timing scaled ~17x with param count).
+- **Final reported RAM/latency numbers:** Pure HE ≈0.2s latency, ≥400MB RAM; Pure DP-SGD (Opacus) far more taxing — ≈600MB RAM, ≈300s/client to train
+- Established the HE-vs-DP framing for the write-up: complementary, not competing (HE protects the pipe, DP protects the output); recommended a combined deployment (whole-model DP-SGD + classifier-head-only partial HE) as a future third experiment
+
+
+- **Defence-folder consolidation completed:** confirmed `docker_fl/` is a full parallel project (own datasets, own results), not a duplicate. Diffed `zkp.py`/`local_dp.py` between `src/` and `docker_fl/` — found real divergences. Merged into one canonical `src/defences/zkp.py`/`local_dp.py`; confirmed `docker-compose.yml` mounts `../src/defences` read-only into all four containers, verified live via `inspect.getsourcefile()`. `krum.py`/`byzantine.py` had no conflict. `defences/homomorphic.py` confirmed dead code — real pure-HE implementation lives in `docker_fl/he_aggregation.py`, porting deferred
+- **`main.py` unification completed:** merged the two previously separate `main.py` files (DP/ZKP/HE version and Krum/Byzantine version) into one file with three aggregation branches — HE, Multi-Krum, or plain FedAvg.
+- Flagged a terminology note for the write-up: the DP/ZKP/HE `main.py`'s "ZKP" is a plain norm-threshold check, structurally different from the HMAC-commitment `defences/zkp.py`
+- **Issue resolution:** deleted the unused scaffold `src/server_app.py` (training has been driven by `app/main.py`/`main.py` on real Edge-IIoTset data since Week 4); closed Issue 7 as a consequence. Clarified metrics separation — `docker_fl/results` (now `RESULTS AND MANIFESTS/Docker test for RAM and Latency/`) intentionally logs hardware metrics on placeholder data (purpose is resource-constraint emulation, not accuracy), while root `results/` holds full real-data benchmarks. Closed Issue 9 (defence-folder duplication); Issue 10 (Krum non-IID exclusion) marked as actively being worked on
+
+
+- **Repository reorganization completed** (kept in a separate commit from logic changes, `dc7d4af`, for a clean diff): new structure — `experiments/Current tests/` (was `src/`), `experiments/Docker tests for RAM and Latency/` (was `docker_fl/`), consolidated `RESULTS AND MANIFESTS/`. Removed confirmed-safe dead weight: `k8s/` (unused ~4 weeks), `docker-compose.yml`/`superexec.Dockerfile`/`pyproject.toml`, stale root `requirements.txt`/`experiment_config_network.json`/`results_network.csv`, stray accidental terminal-capture junk files, and the outdated `tasks/week-01.md`
+
+
+- Parameterized `model_defs.py` with an opt-in `dp_safe` flag (BatchNorm1d→GroupNorm, LSTM→DPLSTM) instead of an unconditional swap, so non-DP runs stay byte-identical to existing baselines/checkpoints
+- Added a `BYZANTINE_HEAD_ONLY` flag — under `USE_HE=True`, uses `classifier_head_flip_attack()` instead of `sign_flip_attack()` since a full sign-flip at scale=5.0 would trip ZKP's norm gate under HE
+- Wrote `scripts/build_manifest.py` (rewritten once after an initial wrong-schema assumption): discovers all runs via `experiment_config_*.json` + `results_*.csv` pairs, computes per-experiment summary stats, sanitizes stray "Flower" references, outputs `manifest.json` + `manifest_summary.csv`
+- Confirmed 38 features is the real, reproducible count (not the documented 35) via `check_features.py` and a full column audit — adopted as ground truth for the main experiment
+
+
+- **Ran and analyzed the first full 25-round ε=15 run** Experiment 1 (DP-SGD ε=15 + Multi-Krum + Byzantine attack, 25 rounds): Krum achieved 100% Byzantine detection every round on both models, confirming DP-SGD and Multi-Krum are compatible at this privacy level. Network held up well (90.8% acc, only 1.5% relative drop from its clean baseline), but application collapsed (47.0% acc, a 38% relative drop). The gap traces almost entirely to XSS, which scored near-zero F1 in 20 of 25 rounds — likely driven by Krum's looser client-exclusion margin (m=6) discarding legitimate non-IID clients that happened to hold XSS signal, on top of a task that's already harder at baseline. Next steps: rerun application under the tightened m=7 Krum config, finish the in-progress oracle-Krum comparison to isolate the exclusion effect, and check per-client XSS sample counts.
+
+
+- Built a new matched-resource Full-HE vs. Partial-HE ablation (distinct from Week 7's deliberately-varied `pure_he`/`pure_dp` runs); fixed a `docker-compose.yml` header (`version:`/`services:`) lost in the reorg, and — again — `server.py` hardcoding `num_features=40`, fixed to read from environment
+- **Received and analyzed the `he_full`/`he_partial` results:** partial HE (classifier head only, 3.6% of params) is ~17–19x faster at client-side encryption and ~14x faster at server-side aggregation than full-model HE, with no measurable difference in peak RAM (within ~1MB — training memory dominates the round's peak regardless of HE scope, at this ~130K-param model size). **Caveat surfaced:** this ablation ran on 35 features / 100k-row-subsampled partitions (from `build_partitions.py --max-rows 100000`), not the main experiment's 38-feature full corpus — internally valid for the full-vs-partial comparison, but not yet directly comparable to the main Krum/DP-SGD results
+
+### Problems / Blockers
+
+-Caught and fixed a critical bug during the 'main.py' merge: ZKP-rejected clients get `continue`d out before aggregation, compacting `accepted_params`, so Krum's `selected_indices` were being compared directly against `BYZANTINE_CLIENTS` (original IDs) — fixed by tracking `accepted_client_indices` in parallel
+- Found and fixed three more bugs in the same pass: `get_model()` missing `dp_safe` (fixed via a unified `DP_SAFE = USE_DP` flag across all call sites); the Opacus wrapper never unwrapped before param extraction (fixed via `real_model = model._module if hasattr(model, "_module") else model`); achieved epsilon computed then immediately discarded before logging, leaving `dp_epsilon_spent` always `N/A` (fixed by removing the overwrite). Also fixed an output file-naming collision (results/checkpoints not tagged by DP epsilon condition, risking silent overwrites) via a rename-after-each-run workflow
+
+- Worked through Docker/Windows issues: wrong dataset path, cmd.exe vs. PowerShell mismatches, and a genuine `Errno 12` OOM traced to WSL2's VM having only 3.5GB total memory — fixed via a `.wslconfig` bump
+- Epsilon composition gap confirmed structural (flat ε≈2.99/round) — accepted as a documented caveat rather than fixed this week
+
+- `defences/homomorphic.py` still dead code; real HE implementation still needs porting from `docker_fl/he_aggregation.py`
+
+- Also caught and fixed the MEAN-row `krum_detected_byzantine` truthy-collapse bug (`1 if krum_detected else 0` couldn't distinguish 0.5 partial detection from 1.0 full detection) via a new `is_mean` flag in `append_log_row()`; investigated and ruled out a CSV header mismatch (APP_NAMES columns on a network run) as a code bug — traced to a stale/environment file issue, resolved by regenerating headers from the correct directory
+
+- Diagnosed severe network-model slowness (9 hrs / 10 rounds) to network having ~3x application's data volume; applied three fixes on top of an already-revised `main.py`: Parallelization: client training logic moved verbatim into a new top-level function _train_one_client(), The round loop now submits all 10 clients to a 4-worker ProcessPoolExecutor, then processes results in original client order, Thread tuning: main process uses all detected cores (torch.set_num_threads(_CPU_COUNT)); each worker process is capped at cores // 4 to avoid 4 processes each fighting for every core simultaneously. DP batch size: 256 → 512.
+
+- `KRUM_M` still isn't reaching `multi_krum()` — Krum still discards 4 clients instead of the intended 3; blocked on reviewing `krum.py`'s current source to fix the pass-through
+- Fix `KRUM_M` propagation into `multi_krum()`
+
+- Added manifests to ensure reproducability.
+
+
+### Next week plan
+
+- Complete experiment 1 after fixing krum to properly discard 3 clients instead of 4, increase speed of training model.
+- Build the combined DP-SGD + partial-HE experiment (Experiment 2)
+---

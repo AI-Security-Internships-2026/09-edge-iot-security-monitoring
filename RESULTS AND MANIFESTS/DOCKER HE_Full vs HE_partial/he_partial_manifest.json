@@ -1,0 +1,176 @@
+{
+  "condition": "he_partial",
+  "description": "Pure Homomorphic Encryption ablation — PARTIAL model coverage. Only the classifier head (~3.6% of parameters) is CKKS-encrypted client-side; the remaining ~96.4% (CNN + LSTM backbone) is sent as plaintext and aggregated via standard FedAvg on the server.",
+
+  "data_provenance": {
+    "source": "AUTHORITATIVE — read directly from results/he_partial/client_0_results.json, client_1_results.json, and server_timing.json, as provided verbatim by the user. Supersedes the earlier console-reconstructed version of this manifest.",
+    "confidence": "exact — all figures below are copied directly from the source JSON"
+  },
+
+  "feature_count": {
+    "value_used_in_this_run": 35,
+    "confirmed_by": "num_features: 35 field directly inside both client_0 and client_1's recorded config block — authoritative, identical partition files to the he_full condition",
+    "why_this_differs_from_the_main_experiment": {
+      "main_experiment_feature_count": 38,
+      "main_experiment_source": "src/data_loader.py's load_partition_network(), called by main.py (Krum/DP-SGD experiments), fit on the FULL corpus (~736,046 rows, no row cap)",
+      "this_run_feature_count": 35,
+      "this_run_source": "docker_fl/build_partitions.py, invoked with --max-rows 100000 per the script's documented usage example, producing a ~100k-row stratified subsample of the corpus BEFORE VarianceThreshold(threshold=1e-6) is fit",
+      "root_cause": "Identical mechanism to the he_full condition — VarianceThreshold's selected feature set is sample-size-dependent, and a ~100k-row stratified subsample causes several borderline-variance columns to fall below the 1e-6 threshold that clears on the full 736,046-row corpus. Both conditions share the exact same partition files, so this discrepancy is identical and not condition-specific.",
+      "resolution_status": "NOT YET RESOLVED as of this manifest. Same fix as he_full: rebuild via 'python build_partitions.py --model-type network --num-clients 2' (no --max-rows)."
+    }
+  },
+
+  "model_config": {
+    "architecture": "CNN_LSTM",
+    "total_params": 129352,
+    "num_classes": 8,
+    "model_type": "network",
+    "note": "identical total_params to he_full, as expected — HE coverage scope changes which parameters are encrypted, not model architecture"
+  },
+
+  "he_config": {
+    "he_full_coverage": false,
+    "he_scope_label": "classifier_head_only",
+    "poly_modulus_degree": 4096,
+    "sensitive_params": 4680,
+    "sensitive_pct": 3.6,
+    "bulk_params": 124672,
+    "bulk_pct": 96.4,
+    "scheme": "CKKS",
+    "note_on_percentage": "3.6% (4,680 / 129,352) is empirically measured, superseding earlier project-doc estimates (~5.8%, ~6%) based on a different, unreconciled total-parameter assumption. Use 3.6% / 4,680 / 129,352 as authoritative going forward."
+  },
+
+  "defence_stack": {
+    "use_local_dp": false,
+    "use_zkp": false,
+    "use_he": true,
+    "dp_method": null,
+    "dp_config_present_but_inactive": {
+      "dp_epsilon_target": 5.0,
+      "dp_delta": 1e-05,
+      "dp_max_grad_norm": 1.0,
+      "note": "argparse defaults recorded regardless of use_dp; dp_method: null confirms DP did not execute"
+    }
+  },
+
+  "resource_limits": {
+    "server_mem_limit": "2g (unconstrained, per design)",
+    "client_mem_limit_declared_in_compose": "500m",
+    "client_mem_limit_label_in_results_json": 200,
+    "CONFIRMED_MISMATCH": "same as he_full — client.py's config.mem_limit_mb reads 200 for both clients here too, contradicting the 500m actually enforced. Peak usage of ~365-373MB in this run would have exceeded a genuine 200MB limit; the absence of an OOM kill confirms 500m was the real active limit. This is a pre-existing client.py labeling bug shared identically across both HE conditions."
+  },
+
+  "per_client_per_round_results": {
+    "client_0": {
+      "train_rows": 38440,
+      "test_rows": 9611,
+      "features": 35,
+      "rounds": {
+        "1": {
+          "train_s": 41.98250,
+          "he_encrypt_s": 0.03145,
+          "total_s": 42.01395,
+          "http_send_s": 0.06049,
+          "before_round_mb": 59.254,
+          "after_train_mb": 59.313,
+          "after_he_mb": 60.352,
+          "round_peak_mb": 373.023,
+          "round_avg_mb": 347.196,
+          "stage_peaks": { "train_subprocess": 373.023, "he_encrypt": 0.0 },
+          "stage_avgs":  { "train_subprocess": 347.196, "he_encrypt": 0.0 },
+          "note": "he_encrypt stage_peaks/stage_avgs of 0.0 here reflects the HE stage's RamSampler capturing essentially no samples during this round's very brief (~0.03s) encryption window at this sampling interval — not a measurement error, just an artifact of an extremely short stage relative to the sampler's polling interval"
+        },
+        "2": {
+          "train_s": 41.36983,
+          "he_encrypt_s": 0.02497,
+          "total_s": 41.39480,
+          "http_send_s": 0.04655,
+          "before_round_mb": 62.223,
+          "after_train_mb": 62.223,
+          "after_he_mb": 62.238,
+          "round_peak_mb": 373.027,
+          "round_avg_mb": 205.346,
+          "stage_peaks": { "train_subprocess": 373.027, "he_encrypt": 62.242 },
+          "stage_avgs":  { "train_subprocess": 348.449, "he_encrypt": 62.242 }
+        },
+        "3": {
+          "train_s": 41.76760,
+          "he_encrypt_s": 0.02835,
+          "total_s": 41.79595,
+          "http_send_s": 0.05534,
+          "before_round_mb": 62.813,
+          "after_train_mb": 62.816,
+          "after_he_mb": 62.832,
+          "round_peak_mb": 372.473,
+          "round_avg_mb": 206.128,
+          "stage_peaks": { "train_subprocess": 372.473, "he_encrypt": 62.836 },
+          "stage_avgs":  { "train_subprocess": 349.421, "he_encrypt": 62.836 }
+        }
+      },
+      "summary_ram": { "overall_peak_mb": 373.027, "overall_avg_mb": 252.890 }
+    },
+    "client_1": {
+      "train_rows": 23294,
+      "test_rows": 5824,
+      "features": 35,
+      "rounds": {
+        "1": {
+          "train_s": 29.03892,
+          "he_encrypt_s": 0.03191,
+          "total_s": 29.07082,
+          "http_send_s": 0.03965,
+          "before_round_mb": 59.262,
+          "after_train_mb": 59.281,
+          "after_he_mb": 60.516,
+          "round_peak_mb": 365.309,
+          "round_avg_mb": 196.766,
+          "stage_peaks": { "train_subprocess": 365.309, "he_encrypt": 60.520 },
+          "stage_avgs":  { "train_subprocess": 333.012, "he_encrypt": 60.520 }
+        },
+        "2": {
+          "train_s": 28.69658,
+          "he_encrypt_s": 0.02664,
+          "total_s": 28.72323,
+          "http_send_s": 0.02462,
+          "before_round_mb": 62.301,
+          "after_train_mb": 62.301,
+          "after_he_mb": 62.316,
+          "round_peak_mb": 365.051,
+          "round_avg_mb": 198.708,
+          "stage_peaks": { "train_subprocess": 365.051, "he_encrypt": 62.320 },
+          "stage_avgs":  { "train_subprocess": 335.096, "he_encrypt": 62.320 }
+        },
+        "3": {
+          "train_s": 29.52638,
+          "he_encrypt_s": 0.03027,
+          "total_s": 29.55665,
+          "http_send_s": 0.03530,
+          "before_round_mb": 63.352,
+          "after_train_mb": 63.355,
+          "after_he_mb": 63.398,
+          "round_peak_mb": 367.105,
+          "round_avg_mb": 200.565,
+          "stage_peaks": { "train_subprocess": 367.105, "he_encrypt": 63.402 },
+          "stage_avgs":  { "train_subprocess": 337.728, "he_encrypt": 63.402 }
+        }
+      },
+      "summary_ram": { "overall_peak_mb": 367.105, "overall_avg_mb": 198.680 }
+    }
+  },
+
+  "server_aggregation": {
+    "1": { "aggregate_s": 0.01869, "sensitive_mode": "ckks" },
+    "2": { "aggregate_s": 0.01535, "sensitive_mode": "ckks" },
+    "3": { "aggregate_s": 0.01849, "sensitive_mode": "ckks" },
+    "mean_aggregate_s": 0.01751
+  },
+
+  "aggregate_summary": {
+    "mean_he_encrypt_s_client_0": 0.02826,
+    "mean_he_encrypt_s_client_1": 0.02961,
+    "mean_train_s_client_0": 41.70664,
+    "mean_train_s_client_1": 29.08730,
+    "overall_peak_ram_mb": 373.027,
+    "overall_peak_ram_client": "client_0, round 1"
+  }
+}
