@@ -1,0 +1,90 @@
+{
+  "client_id": 0,
+  "timing": {
+    "1": {
+      "train": 82.17464852333069,
+      "he_encrypt": 0.6406223773956299,
+      "total": 82.81527090072632,
+      "http_send": 0.3399930000305176
+    },
+    "2": {
+      "train": 81.02283811569214,
+      "he_encrypt": 0.699951171875,
+      "total": 81.72278928756714,
+      "http_send": 0.2980070114135742
+    },
+    "3": {
+      "train": 81.03962111473083,
+      "he_encrypt": 0.6984496116638184,
+      "total": 81.73807072639465,
+      "http_send": 0.2783646583557129
+    }
+  },
+  "memory": {
+    "1": {
+      "before_round": 58.1328125,
+      "after_train": 58.15625,
+      "after_he": 64.6875,
+      "peak": 64.6875,
+      "round_peak_mb": 327.6015625,
+      "round_avg_mb": 184.80767813800279,
+      "stage_peaks": {
+        "train_subprocess": 327.6015625,
+        "he_encrypt": 64.03515625
+      },
+      "stage_avgs": {
+        "train_subprocess": 307.5467178831484,
+        "he_encrypt": 62.068638392857146
+      }
+    },
+    "2": {
+      "before_round": 75.4609375,
+      "after_train": 75.4609375,
+      "after_he": 75.4609375,
+      "peak": 75.4609375,
+      "round_peak_mb": 328.2734375,
+      "round_avg_mb": 192.89691976764502,
+      "stage_peaks": {
+        "train_subprocess": 328.2734375,
+        "he_encrypt": 75.46484375
+      },
+      "stage_avgs": {
+        "train_subprocess": 310.32899578529003,
+        "he_encrypt": 75.46484375
+      }
+    },
+    "3": {
+      "before_round": 76.47265625,
+      "after_train": 76.48046875,
+      "after_he": 76.484375,
+      "peak": 76.484375,
+      "round_peak_mb": 328.0859375,
+      "round_avg_mb": 192.92654154487622,
+      "stage_peaks": {
+        "train_subprocess": 328.0859375,
+        "he_encrypt": 76.48828125
+      },
+      "stage_avgs": {
+        "train_subprocess": 309.36480183975243,
+        "he_encrypt": 76.48828125
+      }
+    }
+  },
+  "summary_ram": {
+    "overall_peak_mb": 328.2734375,
+    "overall_avg_mb": 190.2103798168413
+  },
+  "config": {
+    "model_type": "network",
+    "use_dp": false,
+    "use_zkp": false,
+    "use_he": true,
+    "he_scope": "full_model",
+    "dp_epsilon": 3.0,
+    "he_poly_degree": 4096,
+    "mem_limit_mb": 200,
+    "local_epochs": 2,
+    "num_features": 35,
+    "data_source": "real_edge_iiotset_partition"
+  }
+}
