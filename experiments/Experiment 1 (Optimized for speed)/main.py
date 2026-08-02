@@ -68,6 +68,57 @@ CHANGELOG (this revision)
 5. Opacus accountant is unchanged — still "rdp" (RDP accountant), as
    confirmed in use. Not touched by any of the above.
 
+6. NUM_ROUNDS reduced 25 -> 20 for faster iteration. NOTE: reference
+   baselines (F1=0.839 clean, F1=0.857 Krum-only-no-DP) were measured
+   at round 25 — a round-20 "final round" result needs the baselines
+   re-measured at round 20 too, or an explicit caveat in the writeup,
+   before treating the two as directly comparable.
+
+7. CHANGE — client training parallelized across a 4-worker process
+   pool (speed only, zero effect on the math). Per-client training
+   was previously fully sequential (one client after another in a
+   single for-loop); each client's local training is independent
+   given the same global_params, so there's no correctness reason for
+   sequential execution. Training logic itself is UNCHANGED — moved
+   verbatim into a new top-level function, _train_one_client(), which
+   must be a module-level (not nested/closure) function because
+   Windows' multiprocessing uses "spawn", which requires worker
+   functions to be picklable. ZKP filtering, HE encryption, and
+   accepted-list/index bookkeeping (the Bug-1-sensitive part) remain
+   entirely in the main process, executed in original client order
+   AFTER all workers finish, so accepted_client_indices / Krum
+   position-mapping behavior is byte-for-byte identical to the
+   sequential version — only the wall-clock ordering of training
+   changed, not the logic or results.
+   CLIENT_POOL_WORKERS=4 is a starting point balanced against typical
+   per-client DP-SGD peak RAM (~350-370MB observed in the Docker
+   ablation) — 4 concurrent workers is a bounded ~1.4-1.5GB peak
+   addition, not 10x. Increase only if you've confirmed your machine
+   has both the spare cores and the spare RAM for more concurrent
+   workers.
+
+8. CHANGE — CPU thread allocation tuned to avoid oversubscription.
+   torch.set_num_threads() is now called in BOTH the main process
+   (full core count, since eval and non-parallel work happen there
+   with no workers competing for CPU at the same time) and inside
+   each worker process (core_count // CLIENT_POOL_WORKERS, so 4
+   workers running simultaneously don't each try to claim every core
+   and thrash each other). Previously no explicit thread count was
+   set anywhere, leaving PyTorch's default (which can be unpredictable
+   across environments) in charge.
+
+9. CHANGE — DP_BATCH_SIZE increased 256 -> 512. Larger batches under
+   DP-SGD are a recognized, legitimate technique: fewer optimizer
+   steps per epoch for the same data, which the RDP accountant
+   composes over — fewer total steps can mean LESS noise needed per
+   step to hit the same target epsilon, i.e. this can improve utility
+   under DP, not just speed. Applied uniformly across all three ε
+   conditions so the sweep stays apples-to-apples. Recommend
+   confirming this doesn't change your target-epsilon achieved values
+   in an unexpected way before treating results as final — Opacus
+   recalculates sigma automatically, but worth a sanity check on the
+   first run's printed achieved_eps.
+
 Everything else (aggregation structure, HE, ZKP, checkpoint logic) is
 untouched from the previous corrected version.
 --------------------------------------------------------------------------
@@ -80,6 +131,8 @@ import json
 import time
 import warnings
 import numpy as np
+import torch
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------------
 # Path setup — allow running from project root OR from src/
@@ -97,7 +150,13 @@ assert MODEL_TYPE in ("network", "application"), \
     "Usage: python main.py [network|application]"
 
 # FL hyperparameters
-NUM_ROUNDS    = 25
+NUM_ROUNDS    = 20   # CHANGE: reduced from 25 for faster iteration.
+                      # NOTE: reference baselines (F1=0.839 clean, F1=0.857
+                      # Krum-only-no-DP) were measured at round 25 — a
+                      # round-20 "final round" result is not directly
+                      # comparable to those without re-measuring the
+                      # baselines at round 20 too, or explicitly caveating
+                      # the mismatch in the writeup.
 NUM_CLIENTS   = 10
 LOCAL_EPOCHS  = 5
 LEARNING_RATE = 0.001
@@ -144,7 +203,7 @@ BYZANTINE_HEAD_ONLY = False   # set True for Experiment 2 Condition B
 DP_EPSILON       = 15.0        # set per condition: 15.0 / 9.0 / 3.0
 DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5        # CHANGE: raised from 1.0 — see changelog #4
-DP_BATCH_SIZE    = 256
+DP_BATCH_SIZE    = 512        # CHANGE: raised from 256 — see changelog #9
 
 # ZKP settings
 ZKP_MAX_NORM = 10.0       # reject clients whose update L2-norm exceeds this
@@ -154,6 +213,11 @@ ZKP_MAX_NORM = 10.0       # reject clients whose update L2-norm exceeds this
 # (2 confirmed Byzantine + a 1-client safety margin, down from a 2-client
 # margin). See changelog #2 for the full rationale.
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1   # e.g. 7 of 10 selected, 3 discarded
+
+# Parallel client training — see changelog #7/#8
+CLIENT_POOL_WORKERS = 4
+_CPU_COUNT = os.cpu_count() or 4
+_THREADS_PER_WORKER = max(1, _CPU_COUNT // CLIENT_POOL_WORKERS)
 
 # ---------------------------------------------------------------------------
 # Output paths — one set per model type so both can run simultaneously
@@ -202,6 +266,107 @@ if USE_HE:
     except ImportError:
         raise ImportError("TenSEAL required for USE_HE=True. "
                           "Install with Python 3.11: pip install tenseal")
+
+# Main process gets full core count — it runs eval (sequential test() calls)
+# and other non-parallel work with no worker processes competing for CPU
+# at the same time (the client pool is closed before eval starts each round).
+torch.set_num_threads(_CPU_COUNT)
+
+
+# ---------------------------------------------------------------------------
+# ─── PARALLEL CLIENT TRAINING WORKER (module-level — required for pickling
+# under Windows' "spawn" multiprocessing start method) ─────────────────────
+# ---------------------------------------------------------------------------
+
+def _train_one_client(client_id, X_tr, y_tr, global_params, sample_features):
+    """
+    Runs inside a worker process. Trains (or Byzantine-attacks) exactly ONE
+    client and returns its raw, unfiltered parameter update. This is the
+    training logic previously inline in main()'s round loop, moved verbatim
+    — no computation changed, only WHERE it runs.
+
+    Deliberately does NOT do ZKP filtering, HE encryption, or any
+    accepted_params/accepted_client_indices bookkeeping — those stay in the
+    main process, applied in original client order after all workers finish,
+    so index-mapping behavior (Bug 1 fix) is unaffected by execution order.
+
+    Returns: (client_id, params, dp_eps_spent, is_byzantine)
+    """
+    # Each worker process gets a FRACTION of the cores, not all of them —
+    # CLIENT_POOL_WORKERS processes run concurrently, so each claiming every
+    # core would cause thrashing instead of a speedup. See changelog #8.
+    torch.set_num_threads(_THREADS_PER_WORKER)
+
+    model = get_model(num_features=sample_features,
+                      num_classes=NUM_CLASSES,
+                      dp_safe=DP_SAFE)
+    set_model_parameters(model, global_params)
+
+    # ── Byzantine attack injection ───────────────────────────────────────
+    if USE_BYZANTINE_ATTACK and client_id in BYZANTINE_CLIENTS:
+        if USE_HE and BYZANTINE_HEAD_ONLY:
+            from defences.byzantine import classifier_head_flip_attack
+            model_state_keys = list(model.state_dict().keys())
+            params = classifier_head_flip_attack(
+                global_params, model_state_keys, scale=ATTACK_SCALE
+            )
+            print(f"  Client {client_id+1:2d}  [BYZANTINE — head-only ×{ATTACK_SCALE}]")
+        else:
+            params = sign_flip_attack(global_params, scale=ATTACK_SCALE)
+            print(f"  Client {client_id+1:2d}  [BYZANTINE — sign-flip ×{ATTACK_SCALE}]")
+        return client_id, params, None, True
+
+    # ── DP-SGD training (Opacus, RDP accountant) ─────────────────────────
+    criterion = build_criterion()
+    if USE_DP and _OPACUS_AVAILABLE:
+        import torch.utils.data as tud
+        from opacus import PrivacyEngine
+
+        X_t = torch.FloatTensor(X_tr)
+        y_t = torch.LongTensor(y_tr)
+        loader = tud.DataLoader(
+            tud.TensorDataset(X_t, y_t),
+            batch_size=DP_BATCH_SIZE,
+            shuffle=True,
+        )
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        privacy_engine = PrivacyEngine(accountant="rdp")
+        model, optimizer, loader = privacy_engine.make_private_with_epsilon(
+            module=model,
+            optimizer=optimizer,
+            data_loader=loader,
+            target_epsilon=DP_EPSILON,
+            target_delta=DP_DELTA,
+            epochs=LOCAL_EPOCHS,
+            max_grad_norm=DP_MAX_GRAD_NORM,
+        )
+        model.train()
+        for _ in range(LOCAL_EPOCHS):
+            for X_b, y_b in loader:
+                optimizer.zero_grad()
+                loss_val = criterion(model(X_b), y_b)
+                loss_val.backward()
+                optimizer.step()
+
+        dp_eps_spent = privacy_engine.get_epsilon(DP_DELTA)
+
+        # Opacus model must be unwrapped BEFORE extracting params — see
+        # original changelog note; unchanged behavior, just relocated.
+        real_model = model._module if hasattr(model, "_module") else model
+        params = get_model_parameters(real_model)
+
+        print(f"  Client {client_id+1:2d}  DP-SGD done  achieved_eps={dp_eps_spent:.4f}")
+        return client_id, params, dp_eps_spent, False
+
+    else:
+        # Standard FedProx training (no DP)
+        train(model, X_tr, y_tr, criterion,
+              epochs=LOCAL_EPOCHS,
+              lr=LEARNING_RATE,
+              global_params=global_params,
+              mu=PROX_MU)
+        params = get_model_parameters(model)
+        return client_id, params, None, False
 
 
 # ---------------------------------------------------------------------------
@@ -393,10 +558,9 @@ def main():
         clients_data.append(load_partition(i, NUM_CLIENTS))
     sample_features = clients_data[0][0].shape[1]
     print(f"\nFeature count (measured, not assumed): {sample_features}")
-    print(f"All {NUM_CLIENTS} clients loaded.\n")
-
-    # ── Build shared criterion ───────────────────────────────────────────────
-    criterion = build_criterion()
+    print(f"All {NUM_CLIENTS} clients loaded.")
+    print(f"Client training pool: {CLIENT_POOL_WORKERS} workers "
+          f"({_THREADS_PER_WORKER} threads each, {_CPU_COUNT} cores detected)\n")
 
     # ── HE context (only if USE_HE) ──────────────────────────────────────────
     he_context = None
@@ -482,84 +646,32 @@ def main():
         zkp_rejected_this_round  = []
         dp_eps_spent_this_round  = []   # collect per-client DP ε
 
-        # ── Per-client training ──────────────────────────────────────────────
+        # ── Per-client training — PARALLELIZED across CLIENT_POOL_WORKERS ────
+        # All 10 clients are submitted to the pool at once; up to
+        # CLIENT_POOL_WORKERS run concurrently, the rest queue automatically.
+        # Training logic itself is unchanged (see _train_one_client above) —
+        # only wall-clock ordering changed.
+        raw_results = {}
+        with ProcessPoolExecutor(max_workers=CLIENT_POOL_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    _train_one_client, i, X_tr, y_tr, global_params, sample_features
+                ): i
+                for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data)
+            }
+            for future in as_completed(futures):
+                i = futures[future]
+                client_id, params, dp_eps_spent, is_byzantine = future.result()
+                raw_results[client_id] = (params, dp_eps_spent, is_byzantine)
+
+        # ── ZKP filtering / HE encryption / accepted-list bookkeeping ────────
+        # Deliberately processed in ORIGINAL client order (0..NUM_CLIENTS-1),
+        # NOT worker-completion order, so accepted_client_indices and every
+        # downstream Krum position-mapping behaves identically to the fully
+        # sequential version. This is the part that must stay in the main
+        # process — it's inherently order- and index-sensitive (Bug 1 fix).
         for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
-            model = get_model(num_features=sample_features,
-                              num_classes=NUM_CLASSES,
-                              dp_safe=DP_SAFE)
-            set_model_parameters(model, global_params)
-
-            # ── Byzantine attack injection ───────────────────────────────────
-            if USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
-                if USE_HE and BYZANTINE_HEAD_ONLY:
-                    # Head-only attack: only flip classifier weights.
-                    # Stays within ZKP norm bound — more realistic under HE
-                    # since the full model is encrypted and a sign-flip at
-                    # ATTACK_SCALE=5.0 would have a huge norm detectable by ZKP.
-                    from defences.byzantine import classifier_head_flip_attack
-                    model_state_keys = list(model.state_dict().keys())
-                    params = classifier_head_flip_attack(
-                        global_params, model_state_keys, scale=ATTACK_SCALE
-                    )
-                    print(f"  Client {i+1:2d}  [BYZANTINE — head-only ×{ATTACK_SCALE}]")
-                else:
-                    params = sign_flip_attack(global_params, scale=ATTACK_SCALE)
-                    print(f"  Client {i+1:2d}  [BYZANTINE — sign-flip ×{ATTACK_SCALE}]")
-                dp_eps_spent = None
-
-            else:
-                # ── DP-SGD training (Opacus, RDP accountant) ──────────────────
-                if USE_DP and _OPACUS_AVAILABLE:
-                    import torch
-                    import torch.utils.data as tud
-                    from opacus import PrivacyEngine
-
-                    X_t = torch.FloatTensor(X_tr)
-                    y_t = torch.LongTensor(y_tr)
-                    loader = tud.DataLoader(
-                        tud.TensorDataset(X_t, y_t),
-                        batch_size=DP_BATCH_SIZE,
-                        shuffle=True,
-                    )
-                    optimizer = torch.optim.Adam(
-                        model.parameters(), lr=LEARNING_RATE
-                    )
-                    privacy_engine = PrivacyEngine(accountant="rdp")
-                    model, optimizer, loader = privacy_engine.make_private_with_epsilon(
-                        module=model,
-                        optimizer=optimizer,
-                        data_loader=loader,
-                        target_epsilon=DP_EPSILON,
-                        target_delta=DP_DELTA,
-                        epochs=LOCAL_EPOCHS,
-                        max_grad_norm=DP_MAX_GRAD_NORM,
-                    )
-                    # Manual epoch loop (Opacus wraps the loader)
-                    model.train()
-                    for _ in range(LOCAL_EPOCHS):
-                        for X_b, y_b in loader:
-                            optimizer.zero_grad()
-                            loss_val = criterion(model(X_b), y_b)
-                            loss_val.backward()
-                            optimizer.step()
-
-                    dp_eps_spent = privacy_engine.get_epsilon(DP_DELTA)
-
-                    # Opacus model must be unwrapped BEFORE extracting params.
-                    # Calling state_dict() on the wrapped GradSampleModule
-                    # produces different keys than a plain model, which
-                    # corrupts set_model_parameters() in the next round.
-                    real_model = model._module if hasattr(model, "_module") else model
-                    params = get_model_parameters(real_model)
-
-                else:
-                    # Standard FedProx training (no DP)
-                    train(model, X_tr, y_tr, criterion,
-                          epochs=LOCAL_EPOCHS,
-                          lr=LEARNING_RATE,
-                          global_params=global_params,
-                          mu=PROX_MU)
-                    dp_eps_spent = None
+            params, dp_eps_spent, is_byzantine = raw_results[i]
 
             # ── ZKP norm-bound gate ──────────────────────────────────────────
             # NOTE: this gate applies to ALL clients including Byzantine ones.

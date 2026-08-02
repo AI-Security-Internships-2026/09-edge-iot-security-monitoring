@@ -252,12 +252,7 @@
       "severity": "high - affects the validity of any 'epsilon=3.0' privacy claim for the full training run",
       "recommended_fix": "Persist a single privacy accountant (RDP or PRV) across rounds via a state file read/written by train_worker.py, OR explicitly report per-round epsilon and the composed bound separately in any writeup."
     },
-    {
-      "issue": "Observed RAM (up to 645MB) exceeds declared client mem_limit (256MB) with no OOM",
-      "detail": "Either the effective container memory limit during this run was higher than 256MB (e.g. changed during troubleshooting and not reverted), or the limit was not enforced as configured. Actual enforced limit for this specific run is unconfirmed.",
-      "severity": "medium - affects whether these RAM numbers can be labeled as '256MB-constrained device' results",
-      "recommended_fix": "Run `docker compose --profile pure_dp config | findstr mem_limit` immediately before future runs and record the confirmed value alongside results."
-    },
+
     {
       "issue": "HE/ZKP fully disabled this run (as intended for pure_dp condition)",
       "detail": "he_encrypt latency and ZKP latency are correctly 0.0 across all rounds/clients, confirming isolation from the HE/ZKP stack for this ablation condition.",

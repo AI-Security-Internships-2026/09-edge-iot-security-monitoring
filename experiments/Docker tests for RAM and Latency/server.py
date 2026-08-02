@@ -268,13 +268,27 @@ def _init_global_model():
     sys.path.insert(0, "/app")
     from task import get_model, get_model_parameters
 
-    num_features = 40 if MODEL_TYPE == "network" else 52
+    _num_features_env = os.environ.get("NUM_FEATURES")
+    if _num_features_env is not None:
+        num_features = int(_num_features_env)
+    else:
+        # Fallback only — 40/52 are legacy values already confirmed stale
+        # for the network model (real value is 38, confirmed via
+        # VarianceThreshold audit). Set NUM_FEATURES explicitly in
+        # docker-compose.yml instead of relying on this fallback.
+        num_features = 40 if MODEL_TYPE == "network" else 52
+        log(f"WARNING: NUM_FEATURES env var not set — falling back to "
+            f"legacy hardcoded value ({num_features}). This value is "
+            f"KNOWN STALE for the network model (confirmed real value: "
+            f"38). Set NUM_FEATURES explicitly in docker-compose.yml.")
+
     num_classes  = 8
 
     model  = get_model(num_features=num_features, num_classes=num_classes)
     params = get_model_parameters(model)
     state["global_params"] = params
-    log(f"Global model initialised: {sum(p.size for p in params):,} params")
+    log(f"Global model initialised: num_features={num_features}  "
+        f"{sum(p.size for p in params):,} params")
 
 
 # ── Entry ─────────────────────────────────────────────────────────────

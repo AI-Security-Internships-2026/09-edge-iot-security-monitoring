@@ -3,7 +3,7 @@ version: "3.8"
 services:
 
   # ══════════════════════════════════════════════════════════════════
-  # PURE HE condition: 100% of model encrypted, DP+ZKP off
+  # PURE HE (original ablation): partial coverage, DP/ZKP off
   # ══════════════════════════════════════════════════════════════════
 
   fl_server_he:
@@ -21,7 +21,7 @@ services:
       - "5001:5000"
     volumes:
       - ./results/pure_he:/results
-    mem_limit: 3g
+    mem_limit: 2g
 
   fl_client_he_0:
     profiles: ["pure_he"]
@@ -44,14 +44,13 @@ services:
       MKL_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
     volumes:
-      - ./results/pure_he:/results          # (existing, per service)
-      - ../datasets/partitions:/datasets/partitions:ro   # (existing)
-      - ../src/defences:/app/defences:ro    # NEW — canonical defences, read-only
+      - ./results/pure_he:/results
+      - ../datasets/partitions:/datasets/partitions:ro
     depends_on:
       - fl_server_he
-    mem_limit: 1024m
-    memswap_limit: 1024m
-    cpus: "0.5"
+    mem_limit: 700m
+    memswap_limit: 700m
+    cpus: "1.0"
 
   fl_client_he_1:
     profiles: ["pure_he"]
@@ -74,17 +73,16 @@ services:
       MKL_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
     volumes:
-      - ./results/pure_he:/results          # (existing, per service)
-      - ../datasets/partitions:/datasets/partitions:ro   # (existing)
-      - ../src/defences:/app/defences:ro    # NEW — canonical defences, read-only
+      - ./results/pure_he:/results
+      - ../datasets/partitions:/datasets/partitions:ro
     depends_on:
       - fl_server_he
-    mem_limit: 1024m
-    memswap_limit: 1024m
-    cpus: "0.5"
+    mem_limit: 700m
+    memswap_limit: 700m
+    cpus: "1.0"
 
   # ══════════════════════════════════════════════════════════════════
-  # PURE DP condition: 100% of model DP-noised, HE+ZKP off
+  # PURE DP: 100% of model DP-noised, HE+ZKP off
   # ══════════════════════════════════════════════════════════════════
 
   fl_server_dp:
@@ -102,7 +100,7 @@ services:
       - "5002:5000"
     volumes:
       - ./results/pure_dp:/results
-    mem_limit: 2g
+    mem_limit: 6g
 
   fl_client_dp_0:
     profiles: ["pure_dp"]
@@ -125,14 +123,13 @@ services:
       MKL_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
     volumes:
-      - ./results/pure_dp:/results          # (existing, per service)
-      - ../datasets/partitions:/datasets/partitions:ro   # (existing)
-      - ../src/defences:/app/defences:ro    # NEW — canonical defences, read-only
+      - ./results/pure_dp:/results
+      - ../../datasets/partitions:/datasets/partitions:ro
     depends_on:
       - fl_server_dp
-    mem_limit: 1024m
-    memswap_limit: 1024m
-    cpus: "0.5"
+    mem_limit: 700m
+    memswap_limit: 700m
+    cpus: "1.0"
 
   fl_client_dp_1:
     profiles: ["pure_dp"]
@@ -155,11 +152,170 @@ services:
       MKL_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
     volumes:
-      - ./results/pure_he:/results          # (existing, per service)
-      - ../datasets/partitions:/datasets/partitions:ro   # (existing)
-      - ../src/defences:/app/defences:ro    # NEW — canonical defences, read-only
+      - ./results/pure_dp:/results
+      - ../../datasets/partitions:/datasets/partitions:ro
     depends_on:
       - fl_server_dp
-    mem_limit: 1024m
-    memswap_limit: 1024m
-    cpus: "0.5"
+    mem_limit: 700m
+    memswap_limit: 700m
+    cpus: "1.0"
+
+  # ══════════════════════════════════════════════════════════════════
+  # PURE HE — FULL COVERAGE: 100% of model encrypted
+  # ══════════════════════════════════════════════════════════════════
+
+  fl_server_he_full:
+    profiles: ["he_full"]
+    build: .
+    image: fl-ids:latest
+    container_name: fl_server_he_full
+    command: ["python", "server.py"]
+    environment:
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      USE_HE: "true"
+      MODEL_TYPE: "network"
+      NUM_FEATURES: "38"
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./results/he_full:/results
+    mem_limit: 2g
+
+  fl_client_he_full_0:
+    profiles: ["he_full"]
+    image: fl-ids:latest
+    container_name: fl_client_he_full_0
+    command: ["python", "client.py"]
+    environment:
+      CLIENT_ID: "0"
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      LOCAL_EPOCHS: "2"
+      SERVER_URL: "http://fl_server_he_full:5000"
+      USE_LOCAL_DP: "false"
+      USE_ZKP: "false"
+      USE_HE: "true"
+      HE_FULL_COVERAGE: "true"
+      MODEL_TYPE: "network"
+      PARTITION_DIR: "/datasets/partitions"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ./results/he_full:/results
+      - ../../datasets/partitions:/datasets/partitions:ro
+    depends_on:
+      - fl_server_he_full
+    mem_limit: 500m
+    memswap_limit: 500m
+    cpus: "1.0"
+
+  fl_client_he_full_1:
+    profiles: ["he_full"]
+    image: fl-ids:latest
+    container_name: fl_client_he_full_1
+    command: ["python", "client.py"]
+    environment:
+      CLIENT_ID: "1"
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      LOCAL_EPOCHS: "2"
+      SERVER_URL: "http://fl_server_he_full:5000"
+      USE_LOCAL_DP: "false"
+      USE_ZKP: "false"
+      USE_HE: "true"
+      HE_FULL_COVERAGE: "true"
+      MODEL_TYPE: "network"
+      PARTITION_DIR: "/datasets/partitions"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ./results/he_full:/results
+      - ../../datasets/partitions:/datasets/partitions:ro
+    depends_on:
+      - fl_server_he_full
+    mem_limit: 500m
+    memswap_limit: 500m
+    cpus: "1.0"
+
+  # ══════════════════════════════════════════════════════════════════
+  # PURE HE — PARTIAL: classifier head only (~6% of params)
+  # ══════════════════════════════════════════════════════════════════
+
+  fl_server_he_partial:
+    profiles: ["he_partial"]
+    build: .
+    image: fl-ids:latest
+    container_name: fl_server_he_partial
+    command: ["python", "server.py"]
+    environment:
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      USE_HE: "true"
+      MODEL_TYPE: "network"
+      NUM_FEATURES: "38"
+    ports:
+      - "5004:5000"
+    volumes:
+      - ./results/he_partial:/results
+    mem_limit: 2g
+
+  fl_client_he_partial_0:
+    profiles: ["he_partial"]
+    image: fl-ids:latest
+    container_name: fl_client_he_partial_0
+    command: ["python", "client.py"]
+    environment:
+      CLIENT_ID: "0"
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      LOCAL_EPOCHS: "2"
+      SERVER_URL: "http://fl_server_he_partial:5000"
+      USE_LOCAL_DP: "false"
+      USE_ZKP: "false"
+      USE_HE: "true"
+      HE_FULL_COVERAGE: "false"
+      MODEL_TYPE: "network"
+      PARTITION_DIR: "/datasets/partitions"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ./results/he_partial:/results
+      - ../../datasets/partitions:/datasets/partitions:ro
+    depends_on:
+      - fl_server_he_partial
+    mem_limit: 500m
+    memswap_limit: 500m
+    cpus: "1.0"
+
+  fl_client_he_partial_1:
+    profiles: ["he_partial"]
+    image: fl-ids:latest
+    container_name: fl_client_he_partial_1
+    command: ["python", "client.py"]
+    environment:
+      CLIENT_ID: "1"
+      NUM_CLIENTS: "2"
+      NUM_ROUNDS: "3"
+      LOCAL_EPOCHS: "2"
+      SERVER_URL: "http://fl_server_he_partial:5000"
+      USE_LOCAL_DP: "false"
+      USE_ZKP: "false"
+      USE_HE: "true"
+      HE_FULL_COVERAGE: "false"
+      MODEL_TYPE: "network"
+      PARTITION_DIR: "/datasets/partitions"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - ./results/he_partial:/results
+      - ../../datasets/partitions:/datasets/partitions:ro
+    depends_on:
+      - fl_server_he_partial
+    mem_limit: 500m
+    memswap_limit: 500m
+    cpus: "1.0"

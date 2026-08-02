@@ -1,0 +1,54 @@
+{
+  "client_id": 0,
+  "timing": {
+    "1": {
+      "train": 48.991268157958984,
+      "he_encrypt": 0.024164676666259766,
+      "total": 49.015432834625244,
+      "http_send": 0.05649113655090332
+    },
+    "2": {
+      "train": 42.79909086227417,
+      "he_encrypt": 0.026757240295410156,
+      "total": 42.82584810256958,
+      "http_send": 0.023405075073242188
+    },
+    "3": {
+      "train": 41.55465579032898,
+      "he_encrypt": 0.03476119041442871,
+      "total": 41.58941698074341,
+      "http_send": 0.02831101417541504
+    }
+  },
+  "memory": {
+    "1": {
+      "before_round": 56.984375,
+      "after_train": 43.359375,
+      "after_he": 45.83984375,
+      "peak": 45.88671875
+    },
+    "2": {
+      "before_round": 46.41796875,
+      "after_train": 46.48828125,
+      "after_he": 46.53125,
+      "peak": 46.53125
+    },
+    "3": {
+      "before_round": 46.53125,
+      "after_train": 46.5078125,
+      "after_he": 46.5078125,
+      "peak": 46.5078125
+    }
+  },
+  "config": {
+    "model_type": "network",
+    "use_dp": false,
+    "use_zkp": false,
+    "use_he": true,
+    "he_scope": "classifier_head_only",
+    "dp_epsilon": 3.0,
+    "he_poly_degree": 4096,
+    "mem_limit_mb": 200,
+    "local_epochs": 2
+  }
+}
