@@ -74,12 +74,8 @@ None faced.
 
 - Plug in the real Edge-IIoTset dataset (replacing the random placeholder data in `client_app.py`) and partition it across the 10 simulated clients
 - Re-run the 10-client FL loop with real data and record accuracy against the 92.49% Rashid et al. benchmark
-<<<<<<< Updated upstream
-=======
->>>>>>> origin/dev
 - Begin implementing Krum aggregation as the first defence baseline
-=======
-- Begin implementing Krum aggregation as the first defence baseline
+
 
 ## Week 4
 
@@ -91,7 +87,7 @@ None faced.
 - Integrated the full Edge-IIoTset DNN feature set (1.2GB CSV) into the FL pipeline with `.npz` disk caching so the CSV is only parsed once per machine
 - Discovered and fixed a critical silent preprocessing bug: `VarianceThreshold(1e-6)` was dropping all HTTP and UDP features (29 of 52 columns) because they have low variance across the full dataset — destroying the only signal distinguishing Backdoor, XSS, Password, SQL_injection, and Uploading, and causing DDoS_UDP to sit at F1=0.0000 permanently for 20+ rounds
 - Applied the fix per-model rather than globally: the network model retains `VarianceThreshold` (reducing to ~40 features) while the application model skips it entirely, preserving all HTTP features (`http.request.uri.query`, `http.file_data`, `http.content_length`, etc.) that are essential for application-layer attack separation
-- Applied a VARS-FL-style dataset cap, reducing DDoS_TCP from 72.8% of total rows down to 18% to remove a lab-generation artefact; all other classes left at natural counts
+- Applied a VARS-FL-style dataset cap, reducing normal from 72.8% of total rows down to 18% to remove a lab-generation artefact; all other classes left at natural counts
 - Updated class weights in both `build_criterion_network()` and `build_criterion_application()` using real per-class sample counts from the preprocessed cache, with manual overrides for feature-confused classes (Backdoor ×5, XSS ×4, Password ×3, Fingerprinting ×3)
 - Split the 15-class problem into two specialised 8-class models controlled by a single CLI flag (`python src/main.py network` / `python src/main.py application`): a network-layer model covering volumetric and protocol attacks, and an application-layer model covering stealth and payload attacks, each with its own Focal Loss criterion, feature set, class weights, and output files
 - Implemented FedProx (`μ=0.01`) as the local training algorithm
@@ -108,7 +104,6 @@ None faced.
 - Begin implementing Multi-Krum (`m=7`) by writing `src/defences/krum.py` and uncommenting the existing `DEFENCE HOOK` in `main.py`
 - Inject simulated Byzantine clients (2 of 10 sending scaled-negative updates) to give Krum something to actually defend against and record detection rate vs. accuracy tradeoff
 - Begin FLDetector implementation using per-client update history tracking
->>>>>>> Stashed changes
 
 
 ## Week 5
@@ -249,3 +244,27 @@ None faced.
 - Complete experiment 1 after fixing krum to properly discard 3 clients instead of 4, increase speed of training model.
 - Build the combined DP-SGD + partial-HE experiment (Experiment 2)
 ---
+
+## Week 8
+
+**Branch:** `zarawar-week-8`
+**PR link:**
+
+### Completed this week
+
+- Found that experiment 1 was achieving a low accuracy and macro F1 score. 
+- Observed that text features were silently being destroyed in application model specifically. Fixed it by 'engineer_text_features()',  four techniques (length, Shannon entropy, keyword-regex binary flags, frequency encoding for mqtt.topic), wired into preprocess_application_model() before the numeric-coercion step. Estimated to grow feature count from 52 → ~80-90. 
+- Reran all baseline runs with the new features included, which resulted in a higher F1 score and accuracy in both models.
+-updated baseline numbers and manifests.
+
+- Implemented in `main.py`: Parallelization: client training logic moved verbatim into a new top-level function _train_one_client(), The round loop now submits all 10 clients to a 4-worker ProcessPoolExecutor, then processes results in original client order, Thread tuning: main process uses all detected cores (torch.set_num_threads(_CPU_COUNT)); each worker process is capped at cores // 4 to avoid 4 processes each fighting for every core simultaneously. DP batch size: 256 → 512.
+
+- Implemented adaptive Multi Krum (MAD/Z-score dynamic thresholding). Computes standard Krum distance scores for every client using the same theoretical neighbor count (n - f - 2) as the existing implementation — unchanged. Instead of always keeping a fixed count m, drops any client whose score exceeds median(scores) + k · 1.4826 · MAD(scores) (default) or mean + k·std (z-score option, kept for ablation). All-honest rounds → threshold stays close to the pack → ~0 clients dropped. Byzantine clusters → dropped regardless of count, not capped at a fixed number.
+- Krum detection: 100% every round, both models — the two Byzantine clients correctly discarded in all 25 rounds, zero false negatives.
+- Reran Krum baseline numbers and updated Krum baseline numbers. Added manifests as well.
+
+
+### next tasks
+- added manifests for experiment 1.
+- Completed experiment 1.
+- Is it ok if DP resets epsilon each round.
