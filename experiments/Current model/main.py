@@ -606,7 +606,7 @@ def main():
     # class-weight tensor lives on the same device the model/batches will
     # be on — see changelog #17's ASSUMPTION note re: task.py.
     print("Building criterion once (class weights, FocalLoss)...")
-    precomputed_criterion = build_criterion(device=_DEVICE)
+    precomputed_criterion = build_criterion().to(_DEVICE)
     print("Criterion built — workers will reuse this, no per-round reload.\n")
 
     # ── Static per-client config, built once, passed to every worker call ──
