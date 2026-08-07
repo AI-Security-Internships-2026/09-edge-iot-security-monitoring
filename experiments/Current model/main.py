@@ -32,38 +32,35 @@ CHANGELOG (this revision)
       adaptive Multi-Krum / Condition 5, criterion built once,
       eval parallelized, EMA removed, noise_multiplier caching)
 
-17. GPU DEVICE SUPPORT — added.
-    - `torch` is now imported at module level (was previously only
-      imported lazily inside main()/_train_one_client()) so device
-      detection can happen before CLIENT_POOL_WORKERS is decided.
-    - `_DEVICE` is resolved once via torch.cuda.is_available().
-    - CLIENT_POOL_WORKERS now defaults to 1 (sequential) whenever CUDA
-      is available, instead of the CPU-oriented 4-way ProcessPoolExecutor
-      pool. Rationale: 4 separate processes each opening their own CUDA
-      context on a single GPU causes memory contention and context-switch
-      overhead — this is typically SLOWER than sequential GPU training,
-      not faster. CPU-only runs keep the original 4-way pool unchanged.
-    - `device` is threaded through client_cfg / eval_cfg and both
-      _train_one_client() and _eval_one_client() now move the model
-      (and, for DP-SGD, each batch) onto that device.
-    - `build_criterion()` is now called with `device=_DEVICE`.
+17. GPU DEVICE SUPPORT — added (see prior revision).
 
-    ASSUMPTION THIS RELIES ON, NOT YET VERIFIED HERE: task.py's
-    `train()`, `test()`, `build_criterion_network()`, and
-    `build_criterion_application()` accept a `device` kwarg and move
-    their internal tensors (e.g. FocalLoss class-weight tensor) onto
-    it. task.py was not included in the files provided for this edit —
-    if it does NOT yet have device-aware signatures, the calls below
-    will raise a TypeError (unexpected keyword argument 'device') or,
-    worse, silently run with a CPU-resident weight tensor against
-    GPU-resident logits and raise a device-mismatch RuntimeError at
-    loss computation. Send task.py over to get it patched to match.
+18. SANITY_CHECK toggle added (see prior revision).
 
-18. SANITY_CHECK toggle added — flip to True for a quick 2-round
-    end-to-end run (confirm nvidia-smi shows GPU utilization, confirm
-    no device-mismatch crashes, get a real round-time number) before
-    committing to the full 25-round / 4-epsilon sweep. Flip back to
-    False for the real run — do not leave this True by accident.
+19. FIX — fork+CUDA hang. The GPU sanity-check run hung indefinitely at
+    round 1 with 0% CPU and 0% GPU utilization on the worker process —
+    confirmed via `top` (worker process essentially idle, not doing
+    kernel-JIT-compile CPU work) rather than crashing outright. Root
+    cause: ProcessPoolExecutor's worker was still being created via
+    Linux's default 'fork' start method, AFTER CUDA had already been
+    initialized in the main process (torch.cuda.is_available() runs at
+    module import time, before the pool exists). Forking a process
+    that already holds an active CUDA context hands the child a
+    half-initialized, unsafe context — a well-known PyTorch/CUDA
+    footgun that hangs rather than erroring.
+
+    FIX: when CUDA is available, the ProcessPoolExecutor is no longer
+    created at all — client training/eval for each round now runs via
+    a plain sequential in-process loop (see _run_training_wave() /
+    _run_eval_wave() below), calling _train_one_client()/
+    _eval_one_client() directly with no subprocess involved. This is
+    strictly safer than trying to force 'spawn' as an alternative fix,
+    and also resolves the "revisit if per-client IPC overhead turns
+    out to matter" open item from revision 17 — at CLIENT_POOL_WORKERS=1
+    there was zero parallelism benefit from the pool anyway, only
+    IPC/pickling overhead and, as it turned out, an actual hang risk.
+    CPU-only runs are UNCHANGED — still use the original 4-way
+    ProcessPoolExecutor pool (fork is safe there since no CUDA context
+    ever exists in the parent process).
 
 --------------------------------------------------------------------------
 KNOWN OPEN ITEMS — NOT YET RESOLVED, FLAGGED FOR NEXT REVISION
@@ -73,18 +70,14 @@ KNOWN OPEN ITEMS — NOT YET RESOLVED, FLAGGED FOR NEXT REVISION
 - USE_ADAPTIVE_KRUM=True is a deliberate deviation from the master planning
   doc's "Experiment 1 must use fixed-m Krum" instruction (user decision) —
   any comparison against a fixed-m Condition 3 anchor is not apples-to-apples.
-- Prerequisites 4-6 from the Experiment-1 checklist were manually verified
-  against model_defs.py / task.py / data_loader.py in conversation — not
-  re-derived from this diff alone.
-- task.py device-awareness is ASSUMED, not verified in this revision — see
-  changelog #17 above. Confirm before running on GPU.
-- Whether ProcessPoolExecutor should be dropped entirely in favor of plain
-  sequential in-process training when CUDA is available (rather than a
-  1-worker pool) is still an open question — a 1-worker pool avoids a
-  second CUDA context but still pays process-spawn/IPC overhead per
-  client per round that a plain for-loop wouldn't. Left as a pool with
-  max_workers=1 for now since it's a minimal, low-risk change; revisit
-  if per-client IPC overhead turns out to matter at these round times.
+- task.py has been patched (separately) to register FocalLoss's weight via
+  register_buffer() and accept a `device` kwarg on train()/test() — confirm
+  the version on disk matches before running; this file's calls assume it.
+- DP_BATCH_SIZE=512 was tuned for CPU. DGX Spark's unified CPU/GPU memory
+  means an Opacus per-sample-gradient OOM here can degrade the WHOLE
+  system rather than cleanly killing the job — watch `free -h` on the
+  first real (non-sanity-check) DP round; drop DP_BATCH_SIZE if memory
+  pressure shows up.
 --------------------------------------------------------------------------
 """
 
@@ -94,6 +87,7 @@ import csv
 import json
 import time
 import warnings
+import contextlib
 import numpy as np
 import torch
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -114,11 +108,6 @@ assert MODEL_TYPE in ("network", "application"), \
     "Usage: python main.py [network|application]"
 
 # ── Sanity-check toggle ──────────────────────────────────────────────────
-# Set to True to force a short 2-round run. Recommended before committing
-# to a full 25-round GPU run: confirms nvidia-smi shows GPU utilization
-# climbing during training, confirms no device-mismatch crashes, and gives
-# a real round-time number cheaply (minutes, not hours) before starting
-# the actual Experiment 1 sweep. Set back to False for real runs.
 SANITY_CHECK = True
 
 # FL hyperparameters
@@ -127,10 +116,6 @@ NUM_CLIENTS   = 10
 LOCAL_EPOCHS  = 5
 LEARNING_RATE = 0.001
 PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
-# NOTE: if this doesn't match the mu used to generate your reference
-# baselines, the gap you attribute to DP noise (or anything else) in
-# the writeup partly reflects a mu mismatch. Confirm against
-# experiment_config_*.json from the run you're comparing against.
 
 # Byzantine attack
 USE_BYZANTINE_ATTACK = True
@@ -139,47 +124,32 @@ BYZANTINE_CLIENTS    = list(range(NUM_BYZANTINE))   # clients 0 and 1 are malici
 ATTACK_SCALE         = 5.0 if MODEL_TYPE == "network" else 2.0
 
 # ─── Defence flags ──────────────────────────────────────────────────────────
-# Experiment 1 (Krum path):          USE_KRUM=True,          USE_HE=False
-# Experiment 1b (Adaptive-Krum path): USE_ADAPTIVE_KRUM=True, USE_HE=False
-# Experiment 2 (HE path):             USE_HE=True
-# Ablation (no defence):              all three False
 USE_KRUM          = False
-USE_ADAPTIVE_KRUM = True   # USER DECISION: running the epsilon sweep with
-                            # adaptive (MAD-threshold) Krum instead of fixed-m.
-                            # See defences/krum.py::adaptive_multi_krum.
-USE_HE   = False          # CKKS via TenSEAL — set True for Experiment 2
+USE_ADAPTIVE_KRUM = True
+USE_HE   = False
 
-USE_DP   = True           # Opacus per-round DP-SGD — epsilon sweep active
-USE_ZKP  = False          # lightweight norm-bound ZKP gate
+USE_DP   = True
+USE_ZKP  = False
 
 assert sum([USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE]) <= 1, \
     "USE_KRUM, USE_ADAPTIVE_KRUM, and USE_HE are mutually exclusive aggregation " \
     "branches — pick at most one."
 
-# DP_SAFE must match USE_DP — architecture (BatchNorm→GroupNorm, LSTM→DPLSTM
-# with dp_safe=True) must be consistent across checkpoint init, training,
-# and eval or set_model_parameters will fail on mismatched state_dict keys.
 DP_SAFE = USE_DP
 
-# Head-only attack: flips only classifier weights, stays within ZKP norm bound.
-BYZANTINE_HEAD_ONLY = False   # set True for Experiment 2 Condition B
+BYZANTINE_HEAD_ONLY = False
 
-# DP settings (per-round; not composition-tracked — see epsilon sweep for
-# the ε study). Accountant is RDP throughout — see PrivacyEngine below.
-DP_EPSILON       = 15.0        # set per condition: 15.0 / 9.0 / 3.0
+DP_EPSILON       = 15.0
 DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5
 DP_BATCH_SIZE    = 512
 
-# ZKP settings
-ZKP_MAX_NORM = 10.0       # reject clients whose update L2-norm exceeds this
+ZKP_MAX_NORM = 10.0
 
-# Fixed-m Krum settings
-KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1   # e.g. 7 of 10 selected, 3 discarded
+KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
-# Adaptive Multi-Krum settings
 ADAPTIVE_KRUM_K                 = 2.5
-ADAPTIVE_KRUM_METHOD             = "mad"   # "mad" (robust) or "zscore" (ablation only)
+ADAPTIVE_KRUM_METHOD             = "mad"
 ADAPTIVE_KRUM_MIN_KEEP_FRACTION  = 0.5
 
 # ---------------------------------------------------------------------------
@@ -189,14 +159,11 @@ _CPU_COUNT      = os.cpu_count() or 4
 _CUDA_AVAILABLE = torch.cuda.is_available()
 _DEVICE         = torch.device("cuda" if _CUDA_AVAILABLE else "cpu")
 
-# GPU note: ProcessPoolExecutor's 4-worker pool was designed for
-# CPU-parallel client training (each of 4 processes uses its own CPU
-# threads). On a single GPU, 4 separate processes would each open their
-# own CUDA context on the same device — this causes memory contention
-# and context-switch overhead and is typically SLOWER than sequential
-# GPU training, not faster. Default to sequential (1 worker) client
-# training whenever CUDA is available; CPU-only runs keep the original
-# 4-way pool.
+# GPU note: see changelog #19. When CUDA is available, no
+# ProcessPoolExecutor is created at all — client training/eval runs
+# sequentially in-process (see _run_training_wave/_run_eval_wave).
+# CLIENT_POOL_WORKERS is kept as a reported/logged value (still 1 on
+# GPU) even though no pool actually exists in that case.
 CLIENT_POOL_WORKERS = 1 if _CUDA_AVAILABLE else min(4, NUM_CLIENTS)
 _THREADS_PER_WORKER = max(1, _CPU_COUNT // CLIENT_POOL_WORKERS)
 
@@ -251,11 +218,6 @@ if USE_HE:
         raise ImportError("TenSEAL required for USE_HE=True. "
                           "Install with Python 3.11: pip install tenseal")
 
-# ── Per-worker-process noise_multiplier cache — see prior revision #16 ─────
-# Keyed by (client_idx, dp_epsilon, dp_delta, local_epochs, dp_batch_size,
-# dp_max_grad_norm, dataset_size). Lives at module level so it persists
-# across rounds WITHIN one worker process (the pool is created once and
-# reused for the whole run) but is naturally fresh in each new run.
 _noise_multiplier_cache = {}
 
 
@@ -264,27 +226,19 @@ _noise_multiplier_cache = {}
 # ---------------------------------------------------------------------------
 
 def get_round_lr(base_lr, round_num, num_rounds, min_lr_frac=0.15):
-    """
-    Cosine-decays the CLIENT-SIDE learning rate across FL rounds.
-    Currently UNUSED — LR decay disabled per user decision (see
-    KNOWN OPEN ITEMS at top of file). Left defined in case a future
-    experiment wants it back.
-    """
     progress = round_num / num_rounds
     decay = 0.5 * (1 + np.cos(np.pi * progress))
     return base_lr * (min_lr_frac + (1 - min_lr_frac) * decay)
 
 
 # ---------------------------------------------------------------------------
-# ─── PARALLEL CLIENT TRAINING ───────────────────────────────────────────────
+# ─── PARALLEL / SEQUENTIAL CLIENT TRAINING ──────────────────────────────────
 # ---------------------------------------------------------------------------
 
 def _pool_worker_init():
     """
-    Runs once per worker process at pool startup (not per task). Caps
-    this worker's torch thread usage so CLIENT_POOL_WORKERS processes
-    don't each independently try to claim every core. On GPU runs
-    CLIENT_POOL_WORKERS is 1, so this mainly matters for CPU-only runs.
+    Runs once per worker process at pool startup — CPU-only path.
+    Never invoked on GPU runs since no pool exists there (see #19).
     """
     import torch as _torch
     _torch.set_num_threads(_THREADS_PER_WORKER)
@@ -292,8 +246,8 @@ def _pool_worker_init():
 
 def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
     """
-    Top-level (module-level) function — REQUIRED for Windows
-    multiprocessing (spawn pickles this callable).
+    Called either via ProcessPoolExecutor (CPU) or directly in-process
+    (GPU — see changelog #19). Signature/behavior identical either way.
 
     Returns (client_idx, params, dp_eps_spent, dp_noise_multiplier).
     """
@@ -308,9 +262,6 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
     dp_eps_spent = None
     dp_noise_multiplier = None
 
-    # ── Byzantine attack injection ───────────────────────────────────
-    # (operates on the numpy global_params directly — never touches the
-    # model object above, so no device handling needed on this branch)
     if client_cfg["use_byzantine_attack"] and client_idx in client_cfg["byzantine_clients"]:
         if client_cfg["use_he"] and client_cfg["byzantine_head_only"]:
             from defences.byzantine import classifier_head_flip_attack
@@ -322,7 +273,6 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
             params = sign_flip_attack(global_params, scale=client_cfg["attack_scale"])
 
     else:
-        # ── DP-SGD training (Opacus, RDP accountant) ──────────────────
         if client_cfg["use_dp"] and _OPACUS_AVAILABLE:
             import torch
             import torch.utils.data as tud
@@ -342,7 +292,6 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
             )
             privacy_engine = PrivacyEngine(accountant="rdp")
 
-            # ── Noise-multiplier calibration cache ─────────────────────
             cache_key = (
                 client_idx, client_cfg["dp_epsilon"], client_cfg["dp_delta"],
                 client_cfg["local_epochs"], client_cfg["dp_batch_size"],
@@ -376,9 +325,6 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
             model.train()
             for _ in range(client_cfg["local_epochs"]):
                 for X_b, y_b in loader:
-                    # DataLoader always yields CPU tensors regardless of
-                    # what device the source TensorDataset was built
-                    # from — move each batch explicitly.
                     X_b = X_b.to(device)
                     y_b = y_b.to(device)
                     optimizer.zero_grad()
@@ -389,13 +335,9 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
             dp_eps_spent = privacy_engine.get_epsilon(client_cfg["dp_delta"])
 
             real_model = model._module if hasattr(model, "_module") else model
-            params = get_model_parameters(real_model)  # already .cpu().numpy()'d
+            params = get_model_parameters(real_model)
 
         else:
-            # Standard FedProx training (no DP)
-            # NOTE: assumes task.py's train() accepts a `device` kwarg —
-            # see changelog #17 at top of file. Not verified here since
-            # task.py wasn't included with this edit.
             criterion = client_cfg["criterion"]
             train(model, X_tr, y_tr, criterion,
                   epochs=client_cfg["local_epochs"],
@@ -403,17 +345,15 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                   global_params=global_params,
                   mu=client_cfg["prox_mu"],
                   device=device)
-            params = get_model_parameters(model)  # already .cpu().numpy()'d
+            params = get_model_parameters(model)
 
     return client_idx, params, dp_eps_spent, dp_noise_multiplier
 
 
 def _eval_one_client(client_idx, global_params, X_te, y_te, eval_cfg):
     """
-    Top-level (module-level) function, mirrors _train_one_client's
-    picklability requirement. Rebuilds the eval model fresh in the
-    worker and runs test() there instead of sequentially in the main
-    process. Model is moved to eval_cfg["device"] before evaluation.
+    Called either via ProcessPoolExecutor (CPU) or directly in-process
+    (GPU — see changelog #19).
 
     Returns (client_idx, loss, accuracy, per_class_f1).
     """
@@ -425,13 +365,68 @@ def _eval_one_client(client_idx, global_params, X_te, y_te, eval_cfg):
     set_model_parameters(model, global_params)
     model = model.to(device)
 
-    # NOTE: assumes task.py's test() accepts a `device` kwarg — see
-    # changelog #17 at top of file. Not verified here since task.py
-    # wasn't included with this edit.
     loss_v, acc_v, f1_per_class = test(model, X_te, y_te,
                                        eval_cfg["num_classes"],
                                        device=device)
     return client_idx, loss_v, acc_v, f1_per_class
+
+
+def _run_training_wave(executor, clients_data, global_params, round_client_cfg):
+    """
+    Runs _train_one_client() for all clients this round, either through
+    the persistent ProcessPoolExecutor (CPU path) or as a plain
+    sequential in-process loop (GPU path — executor is None). See
+    changelog #19 for why the GPU path avoids the pool entirely.
+
+    Returns a dict {client_idx: (params, dp_eps_spent, dp_noise_mult)}.
+    """
+    if executor is None:
+        results_by_client = {}
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
+            client_idx, params, dp_eps_spent, dp_noise_mult = _train_one_client(
+                i, X_tr, y_tr, global_params, round_client_cfg
+            )
+            results_by_client[client_idx] = (params, dp_eps_spent, dp_noise_mult)
+        return results_by_client
+
+    futures = {
+        executor.submit(
+            _train_one_client, i, X_tr, y_tr, global_params, round_client_cfg
+        ): i
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data)
+    }
+    results_by_client = {}
+    for future in as_completed(futures):
+        client_idx, params, dp_eps_spent, dp_noise_mult = future.result()
+        results_by_client[client_idx] = (params, dp_eps_spent, dp_noise_mult)
+    return results_by_client
+
+
+def _run_eval_wave(executor, clients_data, global_params, eval_cfg):
+    """
+    Mirrors _run_training_wave() for the evaluation step.
+    Returns a dict {client_idx: (loss, accuracy, per_class_f1)}.
+    """
+    if executor is None:
+        results = {}
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
+            client_idx, loss_v, acc_v, f1_per_class = _eval_one_client(
+                i, global_params, X_te, y_te, eval_cfg
+            )
+            results[client_idx] = (loss_v, acc_v, f1_per_class)
+        return results
+
+    eval_futures = {
+        executor.submit(
+            _eval_one_client, i, global_params, X_te, y_te, eval_cfg
+        ): i
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data)
+    }
+    results = {}
+    for future in as_completed(eval_futures):
+        client_idx, loss_v, acc_v, f1_per_class = future.result()
+        results[client_idx] = (loss_v, acc_v, f1_per_class)
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -569,10 +564,13 @@ def main():
           f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}")
     print(f"  USE_KRUM={USE_KRUM}  USE_ADAPTIVE_KRUM={USE_ADAPTIVE_KRUM}  "
           f"USE_HE={USE_HE}  USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
-    print(f"  Parallel client training: {CLIENT_POOL_WORKERS} worker(s), "
-          f"{_THREADS_PER_WORKER} threads/worker "
-          f"({_CPU_COUNT} cores detected)"
-          + ("  [sequential — GPU run]" if _CUDA_AVAILABLE else ""))
+    if _CUDA_AVAILABLE:
+        print(f"  Client training: SEQUENTIAL, in-process (no worker pool — "
+              f"see changelog #19, avoids fork+CUDA hang)")
+    else:
+        print(f"  Parallel client training: {CLIENT_POOL_WORKERS} worker(s), "
+              f"{_THREADS_PER_WORKER} threads/worker "
+              f"({_CPU_COUNT} cores detected)")
     if USE_DP:
         print(f"  DP: ε={DP_EPSILON}  δ={DP_DELTA}  "
               f"max_grad_norm={DP_MAX_GRAD_NORM}  batch_size={DP_BATCH_SIZE}  "
@@ -590,7 +588,6 @@ def main():
 
     torch.set_num_threads(_CPU_COUNT)
 
-    # ── Load data partitions ─────────────────────────────────────────────────
     print("Loading data partitions...")
     clients_data = []
     for i in range(NUM_CLIENTS):
@@ -600,16 +597,10 @@ def main():
     print(f"\nFeature count (measured, not assumed): {sample_features}")
     print(f"All {NUM_CLIENTS} clients loaded.\n")
 
-    # Criterion (FocalLoss + class weights) never changes across rounds or
-    # clients — build it ONCE here, in the main process, and hand it to
-    # every worker via client_cfg. Passed device=_DEVICE so its internal
-    # class-weight tensor lives on the same device the model/batches will
-    # be on — see changelog #17's ASSUMPTION note re: task.py.
     print("Building criterion once (class weights, FocalLoss)...")
     precomputed_criterion = build_criterion().to(_DEVICE)
     print("Criterion built — workers will reuse this, no per-round reload.\n")
 
-    # ── Static per-client config, built once, passed to every worker call ──
     client_cfg = {
         "sample_features":      sample_features,
         "num_classes":          NUM_CLASSES,
@@ -638,7 +629,6 @@ def main():
         "device":          _DEVICE,
     }
 
-    # ── HE context (only if USE_HE) ──────────────────────────────────────────
     he_context = None
     if USE_HE and _TENSEAL_AVAILABLE:
         he_context = ts.context(
@@ -650,7 +640,6 @@ def main():
         he_context.generate_galois_keys()
         print("TenSEAL CKKS context initialised.\n")
 
-    # ── Checkpoint / resume ──────────────────────────────────────────────────
     global_params, start_round = load_checkpoint()
     if global_params is None:
         global_params = get_model_parameters(
@@ -712,16 +701,26 @@ def main():
         }, f, indent=2)
 
     # ════════════════════════════════════════════════════════════════════════
-    # ─── ROUND LOOP — pool created ONCE, reused for every round ─────────────
+    # ─── ROUND LOOP ──────────────────────────────────────────────────────────
+    # GPU: no pool at all (executor stays None throughout — see #19).
+    # CPU: original persistent 4-way ProcessPoolExecutor, unchanged.
     # ════════════════════════════════════════════════════════════════════════
-    with ProcessPoolExecutor(max_workers=CLIENT_POOL_WORKERS,
-                              initializer=_pool_worker_init) as executor:
+    pool_cm = (
+        contextlib.nullcontext()
+        if _CUDA_AVAILABLE
+        else ProcessPoolExecutor(max_workers=CLIENT_POOL_WORKERS,
+                                 initializer=_pool_worker_init)
+    )
+
+    with pool_cm as executor:
+        # nullcontext()'s __enter__ returns None by default — executor
+        # is None on GPU runs, a real ProcessPoolExecutor on CPU runs.
+        # _run_training_wave/_run_eval_wave branch on this.
 
         for round_num in range(start_round + 1, NUM_ROUNDS + 1):
             round_start = time.time()
             print(f"[ROUND {round_num}/{NUM_ROUNDS}]")
 
-            # LR decay disabled (user decision) — flat client_cfg every round.
             round_client_cfg = client_cfg
 
             accepted_params          = []
@@ -732,20 +731,14 @@ def main():
             dp_eps_spent_this_round  = []
             dp_noise_mult_this_round = []
 
-            # ── Submit all clients to the persistent pool ───────────────────
-            futures = {
-                executor.submit(
-                    _train_one_client, i, X_tr, y_tr, global_params, round_client_cfg
-                ): i
-                for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data)
-            }
+            _train_wave_start = time.time()
+            results_by_client = _run_training_wave(
+                executor, clients_data, global_params, round_client_cfg
+            )
+            _train_wave_elapsed = time.time() - _train_wave_start
+            print(f"  [Timing] Training wave (all {NUM_CLIENTS} clients): "
+                  f"{_train_wave_elapsed:.1f}s")
 
-            results_by_client = {}
-            for future in as_completed(futures):
-                client_idx, params, dp_eps_spent, dp_noise_mult = future.result()
-                results_by_client[client_idx] = (params, dp_eps_spent, dp_noise_mult)
-
-            # ── Sequential bookkeeping, in original client order ────────────
             for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
                 params, dp_eps_spent, dp_noise_mult = results_by_client[i]
 
@@ -776,7 +769,6 @@ def main():
                 if dp_noise_mult is not None:
                     dp_noise_mult_this_round.append(dp_noise_mult)
 
-            # ── Aggregation branch ───────────────────────────────────────────
             krum_selected_ids   = set()
             krum_discarded_ids  = set()
             krum_detected_byz   = set()
@@ -859,21 +851,15 @@ def main():
             if zkp_rejected_this_round:
                 print(f"  ZKP rejected: {zkp_rejected_this_round}")
 
-            # ── Evaluation — PARALLELIZED across the persistent pool ────────
-            # Each worker rebuilds its own eval model from global_params and
-            # moves it to eval_cfg["device"].
             _krum_active = USE_KRUM or USE_ADAPTIVE_KRUM
 
-            eval_futures = {
-                executor.submit(
-                    _eval_one_client, i, global_params, X_te, y_te, eval_cfg
-                ): i
-                for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data)
-            }
-            eval_results_by_client = {}
-            for future in as_completed(eval_futures):
-                client_idx, loss_v, acc_v, f1_per_class = future.result()
-                eval_results_by_client[client_idx] = (loss_v, acc_v, f1_per_class)
+            _eval_wave_start = time.time()
+            eval_results_by_client = _run_eval_wave(
+                executor, clients_data, global_params, eval_cfg
+            )
+            _eval_wave_elapsed = time.time() - _eval_wave_start
+            print(f"  [Timing] Eval wave (all {NUM_CLIENTS} clients): "
+                  f"{_eval_wave_elapsed:.1f}s")
 
             round_losses, round_accs, round_f1s = [], [], []
             for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
@@ -979,7 +965,6 @@ def main():
 
             save_checkpoint(global_params, round_num)
 
-    # ── Final summary ────────────────────────────────────────────────────────
     print("\n" + "="*65)
     print(f"  Training complete — {NUM_ROUNDS} rounds  [{MODEL_TYPE.upper()}]")
     if SANITY_CHECK:

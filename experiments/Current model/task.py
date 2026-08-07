@@ -28,11 +28,25 @@ class FocalLoss(nn.Module):
     gamma=2.0 for network model (easier problem).
     gamma=2.0 for application model too, as of this revision — see
     build_criterion_application() docstring for why 3.0 was dropped.
+
+    GPU FIX: weight is now registered via register_buffer() instead of
+    a plain attribute assignment. A plain `self.weight = weight`
+    attribute is invisible to nn.Module's .to(device)/.cuda() machinery
+    — only registered parameters and buffers get moved. Previously,
+    calling criterion.to(device) in main.py silently did nothing to
+    this tensor, which would have caused a CPU-vs-GPU device-mismatch
+    RuntimeError the moment cross_entropy tried to use it against
+    GPU-resident logits (or, if weight is None, no error but silently
+    wrong — no, N/A here since weight is always a real tensor in this
+    codebase's call sites). register_buffer(..., persistent=False)
+    keeps it out of state_dict() (this is a fixed loss-weighting
+    tensor, not a trainable/checkpointed parameter) while still making
+    it participate correctly in .to()/.cuda()/.cpu() calls.
     """
     def __init__(self, gamma=2.0, weight=None):
         super().__init__()
-        self.gamma  = gamma
-        self.weight = weight
+        self.gamma = gamma
+        self.register_buffer('weight', weight, persistent=False)
 
     def forward(self, inputs, targets):
         ce  = nn.functional.cross_entropy(
@@ -66,6 +80,10 @@ def build_criterion_network():
     data_loader.py header comment / verify_label_bug.py) and no longer
     exists — computing live means this can never drift out of sync
     with whatever data was actually used to build the cache again.
+
+    No device kwarg here deliberately — main.py already calls
+    .to(_DEVICE) on the returned criterion. With the register_buffer
+    fix above, that .to() call now actually works.
     """
     counts = get_class_counts_network()
     return FocalLoss(
@@ -140,6 +158,13 @@ def _proximal_term(model, global_params):
     FedProx: (mu/2) * ||w - w_global||^2
     Matched by parameter name to avoid BatchNorm buffer misalignment.
     Returns None when global_params is None (plain FedAvg mode).
+
+    GPU FIX: g used to be created via torch.tensor(..., dtype=float32)
+    with no device argument, which always lands on CPU regardless of
+    where `param` (and the rest of the model) actually live. Comparing
+    a CPU tensor against a CUDA tensor in (param - g) would raise a
+    device-mismatch RuntimeError the first time this ran on GPU. Now
+    built directly on param.device.
     """
     if global_params is None:
         return None
@@ -149,7 +174,8 @@ def _proximal_term(model, global_params):
 
     total = None
     for name, param in model.named_parameters():
-        g    = torch.tensor(global_dict[name], dtype=torch.float32)
+        g    = torch.tensor(global_dict[name], dtype=torch.float32,
+                            device=param.device)
         term = torch.sum((param - g) ** 2)
         total = term if total is None else total + term
     return total
@@ -158,7 +184,7 @@ def _proximal_term(model, global_params):
 # ── Training ─────────────────────────────────────────────────────────
 
 def train(model, X_train, y_train, criterion,
-          epochs=5, lr=0.001, global_params=None, mu=0.01):
+          epochs=5, lr=0.001, global_params=None, mu=0.01, device='cpu'):
     """
     Local training step.
 
@@ -170,8 +196,14 @@ def train(model, X_train, y_train, criterion,
 
     Gradient clipping (max_norm=1.0) prevents explosion.
 
-    DEFENCE HOOK — DP-SGD:
-        wrap optimizer with Opacus PrivacyEngine before epoch loop
+    GPU FIX (device kwarg, new): caller (main.py's _train_one_client)
+    already moves `model` to `device` before calling this. X_train/
+    y_train arrive as numpy arrays and are converted to CPU tensors by
+    torch.FloatTensor/LongTensor regardless — those must be moved to
+    `device` too, per-batch, exactly like the DP-SGD path in main.py
+    already does (DataLoader always yields CPU tensors regardless of
+    the source TensorDataset's device). Defaults to 'cpu' so any
+    existing non-device-aware call site keeps working unmodified.
     """
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -188,6 +220,8 @@ def train(model, X_train, y_train, criterion,
 
     for _ in range(epochs):
         for X_b, y_b in loader:
+            X_b = X_b.to(device)
+            y_b = y_b.to(device)
             optimizer.zero_grad()
             loss = criterion(model(X_b), y_b)
             prox = _proximal_term(model, global_params)
@@ -205,20 +239,29 @@ def train(model, X_train, y_train, criterion,
 
 # ── Evaluation ───────────────────────────────────────────────────────
 
-def test(model, X_test, y_test, num_classes):
+def test(model, X_test, y_test, num_classes, device='cpu'):
     """
     Returns (loss, accuracy, per_class_f1_array).
     Uses standard CrossEntropyLoss for evaluation so loss values
     are comparable across rounds and experiments.
+
+    GPU FIX (device kwarg, new): X/y moved to `device` before the
+    forward pass. Predictions are explicitly brought back to CPU via
+    .cpu() before .numpy() — calling .numpy() directly on a CUDA
+    tensor raises immediately ("can't convert cuda:0 device type
+    tensor to numpy"), and y_test (still a plain numpy array from the
+    caller) needs preds in numpy form on the CPU side to compare
+    against. Defaults to 'cpu' so any existing non-device-aware call
+    site keeps working unmodified.
     """
     model.eval()
-    X = torch.FloatTensor(X_test)
-    y = torch.LongTensor(y_test)
+    X = torch.FloatTensor(X_test).to(device)
+    y = torch.LongTensor(y_test).to(device)
 
     with torch.no_grad():
         out   = model(X)
         loss  = nn.CrossEntropyLoss()(out, y).item()
-        preds = torch.argmax(out, dim=1).numpy()
+        preds = torch.argmax(out, dim=1).cpu().numpy()
 
     accuracy     = float((preds == y_test).mean())
     per_class_f1 = f1_score(
