@@ -360,12 +360,17 @@ def _build_application_features(df: pd.DataFrame) -> np.ndarray:
     return combined.values.astype(float)
 
 
-def load_and_preprocess():
+def load_and_preprocess(model_type):
     """
-    Loads, relabels, caps, and featurizes the dataset ONCE for BOTH
-    models, caching each separately (network and application models
-    now have different feature counts/content, so a single shared
-    cache no longer makes sense).
+    Loads, relabels, caps, and featurizes the dataset, caching network
+    and application data separately (they have different feature
+    counts/content, so a single shared cache no longer makes sense).
+
+    Args:
+        model_type: one of 'network', 'application', 'both'.
+            Only the cache(s) needed for this model_type are loaded
+            or built -- the other model's cache/raw-data work is
+            skipped entirely.
 
     Network model:     VarianceThreshold applied, text columns dropped
     Application model: NO VarianceThreshold, text columns engineered
@@ -373,11 +378,19 @@ def load_and_preprocess():
     """
     global _cached_X_net, _cached_y_net, _cached_X_app, _cached_y_app
 
+    if model_type not in ('network', 'application', 'both'):
+        raise ValueError(
+            f"model_type must be 'network', 'application', or 'both', got {model_type!r}"
+        )
+
+    want_net = model_type in ('network', 'both')
+    want_app = model_type in ('application', 'both')
+
     net_cache_path = CACHE_PATH.replace('.npz', '_network.npz')
     app_cache_path = CACHE_PATH.replace('.npz', '_application.npz')
 
-    need_net = _cached_X_net is None
-    need_app = _cached_X_app is None
+    need_net = want_net and _cached_X_net is None
+    need_app = want_app and _cached_X_app is None
 
     if need_net and os.path.exists(net_cache_path):
         data = np.load(net_cache_path)
@@ -394,6 +407,7 @@ def load_and_preprocess():
     if not (need_net or need_app):
         return
 
+    # Only touch raw data if we actually still need to build something.
     df, y = _load_raw()
 
     if need_net:
@@ -474,7 +488,7 @@ def load_partition_network(partition_id: int,
                            test_size: float    = 0.2,
                            alpha: float        = 0.7,
                            seed: int           = 42):
-    load_and_preprocess()
+    load_and_preprocess('network')
     return _dirichlet_partition(
         _cached_X_net, _cached_y_net, NUM_NETWORK_CLASSES,
         partition_id, num_partitions, test_size, alpha, seed
@@ -486,7 +500,7 @@ def load_partition_application(partition_id: int,
                                test_size: float    = 0.2,
                                alpha: float        = 0.7,
                                seed: int           = 42):
-    load_and_preprocess()
+    load_and_preprocess('application')
     return _dirichlet_partition(
         _cached_X_app, _cached_y_app, NUM_APP_CLASSES,
         partition_id, num_partitions, test_size, alpha, seed
@@ -500,7 +514,7 @@ def get_class_counts_network():
     not a hardcoded table. Used by task.py's FocalLoss weighting so
     the weights always match whatever data was really trained on.
     """
-    load_and_preprocess()
+    load_and_preprocess('network')
     return np.bincount(
         _cached_y_net.astype(int), minlength=NUM_NETWORK_CLASSES
     ).tolist()
@@ -512,7 +526,7 @@ def get_class_counts_application():
     classes (0=Normal ... 7=Fingerprinting), computed from the actual
     corrected cache — not a hardcoded table.
     """
-    load_and_preprocess()
+    load_and_preprocess('application')
     return np.bincount(
         _cached_y_app.astype(int), minlength=NUM_APP_CLASSES
     ).tolist()
