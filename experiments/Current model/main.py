@@ -348,12 +348,6 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                     epochs=client_cfg["local_epochs"],
                     max_grad_norm=client_cfg["dp_max_grad_norm"],
                 )
-                real_model_for_prox = model._module if hasattr(model, "_module") else model
-                _model_state_keys = list(real_model_for_prox.state_dict().keys())
-                _global_dict = (
-                    dict(zip(_model_state_keys, global_params))
-                    if client_cfg["prox_mu"] else None
-                )
                 dp_noise_multiplier = getattr(optimizer, "noise_multiplier", None)
                 if dp_noise_multiplier is not None:
                     _noise_multiplier_cache[cache_key] = dp_noise_multiplier
@@ -366,11 +360,17 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                     max_grad_norm=client_cfg["dp_max_grad_norm"],
                 )
                 dp_noise_multiplier = cached_sigma
-                real_model_for_prox = model._module if hasattr(model, "_module") else model
-                _model_state_keys = list(real_model_for_prox.state_dict().keys())
-                _global_dict = (
+
+            # Computed ONCE here, after BOTH branches above (cached or not)
+            # have finished wrapping model/optimizer/loader — not duplicated
+            # inside just one branch, since round 1 always takes the
+            # "cached_sigma is None" path first.
+            real_model_for_prox = model._module if hasattr(model, "_module") else model
+            _model_state_keys = list(real_model_for_prox.state_dict().keys())
+            _global_dict = (
                 dict(zip(_model_state_keys, global_params))
                 if client_cfg["prox_mu"] else None
+            )
 
             model.train()
             for _ in range(client_cfg["local_epochs"]):
@@ -381,14 +381,13 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                     loss_val = criterion(model(X_b), y_b)
                     loss_val.backward()
                     optimizer.step()
-                     _apply_dp_safe_prox_step(real_model_for_prox, _global_dict,
-                                 client_cfg["prox_mu"], client_cfg["learning_rate"])
+                    _apply_dp_safe_prox_step(real_model_for_prox, _global_dict,
+                                             client_cfg["prox_mu"], client_cfg["learning_rate"])
 
             dp_eps_spent = privacy_engine.get_epsilon(client_cfg["dp_delta"])
 
             real_model = model._module if hasattr(model, "_module") else model
             params = get_model_parameters(real_model)
-
         else:
             criterion = client_cfg["criterion"]
             train(model, X_tr, y_tr, criterion,
@@ -724,7 +723,7 @@ def main():
     init_log_csv(resume=resume)
     best_f1_macro = -1.0
     if resume and os.path.exists(CHECKPOINT_BEST_PROGRESS):
-    with open(CHECKPOINT_BEST_PROGRESS) as f:
+      with open(CHECKPOINT_BEST_PROGRESS) as f:
         best_f1_macro = json.load(f).get("best_f1_macro", -1.0)
     print(f"  Resuming best-F1 tracking: {best_f1_macro:.4f} so far.\n")
 
