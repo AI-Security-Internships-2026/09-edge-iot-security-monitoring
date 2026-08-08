@@ -103,12 +103,25 @@ if SRC_DIR not in sys.path:
 # ─── CONFIGURATION ──────────────────────────────────────────────────────────
 # ---------------------------------------------------------------------------
 
-MODEL_TYPE    = sys.argv[1] if len(sys.argv) > 1 else "network"
-assert MODEL_TYPE in ("network", "application"), \
-    "Usage: python main.py [network|application]"
+import argparse
+
+_parser = argparse.ArgumentParser(
+    description="FL-IDS unified training loop."
+)
+_parser.add_argument("model_type", choices=["network", "application"],
+                     nargs="?", default="network")
+_parser.add_argument("--epsilon", type=float, default=None,
+                     help="Override DP_EPSILON, e.g. --epsilon 9.0")
+_parser.add_argument("--tag", type=str, default=None,
+                     help="Suffix on every output filename — "
+                          "e.g. --tag dp15 → results_network_dp15.csv, "
+                          "replaces manual mv-archiving between sweep runs")
+_args = _parser.parse_args()
+
+MODEL_TYPE = _args.model_type
 
 # ── Sanity-check toggle ──────────────────────────────────────────────────
-SANITY_CHECK = True
+SANITY_CHECK = False
 
 # FL hyperparameters
 NUM_ROUNDS    = 2 if SANITY_CHECK else 25
@@ -139,7 +152,7 @@ DP_SAFE = USE_DP
 
 BYZANTINE_HEAD_ONLY = False
 
-DP_EPSILON       = 15.0
+DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
 DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5
 DP_BATCH_SIZE    = 512
@@ -170,10 +183,12 @@ _THREADS_PER_WORKER = max(1, _CPU_COUNT // CLIENT_POOL_WORKERS)
 # ---------------------------------------------------------------------------
 # Output paths — one set per model type so both can run simultaneously
 # ---------------------------------------------------------------------------
-_TAG               = MODEL_TYPE
-CHECKPOINT_PARAMS  = f"checkpoint_{_TAG}.npz"
-CHECKPOINT_PROGRESS= f"checkpoint_{_TAG}_progress.json"
-LOG_CSV            = f"results_{_TAG}.csv"
+_TAG               = MODEL_TYPE if _args.tag is None else f"{MODEL_TYPE}_{_args.tag}"
+CHECKPOINT_PARAMS       = f"checkpoint_{_TAG}.npz"
+CHECKPOINT_PROGRESS     = f"checkpoint_{_TAG}_progress.json"
+CHECKPOINT_BEST_PARAMS   = f"checkpoint_{_TAG}_best.npz"
+CHECKPOINT_BEST_PROGRESS = f"checkpoint_{_TAG}_best.json"
+LOG_CSV                 = f"results_{_TAG}.csv"
 
 # ---------------------------------------------------------------------------
 # Imports (deferred so errors are clear)
@@ -230,6 +245,30 @@ def get_round_lr(base_lr, round_num, num_rounds, min_lr_frac=0.15):
     decay = 0.5 * (1 + np.cos(np.pi * progress))
     return base_lr * (min_lr_frac + (1 - min_lr_frac) * decay)
 
+
+def _apply_dp_safe_prox_step(real_model, global_dict, mu, lr):
+    """
+    Applies FedProx's proximal pull as a SEPARATE, non-privatized
+    parameter update — not via loss.backward(). See changelog #20:
+    Opacus's DPOptimizer builds its update entirely from .grad_sample,
+    which the prox term never populates (it's a direct function of the
+    parameter, not of any per-sample activation a hooked layer would
+    capture) — so adding it to the loss under DP-SGD silently does
+    nothing. This applies mu*(w - w_global) as a deterministic SGD
+    step, decoupled from the clipped/noised data-gradient step. Safe:
+    the prox term depends only on current params + last round's public
+    global model, never on client data, so it costs zero privacy
+    budget applied this way.
+    """
+    if global_dict is None or mu == 0:
+        return
+    with torch.no_grad():
+        for name, param in real_model.named_parameters():
+            if name not in global_dict:
+                continue
+            g = torch.as_tensor(global_dict[name], dtype=param.dtype,
+                                device=param.device)
+            param -= lr * mu * (param - g)
 
 # ---------------------------------------------------------------------------
 # ─── PARALLEL / SEQUENTIAL CLIENT TRAINING ──────────────────────────────────
@@ -309,6 +348,12 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                     epochs=client_cfg["local_epochs"],
                     max_grad_norm=client_cfg["dp_max_grad_norm"],
                 )
+                real_model_for_prox = model._module if hasattr(model, "_module") else model
+                _model_state_keys = list(real_model_for_prox.state_dict().keys())
+                _global_dict = (
+                    dict(zip(_model_state_keys, global_params))
+                    if client_cfg["prox_mu"] else None
+                )
                 dp_noise_multiplier = getattr(optimizer, "noise_multiplier", None)
                 if dp_noise_multiplier is not None:
                     _noise_multiplier_cache[cache_key] = dp_noise_multiplier
@@ -321,6 +366,11 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                     max_grad_norm=client_cfg["dp_max_grad_norm"],
                 )
                 dp_noise_multiplier = cached_sigma
+                real_model_for_prox = model._module if hasattr(model, "_module") else model
+                _model_state_keys = list(real_model_for_prox.state_dict().keys())
+                _global_dict = (
+                dict(zip(_model_state_keys, global_params))
+                if client_cfg["prox_mu"] else None
 
             model.train()
             for _ in range(client_cfg["local_epochs"]):
@@ -331,6 +381,8 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                     loss_val = criterion(model(X_b), y_b)
                     loss_val.backward()
                     optimizer.step()
+                     _apply_dp_safe_prox_step(real_model_for_prox, _global_dict,
+                                 client_cfg["prox_mu"], client_cfg["learning_rate"])
 
             dp_eps_spent = privacy_engine.get_epsilon(client_cfg["dp_delta"])
 
@@ -487,6 +539,17 @@ def load_checkpoint():
         progress = json.load(f)
     return params, progress["last_completed_round"]
 
+def save_best_checkpoint(global_params: list, round_num: int, f1_macro: float):
+    """
+    Separate checkpoint saved only when this round beats every prior
+    round's F1-Macro this run — so the best round stays recoverable
+    even if a later round degrades and overwrites the per-round
+    checkpoint. This is exactly what was lost for the original locked
+    baselines (round 20/22) — not repeating that here.
+    """
+    np.savez(CHECKPOINT_BEST_PARAMS, *global_params)
+    with open(CHECKPOINT_BEST_PROGRESS, "w") as f:
+        json.dump({"best_round": round_num, "best_f1_macro": float(f1_macro)}, f)
 
 # ---------------------------------------------------------------------------
 # ─── CSV LOGGING ────────────────────────────────────────────────────────────
@@ -659,6 +722,11 @@ def main():
 
     resume = start_round > 0
     init_log_csv(resume=resume)
+    best_f1_macro = -1.0
+    if resume and os.path.exists(CHECKPOINT_BEST_PROGRESS):
+    with open(CHECKPOINT_BEST_PROGRESS) as f:
+        best_f1_macro = json.load(f).get("best_f1_macro", -1.0)
+    print(f"  Resuming best-F1 tracking: {best_f1_macro:.4f} so far.\n")
 
     meta_path = f"experiment_config_{_TAG}.json"
     with open(meta_path, "w") as f:
@@ -889,6 +957,12 @@ def main():
             mean_loss = float(np.mean(round_losses))
             mean_acc  = float(np.mean(round_accs))
             mean_f1   = np.mean(round_f1s, axis=0)
+            round_f1_macro = float(mean_f1.mean())
+            if round_f1_macro > best_f1_macro:
+                best_f1_macro = round_f1_macro
+                save_best_checkpoint(global_params, round_num, best_f1_macro)
+                print(f"  [Best checkpoint] New best F1-Macro: {best_f1_macro:.4f} "
+                    f"(round {round_num}) → {CHECKPOINT_BEST_PARAMS}")
             round_time = time.time() - round_start
 
             print(f"  Loss: {mean_loss:.4f}  Acc: {mean_acc:.4f}  "
