@@ -243,6 +243,7 @@ None faced.
 
 - Complete experiment 1 after fixing krum to properly discard 3 clients instead of 4, increase speed of training model.
 - Build the combined DP-SGD + partial-HE experiment (Experiment 2)
+<<<<<<< HEAD
 ---
 
 ## Week 8
@@ -288,3 +289,6 @@ None faced.
 - Run `confusion_matrix.py` on Experiment 1's best-round checkpoints — proposed multiple weeks ago, still never actually run, and now low-effort since the checkpoints are confirmed recoverable.
 - Confirm whether the application model's ε=9 outperforming ε=15 (non-monotonic w.r.t. noise) is real or a single-seed artifact — would need a repeat run with a different seed.
 - **Is it ok if DP resets epsilon each round?** — Resolved as a documented design decision, not an open question: yes, this is intentional (Opacus's "Option A"). Each round reports its own per-round ε (3/9/15), with no cross-round composition accountant tracking cumulative privacy spend across all 25 rounds. This is stated explicitly as a caveat in the write-up rather than treated as a bug — a full composition-tracking implementation is a possible future addition if a stronger cumulative guarantee is ever needed, but isn't required for the current experiments.
+=======
+---
+>>>>>>> origin/dev
