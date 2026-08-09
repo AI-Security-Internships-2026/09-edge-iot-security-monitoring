@@ -252,19 +252,39 @@ None faced.
 
 ### Completed this week
 
-- Found that experiment 1 was achieving a low accuracy and macro F1 score. 
-- Observed that text features were silently being destroyed in application model specifically. Fixed it by 'engineer_text_features()',  four techniques (length, Shannon entropy, keyword-regex binary flags, frequency encoding for mqtt.topic), wired into preprocess_application_model() before the numeric-coercion step. Estimated to grow feature count from 52 → ~80-90. 
+- Found that experiment 1 was achieving a low accuracy and macro F1 score.
+- Observed that text features were silently being destroyed in application model specifically. Fixed it by `engineer_text_features()`, four techniques (length, Shannon entropy, keyword-regex binary flags, frequency encoding for mqtt.topic), wired into `preprocess_application_model()` before the numeric-coercion step. Grew feature count from 52 → 90 (confirmed measured, not estimated — application model logs now show "90 features after text engineering").
 - Reran all baseline runs with the new features included, which resulted in a higher F1 score and accuracy in both models.
--updated baseline numbers and manifests.
+- Updated baseline numbers and manifests.
 
-- Implemented in `main.py`: Parallelization: client training logic moved verbatim into a new top-level function _train_one_client(), The round loop now submits all 10 clients to a 4-worker ProcessPoolExecutor, then processes results in original client order, Thread tuning: main process uses all detected cores (torch.set_num_threads(_CPU_COUNT)); each worker process is capped at cores // 4 to avoid 4 processes each fighting for every core simultaneously. DP batch size: 256 → 512.
 
-- Implemented adaptive Multi Krum (MAD/Z-score dynamic thresholding). Computes standard Krum distance scores for every client using the same theoretical neighbor count (n - f - 2) as the existing implementation — unchanged. Instead of always keeping a fixed count m, drops any client whose score exceeds median(scores) + k · 1.4826 · MAD(scores) (default) or mean + k·std (z-score option, kept for ablation). All-honest rounds → threshold stays close to the pack → ~0 clients dropped. Byzantine clusters → dropped regardless of count, not capped at a fixed number.
+- Implemented adaptive Multi-Krum (MAD/Z-score dynamic thresholding). Computes standard Krum distance scores for every client using the same theoretical neighbour count (n − f − 2) as the existing implementation — unchanged. Instead of always keeping a fixed count m, drops any client whose score exceeds `median(scores) + k · 1.4826 · MAD(scores)` (default) or `mean + k·std` (z-score option, kept for ablation). All-honest rounds → threshold stays close to the pack → ~0 clients dropped. Byzantine clusters → dropped regardless of count, not capped at a fixed number.
 - Krum detection: 100% every round, both models — the two Byzantine clients correctly discarded in all 25 rounds, zero false negatives.
 - Reran Krum baseline numbers and updated Krum baseline numbers. Added manifests as well.
 
 
-### next tasks
-- added manifests for experiment 1.
-- Completed experiment 1.
-- Is it ok if DP resets epsilon each round.
+- Found and fixed a real bug: `PROX_MU` was silently inert whenever DP-SGD was active. Opacus's `DPOptimizer.step()` builds its update entirely from `.grad_sample`, which a loss-added proximal term never populates — it was being discarded every DP round despite being logged in the config as if it mattered. Fixed by applying the proximal pull as a separate, deterministic, unnoised parameter update (`_apply_dp_safe_prox_step`) right after `optimizer.step()`, decoupled from the privatized gradient step. Privacy-safe since the term depends only on current params + last round's public global model, never client data. All subsequent DP runs are now confirmed genuine DP-SGD + FedProx, not DP-SGD + FedAvg.
+
+
+- Implemented `save_best_checkpoint()` — tracks best F1-Macro across rounds and saves it separately from the per-round-overwritten checkpoint, so the best round's weights are always recoverable (fixes the earlier round-20/round-22 unrecoverable-checkpoint problem for all runs going forward).
+- Added CLI args (`--epsilon`, `--tag`) to `main.py` — sweep conditions no longer need manual code edits or manual archiving between runs; each condition writes its own uniquely-named output files automatically.
+
+
+- Migrated training from local CPU to GPU: got OpenVPN + SSH access to the lab's NVIDIA DGX Spark (Grace Blackwell GB10, ARM64, unified 128GB CPU/GPU memory), set up an NGC PyTorch container (`nvcr.io/nvidia/pytorch:25.10-py3` — required for GB10's compute capability), and added `.to(device)` GPU support throughout `main.py`/`task.py` (including a `register_buffer` fix so `FocalLoss`'s class weights actually move to GPU, which they silently weren't before).
+- Diagnosed and fixed a fork+CUDA hang: `ProcessPoolExecutor` workers were being created via `fork` after CUDA was already initialized in the main process, handing child processes a broken CUDA context. Fixed by running client training/eval sequentially in-process on GPU runs instead (CPU runs unaffected, still use the worker pool).
+
+
+- **Ran Experiment 1 (DP vs. Krum epsilon sweep) to completion** — 6  planned conditions (ε ∈ {3, 9, 15} × {network, application} models), all on GPU, all under Byzantine attack + adaptive Krum defence.
+  - **Headline finding 1:** the original hypothesis (DP noise erodes Krum's Byzantine-detection) does not hold in this range — Krum's score-separation ratio changed by under 2.3% across ε∈{3,9,15} on both models, and detection rate stayed at 100% in every single round of every run. Directly resolves the open question of whether DP noise should be restricted to the classifier head to protect Krum — this data says that's not necessary at these settings.
+  - **Headline finding 2 (more novel):** DP noise strongly delays or suppresses rare-class discovery independent of Krum — clearest on Fingerprinting (application model's rarest class), which stays at F1=0.000 for 23/25 rounds at ε=3 but reaches ~0.6 by round 25 at ε=9/15.
+  - Wrote up full results analysis and a companion technical manifest documenting the exact code state (`main.py`/`task.py`) that produced these results, including a full code review confirming all three fixes above were correctly applied with no new bugs found.
+
+### Next tasks
+
+- **Experiment 2 — HE vs. Krum.** Test whether encrypting the classifier head (partial CKKS HE) creates a Byzantine blind spot Krum can't see into — a client could scale/flip only the encrypted slice, invisible to Krum's plaintext-only distance computation. Blocked on real implementation work first: `main.py` currently asserts `USE_HE` and `USE_KRUM`/`USE_ADAPTIVE_KRUM` are mutually exclusive; need a hybrid aggregation branch (Krum scoring on the plaintext slice, HE aggregation on the encrypted slice, gated by Krum's plaintext-only selection) before this can run at all. Also need to fix two pre-existing bugs in `he_aggregate()` (no decrypt-before-return, unweighted averaging) since they'd otherwise make this experiment's F1 numbers untrustworthy.
+- **Experiment 3 — checkpoint every privacy configuration systematically.** Build a `models/` directory + manifest indexing every run (baseline, +Krum, +DP, +DP+Krum, +HE, +HE+Krum) with its config, checkpoint, and metrics, so results are directly reloadable instead of reconstructed by hand from filenames. Also surfaces that the "6 combinations" table isn't actually complete yet even after Experiment 1 — standalone +Krum/+DP/+HE ablations with no Byzantine attack present don't exist yet, only the DP+Krum-under-attack rows from Experiment 1 do.
+- Write `plot_epsilon_sweep.py` — Experiment 1's results were fully analyzed by hand; a plotting script would let this regenerate automatically if more epsilon points get added later.
+- Run `per_client_audit.py` against both models' partitions — Client 6 (application, Password/XSS) and Client 4 (network, Condition-5-only) anomalies are both still unresolved.
+- Run `confusion_matrix.py` on Experiment 1's best-round checkpoints — proposed multiple weeks ago, still never actually run, and now low-effort since the checkpoints are confirmed recoverable.
+- Confirm whether the application model's ε=9 outperforming ε=15 (non-monotonic w.r.t. noise) is real or a single-seed artifact — would need a repeat run with a different seed.
+- **Is it ok if DP resets epsilon each round?** — Resolved as a documented design decision, not an open question: yes, this is intentional (Opacus's "Option A"). Each round reports its own per-round ε (3/9/15), with no cross-round composition accountant tracking cumulative privacy spend across all 25 rounds. This is stated explicitly as a caveat in the write-up rather than treated as a bug — a full composition-tracking implementation is a possible future addition if a stronger cumulative guarantee is ever needed, but isn't required for the current experiments.
