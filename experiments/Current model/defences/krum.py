@@ -131,11 +131,31 @@ def adaptive_multi_krum(all_params, weights, num_byzantine=2, k=2.5, method="mad
     f = num_byzantine
     theoretical_neighbours = n - f - 2
 
+    # HARD requirement: need a positive neighbour count to compute Krum
+    # scores at all — below this the distance-sum computation is
+    # meaningless (sums zero or negative-count neighbours).
     if theoretical_neighbours <= 0:
         raise ValueError(
-            f"Too many Byzantine clients: n={n}, f={f} → theoretical neighbour "
-            f"count={theoretical_neighbours}. Require f < n/2 - 1, i.e. f ≤ {n // 2 - 2}."
+            f"Cannot compute Krum scores: n={n}, f={f} → theoretical "
+            f"neighbour count={theoretical_neighbours} (n - f - 2). "
+            f"Need f <= n - 3."
         )
+
+    # SOFT requirement: Blanchard et al.'s formal Byzantine-robustness
+    # guarantee only holds for n >= 2f + 3, i.e. f < n/2 - 1. The function
+    # still RUNS below this bound (the hard check above is the only actual
+    # blocker) — but detection is no longer theoretically guaranteed at
+    # this ratio. Warn loudly instead of raising, since exploring past the
+    # guarantee is exactly the point of a Byzantine-fraction sweep — but
+    # every result obtained this way needs to be visibly flagged as
+    # "beyond the guarantee," not indistinguishable from a validated
+    # in-bound result.
+    if f >= n / 2 - 1:
+        print(f"  ⚠️  WARNING: f={f} Byzantine clients out of n={n} exceeds "
+              f"the theoretical Krum safety bound (f < n/2 - 1). "
+              f"Byzantine-robustness is NOT guaranteed at this ratio — "
+              f"treat this round's detection result as exploratory, not "
+              f"a validated robust-detection outcome.")
     if method not in ("mad", "zscore"):
         raise ValueError(f"method={method!r} must be 'mad' or 'zscore'.")
 
@@ -225,7 +245,7 @@ def adaptive_multi_krum(all_params, weights, num_byzantine=2, k=2.5, method="mad
     dropped = [i for i in finite_clients if scores[i] > threshold] + sorted(nan_clients)
 
     fallback_triggered = False
-    min_keep = int(np.ceil(min_keep_fraction * len(finite_clients))) if min_keep_fraction > 0 else 1
+    min_keep = int(np.ceil(min_keep_fraction * len(finite_clients))) if min_keep_fraction > 0 else 0
     if len(kept) < min_keep:
         print(f"  ⚠  Thresholding kept only {len(kept)}/{len(finite_clients)} finite "
               f"clients, below floor of {min_keep}. Falling back to lowest-{min_keep}-score clients.")

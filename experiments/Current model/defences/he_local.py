@@ -24,7 +24,7 @@ since there's no untrusted party to hide the secret key from.
 import time
 import numpy as np
 
-import he_aggregation as he
+from defences import he_aggregation as he
 
 # Standard TenSEAL parameters for n=8192, 128-bit security (RLWE).
 # [60, 40, 40, 60] = 200 total coefficient-modulus bits, under the

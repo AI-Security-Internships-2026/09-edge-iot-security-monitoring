@@ -137,20 +137,33 @@ BYZANTINE_CLIENTS    = list(range(NUM_BYZANTINE))   # clients 0 and 1 are malici
 ATTACK_SCALE         = 5.0 if MODEL_TYPE == "network" else 2.0
 
 # ─── Defence flags ──────────────────────────────────────────────────────────
-USE_KRUM          = False
-USE_ADAPTIVE_KRUM = True
-USE_HE   = False
+USE_KRUM            = False
+USE_ADAPTIVE_KRUM   = False
+USE_HE              = False
+USE_HE_KRUM_HYBRID  = True    # Experiment 2 — plaintext-slice Krum + encrypted-slice HE
 
-USE_DP   = True
+USE_DP   = False   # Experiment 2 isolates HE x Krum only, same philosophy as
+                    # Experiment 1 isolating DP x Krum (USE_ZKP=False there) —
+                    # see master doc's Layer 3 / Experiment 2 "Not used" notes.
 USE_ZKP  = False
 
-assert sum([USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE]) <= 1, \
-    "USE_KRUM, USE_ADAPTIVE_KRUM, and USE_HE are mutually exclusive aggregation " \
-    "branches — pick at most one."
+assert sum([USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE, USE_HE_KRUM_HYBRID]) <= 1, \
+    "USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE, and USE_HE_KRUM_HYBRID are mutually " \
+    "exclusive aggregation branches — pick at most one."
 
 DP_SAFE = USE_DP
 
-BYZANTINE_HEAD_ONLY = False
+# Experiment 2's whole premise requires the head-only variant — a full-model
+# sign-flip would poison the plaintext ("bulk") slice too, and Krum would
+# just catch it the normal way, telling us nothing new.
+BYZANTINE_HEAD_ONLY = True
+
+# CKKS parameters for the partial (classifier-head-only) HE path, used by
+# USE_HE_KRUM_HYBRID. Matches the "standard, non-RAM-constrained" config
+# he_local.py already defines (n=8192, [60,40,40,60], scale=2**40) — same
+# parameters main.py's old full-model USE_HE path used, so HE timing/
+# security stays comparable to the earlier ablation numbers.
+HE_POLY_DEGREE = 8192
 
 DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
 DP_DELTA         = 1e-5
@@ -206,13 +219,19 @@ else:
     from task import (get_model, get_model_parameters, set_model_parameters,
                       train, test, build_criterion_application as build_criterion)
 
-from defences.byzantine import sign_flip_attack
+from defences.byzantine import sign_flip_attack, classifier_head_flip_attack
 
 if USE_KRUM:
     from defences.krum import multi_krum
 
-if USE_ADAPTIVE_KRUM:
+if USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID:
+    # Experiment 2 uses adaptive Krum on the plaintext slice, for direct
+    # comparability with Experiment 1's already-completed adaptive-Krum
+    # results — see master doc, Experiment 2 Prerequisites #4.
     from defences.krum import adaptive_multi_krum
+
+if USE_HE_KRUM_HYBRID:
+    from defences import he_local
 
 if USE_DP:
     try:
@@ -225,12 +244,12 @@ if USE_DP:
 else:
     _OPACUS_AVAILABLE = False
 
-if USE_HE:
+if USE_HE or USE_HE_KRUM_HYBRID:
     try:
         import tenseal as ts
         _TENSEAL_AVAILABLE = True
     except ImportError:
-        raise ImportError("TenSEAL required for USE_HE=True. "
+        raise ImportError("TenSEAL required for USE_HE/USE_HE_KRUM_HYBRID=True. "
                           "Install with Python 3.11: pip install tenseal")
 
 _noise_multiplier_cache = {}
@@ -302,11 +321,28 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
     dp_noise_multiplier = None
 
     if client_cfg["use_byzantine_attack"] and client_idx in client_cfg["byzantine_clients"]:
-        if client_cfg["use_he"] and client_cfg["byzantine_head_only"]:
-            from defences.byzantine import classifier_head_flip_attack
-            model_state_keys = list(model.state_dict().keys())
+        if (client_cfg["use_he"] or client_cfg["use_he_hybrid"]) and client_cfg["byzantine_head_only"]:
+            # Stealthy variant: train normally on the FULL model first, so
+            # the bulk/backbone slice looks like a real locally-computed
+            # update -- not a frozen, unmodified copy of last round's
+            # global model (which is what the old version returned, and
+            # which Krum can trivially spot regardless of HE, since it's
+            # just "this client didn't train," not "this client's
+            # encrypted head is hiding something"). ONLY THEN overwrite
+            # the classifier-head slice with the poisoned values. This is
+            # what actually tests whether an encrypted classifier head
+            # creates a blind spot for an otherwise-normal-looking client.
+            criterion = client_cfg["criterion"]
+            train(model, X_tr, y_tr, criterion,
+                  epochs=client_cfg["local_epochs"],
+                  lr=client_cfg["learning_rate"],
+                  global_params=global_params,
+                  mu=client_cfg["prox_mu"],
+                  device=device)
+            trained_params    = get_model_parameters(model)
+            model_state_keys  = list(model.state_dict().keys())
             params = classifier_head_flip_attack(
-                global_params, model_state_keys, scale=client_cfg["attack_scale"]
+                trained_params, model_state_keys, scale=client_cfg["attack_scale"]
             )
         else:
             params = sign_flip_attack(global_params, scale=client_cfg["attack_scale"])
@@ -625,7 +661,8 @@ def main():
     print(f"  Byzantine={NUM_BYZANTINE} (clients {BYZANTINE_CLIENTS})  "
           f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}")
     print(f"  USE_KRUM={USE_KRUM}  USE_ADAPTIVE_KRUM={USE_ADAPTIVE_KRUM}  "
-          f"USE_HE={USE_HE}  USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
+          f"USE_HE={USE_HE}  USE_HE_KRUM_HYBRID={USE_HE_KRUM_HYBRID}  "
+          f"USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
     if _CUDA_AVAILABLE:
         print(f"  Client training: SEQUENTIAL, in-process (no worker pool — "
               f"see changelog #19, avoids fork+CUDA hang)")
@@ -646,6 +683,13 @@ def main():
         print(f"  Adaptive Krum: method={ADAPTIVE_KRUM_METHOD}  k={ADAPTIVE_KRUM_K}  "
               f"min_keep_fraction={ADAPTIVE_KRUM_MIN_KEEP_FRACTION} "
               f"(clients dropped per round is DYNAMIC, not fixed)")
+    if USE_HE_KRUM_HYBRID:
+        print(f"  HE+Krum Hybrid: adaptive Krum (method={ADAPTIVE_KRUM_METHOD}  "
+              f"k={ADAPTIVE_KRUM_K}) scores the PLAINTEXT (bulk) slice only; "
+              f"classifier-head slice (CKKS, poly_degree={HE_POLY_DEGREE}) is "
+              f"aggregated only over whichever clients that scoring selects.")
+        print(f"  Byzantine head-only attack: {BYZANTINE_HEAD_ONLY} "
+              f"(should be True — this is the whole point of Experiment 2)")
     print(f"{'='*65}\n")
 
     torch.set_num_threads(_CPU_COUNT)
@@ -672,6 +716,7 @@ def main():
         "byzantine_clients":    BYZANTINE_CLIENTS,
         "attack_scale":         ATTACK_SCALE,
         "use_he":                USE_HE,
+        "use_he_hybrid":        USE_HE_KRUM_HYBRID,
         "byzantine_head_only":  BYZANTINE_HEAD_ONLY,
         "use_dp":                USE_DP,
         "dp_epsilon":           DP_EPSILON,
@@ -702,6 +747,28 @@ def main():
         he_context.generate_galois_keys()
         print("TenSEAL CKKS context initialised.\n")
 
+    if USE_HE_KRUM_HYBRID and _TENSEAL_AVAILABLE:
+        # he_local.create_ckks_context() holds the secret key — fine here
+        # since this is a single-process simulation with no untrusted
+        # server/client network boundary (same reasoning as he_local.py's
+        # own docstring). Only the classifier-head slice will ever be
+        # encrypted under it — see split_sensitive_bulk()/SENSITIVE_PREFIX.
+        he_context = he_local.create_ckks_context(HE_POLY_DEGREE)
+        print(f"Partial-HE (classifier-head-only) CKKS context initialised "
+              f"via he_local.create_ckks_context (poly_degree={HE_POLY_DEGREE}).\n")
+
+    # Model state_dict key order, needed to split each client's flat param
+    # list into "sensitive" (classifier.*) vs "bulk" layers for the hybrid
+    # branch's encryption/Krum split. Built once here, off a throwaway
+    # model instance — identical order to every client's own model since
+    # architecture + dp_safe are fixed for the whole run.
+    MODEL_STATE_KEYS = None
+    if USE_HE_KRUM_HYBRID:
+        _keys_model = get_model(num_features=sample_features,
+                                num_classes=NUM_CLASSES, dp_safe=DP_SAFE)
+        MODEL_STATE_KEYS = list(_keys_model.state_dict().keys())
+        del _keys_model
+
     global_params, start_round = load_checkpoint()
     if global_params is None:
         global_params = get_model_parameters(
@@ -723,9 +790,9 @@ def main():
     init_log_csv(resume=resume)
     best_f1_macro = -1.0
     if resume and os.path.exists(CHECKPOINT_BEST_PROGRESS):
-      with open(CHECKPOINT_BEST_PROGRESS) as f:
-        best_f1_macro = json.load(f).get("best_f1_macro", -1.0)
-    print(f"  Resuming best-F1 tracking: {best_f1_macro:.4f} so far.\n")
+        with open(CHECKPOINT_BEST_PROGRESS) as f:
+            best_f1_macro = json.load(f).get("best_f1_macro", -1.0)
+        print(f"  Resuming best-F1 tracking: {best_f1_macro:.4f} so far.\n")
 
     meta_path = f"experiment_config_{_TAG}.json"
     with open(meta_path, "w") as f:
@@ -750,6 +817,8 @@ def main():
             "adaptive_krum_method": ADAPTIVE_KRUM_METHOD,
             "adaptive_krum_min_keep_fraction": ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
             "use_he": USE_HE,
+            "use_he_krum_hybrid": USE_HE_KRUM_HYBRID,
+            "he_poly_degree": HE_POLY_DEGREE if (USE_HE or USE_HE_KRUM_HYBRID) else None,
             "use_dp": USE_DP,
             "dp_epsilon": DP_EPSILON,
             "dp_delta": DP_DELTA,
@@ -810,7 +879,8 @@ def main():
                 params, dp_eps_spent, dp_noise_mult = results_by_client[i]
 
                 if USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
-                    tag = "head-only" if (USE_HE and BYZANTINE_HEAD_ONLY) else "sign-flip"
+                    tag = ("head-only" if ((USE_HE or USE_HE_KRUM_HYBRID) and BYZANTINE_HEAD_ONLY)
+                          else "sign-flip")
                     print(f"  Client {i+1:2d}  [BYZANTINE — {tag} ×{ATTACK_SCALE}]")
 
                 if USE_ZKP:
@@ -826,6 +896,19 @@ def main():
                         for p in params
                     ]
                     accepted_params.append(enc_params)
+                elif USE_HE_KRUM_HYBRID and _TENSEAL_AVAILABLE and he_context is not None:
+                    # Only the classifier-head ("sensitive") layers get
+                    # CKKS-encrypted; everything else ("bulk") stays plain
+                    # numpy, exactly what the Krum branch below needs to
+                    # be able to score. Returns a dict — see he_local.
+                    client_enc = he_local.encrypt_params(
+                        params, MODEL_STATE_KEYS, he_context, HE_POLY_DEGREE
+                    )
+                    if round_num == start_round + 1 and len(accepted_params) == 0:
+                        print(f"  [HE hybrid] {client_enc['pct_encrypted']:.1f}% of "
+                              f"params encrypted (classifier head), rest plaintext "
+                              f"(bulk) — measured once, client {i+1}.")
+                    accepted_params.append(client_enc)
                 else:
                     accepted_params.append(params)
 
@@ -849,6 +932,79 @@ def main():
             if USE_HE and _TENSEAL_AVAILABLE:
                 global_params = he_aggregate(accepted_params, he_context)
                 agg_label = "HE"
+
+            elif USE_HE_KRUM_HYBRID and _TENSEAL_AVAILABLE:
+                # accepted_params here is a list of he_local.encrypt_params()
+                # output dicts (one per accepted client): {"sensitive_enc":
+                # <encrypted classifier head>, "bulk": <plaintext everything
+                # else>, "sensitive_idx"/"bulk_idx": layer index mappings}.
+
+                if len(accepted_params) - NUM_BYZANTINE - 2 < 1:
+                    # Matches adaptive_multi_krum()'s actual HARD requirement
+                    # (theoretical_neighbours=n-f-2 > 0, i.e. n >= f+3) — this
+                    # is deliberately weaker than the Blanchard n>=2f+3 bound,
+                    # which the function now only WARNS about, not raises on.
+                    # Must stay in sync with defences/krum.py's hard check,
+                    # not its soft one, or this fallback fires too eagerly
+                    # and silently blocks the exact beyond-guarantee sweep
+                    # region the soft-warning design exists to allow.
+                    selected_positions = list(range(len(accepted_params)))
+                    krum_score_diag = None
+                    agg_label = ("HE+Krum hybrid (fallback — too few accepted "
+                                 "clients for plaintext-slice Krum; all accepted "
+                                 "clients included in both slices)")
+                else:
+                    bulk_param_lists = [c["bulk"] for c in accepted_params]
+                    _, selected_positions, krum_score_diag = adaptive_multi_krum(
+                        bulk_param_lists,
+                        accepted_weights,
+                        num_byzantine=NUM_BYZANTINE,
+                        k=ADAPTIVE_KRUM_K,
+                        method=ADAPTIVE_KRUM_METHOD,
+                        min_keep_fraction=ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
+                        return_diagnostics=True,
+                    )
+                    # NOTE: the aggregated_params Krum returns (position 0,
+                    # discarded via `_`) is the bulk-only weighted average of
+                    # kept clients — we don't use it directly because
+                    # he_local.aggregate_encrypted() below recomputes the
+                    # identical plaintext-weighted average over the SAME
+                    # selected clients/weights as part of handling the bulk
+                    # half, so nothing is lost, just not duplicated.
+                    agg_label = None  # set below, after selected ids are known
+
+                krum_selected_ids  = {
+                    accepted_client_indices[pos] for pos in selected_positions
+                }
+                krum_discarded_ids = {
+                    idx for idx in accepted_client_indices
+                    if idx not in krum_selected_ids
+                }
+                krum_detected_byz = krum_discarded_ids & set(BYZANTINE_CLIENTS)
+
+                # Encrypted-slice aggregation, RESTRICTED to whichever clients
+                # Krum selected using plaintext evidence only. Krum never sees
+                # the ciphertext; the server still excludes a flagged client's
+                # encrypted contribution too, it just couldn't have used the
+                # encrypted data to make that call. See master doc, Experiment
+                # 2's hybrid design step 3.
+                selected_enc_clients = [accepted_params[pos] for pos in selected_positions]
+                selected_weights     = [accepted_weights[pos] for pos in selected_positions]
+                enc_aggregate = he_local.aggregate_encrypted(
+                    selected_enc_clients, selected_weights, he_context
+                )
+                global_params = he_local.decrypt_params(enc_aggregate)
+
+                if agg_label is None:
+                    agg_label = (
+                        f"HE+Krum hybrid (adaptive, {ADAPTIVE_KRUM_METHOD}, "
+                        f"k={ADAPTIVE_KRUM_K})  plaintext-slice "
+                        f"selected={sorted(krum_selected_ids)}  "
+                        f"discarded={sorted(krum_discarded_ids)}  "
+                        f"detected_byz={sorted(krum_detected_byz)}  "
+                        f"(encrypted classifier-head slice aggregated over "
+                        f"selected clients only)"
+                    )
 
             elif USE_KRUM:
                 effective_m = min(KRUM_M, len(accepted_params) - 1)
@@ -880,6 +1036,9 @@ def main():
 
             elif USE_ADAPTIVE_KRUM:
                 if len(accepted_params) - NUM_BYZANTINE - 2 < 1:
+                    # Matches adaptive_multi_krum()'s actual HARD requirement
+                    # (n >= f+3) — see matching comment in the hybrid branch
+                    # above for why this is deliberately not the 2f+3 bound.
                     global_params = fedprox_aggregate(accepted_params,
                                                       accepted_weights)
                     agg_label = "FedProx (Adaptive-Krum fallback — too few accepted clients)"
@@ -918,7 +1077,7 @@ def main():
             if zkp_rejected_this_round:
                 print(f"  ZKP rejected: {zkp_rejected_this_round}")
 
-            _krum_active = USE_KRUM or USE_ADAPTIVE_KRUM
+            _krum_active = USE_KRUM or USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID
 
             _eval_wave_start = time.time()
             eval_results_by_client = _run_eval_wave(
@@ -978,7 +1137,9 @@ def main():
             )
 
             if _krum_active and krum_detection_rate is not None:
-                krum_label = "Krum" if USE_KRUM else "Adaptive Krum"
+                krum_label = ("Krum" if USE_KRUM
+                             else "HE+Krum Hybrid (plaintext-slice)" if USE_HE_KRUM_HYBRID
+                             else "Adaptive Krum")
                 print(f"  [{krum_label}] Detection rate this round: "
                       f"{krum_detection_rate:.2%}  "
                       f"({len(krum_detected_byz)}/{NUM_BYZANTINE} Byzantine detected, "
@@ -1046,10 +1207,11 @@ def main():
         print(f"  *** starting the real sweep. ***")
     print(f"  Results logged to:     {LOG_CSV}")
     print(f"  Checkpoint:            {CHECKPOINT_PARAMS} (round {NUM_ROUNDS})")
-    if USE_KRUM or USE_ADAPTIVE_KRUM:
+    if USE_KRUM or USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID:
         print(f"\n  Reminder: delete checkpoint before changing flags")
-        print(f"  (Krum/Adaptive-Krum/HE/DP flags change the experiment — old")
-        print(f"  checkpoint params will give misleading results if reused.)")
+        print(f"  (Krum/Adaptive-Krum/HE/HE-Krum-Hybrid/DP flags change the")
+        print(f"  experiment — old checkpoint params will give misleading")
+        print(f"  results if reused.)")
     print("="*65 + "\n")
 
 
