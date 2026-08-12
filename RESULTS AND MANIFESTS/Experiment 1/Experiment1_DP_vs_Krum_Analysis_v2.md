@@ -156,7 +156,7 @@ All six conditions completed in **under 65 minutes each**, network and applicati
 
 ## 8. Recommendations for the Write-Up
 
-1. **Lead with Section 1's negative result as a real finding**, not a failed experiment — "Krum's Byzantine-detection remained at 100% and its score-separation ratio changed by under 2.3% across ε∈{3,9,15}, indicating Krum's robustness to this attack is effectively independent of DP noise in this regime" is a clean, defensible, citable claim.
+1. **Lead with Section 1's negative result as a real finding**, not a failed experiment — "Krum's Byzantine-detection remained at 100% and its score-separation ratio changed by under 2.3% across ε∈{3,9,15}, indicating Krum's robustness to this attack is effectively independent of DP noise in this regime" is a clean, defensible, citable claim. But keep in mind that the byzantine attack scales were very high. A smaller attack can possibly get through.
 2. **Report Section 2 (Fingerprinting/rare-class suppression) as the experiment's more novel contribution** — it's a sharper, more mechanistic claim than generic "DP hurts utility," and it's visually dramatic (a near-zero-until-round-15/16/24 cliff, sensitive to exactly the parameter you swept).
 3. **Use best-round, not final-round, numbers for the network model** given the confirmed round-25 instability pattern — cite it as a structural, recurring property (4 independent occurrences now) rather than noise.
 4. **Flag the application model's ε=9 > ε=15 non-monotonicity honestly** rather than omitting it — Section 4b's per-client spread finding is a second, independent signal in the same direction, which is worth mentioning, but still frame it as needing a repeat-seed confirmation rather than a settled result.

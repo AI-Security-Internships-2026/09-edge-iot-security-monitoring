@@ -1,0 +1,63 @@
+{
+  "run_id": "network_he_krum_hybrid_v1",
+  "experiment": "Experiment 2 — HE vs. Krum (head-only classifier attack, corrected) — network model",
+  "model_type": "network",
+  "num_clients": 10,
+  "num_rounds": 25,
+  "local_epochs": 5,
+  "learning_rate": 0.001,
+  "prox_mu": 0.02,
+  "dirichlet_alpha": 0.7,
+  "batch_size": 512,
+
+  "use_krum": false,
+  "use_adaptive_krum": false,
+  "use_he": false,
+  "use_he_krum_hybrid": true,
+  "use_dp": false,
+  "use_zkp": false,
+
+  "he_poly_degree": 8192,
+  "he_coeff_mod_bit_sizes": [60, 40, 40, 60],
+  "he_global_scale": 1099511627776,
+  "he_sensitive_prefix": "classifier",
+  "he_pct_encrypted_measured": 5.8,
+
+  "adaptive_krum_method": "mad",
+  "adaptive_krum_k": 2.5,
+  "adaptive_krum_min_keep_fraction": 0.5,
+  "adaptive_krum_scores_which_slice": "bulk (plaintext) only",
+
+  "byzantine_clients": [0, 1],
+  "byzantine_head_only": true,
+  "attack_scale": 5.0,
+  "attack_type": "classifier_head_flip_attack (corrected: full local training first, then flip classifier.* keys only)",
+
+  "device": "cpu",
+  "cuda_available": false,
+  "parallelism": "ProcessPoolExecutor, 4 workers, 3 threads/worker (12 cores detected)",
+
+  "code_state": {
+    "note": "Same main.py/defences code state as run application_he_krum_hybrid_v1, run in the same session shortly after it. See that run's config.json for the full fixes_present_in_this_run list.",
+    "git_commit": null,
+    "companion_run": "application_he_krum_hybrid_v1"
+  },
+
+  "run_command": "python main.py network",
+  "note_no_tag_used": "This run was launched without --tag, so output files use the bare 'network' name (results_network.csv, checkpoint_network.npz, checkpoint_network_best.npz, checkpoint_network_progress.json). Recommend --tag he_krum_hybrid_net for any repeat run.",
+
+  "environment": {
+    "machine": "Local Windows machine (same as application_he_krum_hybrid_v1) — venv at VIRTUAL ENVs/.venv311",
+    "os": "Windows",
+    "python_version_caveat": "Same caveat as the application run — venv named .venv311 but pip pointed at pythoncore-3.14-64; actual interpreter version should be confirmed with `python --version`."
+  },
+
+  "anomalies_during_run": [
+    {
+      "type": "BrokenProcessPool",
+      "occurred_between_rounds": "3 -> 4",
+      "resolution": "Resumed automatically from checkpoint_network.npz / checkpoint_network_progress.json at round 4. best_f1_macro correctly resumed at 0.5780, matching round 3's last recorded value.",
+      "likely_cause": "Same class of local Windows/CPU multiprocessing resource pressure seen in the application-model run."
+    }
+  ]
+}

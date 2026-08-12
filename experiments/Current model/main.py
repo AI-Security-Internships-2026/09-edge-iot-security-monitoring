@@ -165,6 +165,12 @@ BYZANTINE_HEAD_ONLY = True
 # security stays comparable to the earlier ablation numbers.
 HE_POLY_DEGREE = 8192
 
+# Layer 2 extension (Experiment 2 mitigation) — see defences/zkp.py Part 2.
+# Only meaningful when USE_HE_KRUM_HYBRID=True; ignored otherwise.
+USE_HEAD_NORM_GUARD = True
+HEAD_NORM_GUARD_K = 2.5   # same default/semantics as ADAPTIVE_KRUM_K
+HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
+
 DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
 DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5
@@ -232,6 +238,9 @@ if USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID:
 
 if USE_HE_KRUM_HYBRID:
     from defences import he_local
+
+if USE_HE_KRUM_HYBRID and USE_HEAD_NORM_GUARD:
+    from defences import zkp
 
 if USE_DP:
     try:
@@ -690,6 +699,11 @@ def main():
               f"aggregated only over whichever clients that scoring selects.")
         print(f"  Byzantine head-only attack: {BYZANTINE_HEAD_ONLY} "
               f"(should be True — this is the whole point of Experiment 2)")
+        print(f"  Head-norm guard (Layer 2 extension): {USE_HEAD_NORM_GUARD} "
+              f"(k={HEAD_NORM_GUARD_K}, min_keep_fraction="
+              f"{HEAD_NORM_GUARD_MIN_KEEP_FRACTION}) — ciphertext-bound "
+              f"MAD threshold on classifier-head delta norms, runs BEFORE "
+              f"Krum each round")
     print(f"{'='*65}\n")
 
     torch.set_num_threads(_CPU_COUNT)
@@ -818,6 +832,9 @@ def main():
             "adaptive_krum_min_keep_fraction": ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
             "use_he": USE_HE,
             "use_he_krum_hybrid": USE_HE_KRUM_HYBRID,
+            "use_head_norm_guard": USE_HEAD_NORM_GUARD,
+            "head_norm_guard_k": HEAD_NORM_GUARD_K if USE_HEAD_NORM_GUARD else None,
+            "head_norm_guard_min_keep_fraction": HEAD_NORM_GUARD_MIN_KEEP_FRACTION if USE_HEAD_NORM_GUARD else None,
             "he_poly_degree": HE_POLY_DEGREE if (USE_HE or USE_HE_KRUM_HYBRID) else None,
             "use_dp": USE_DP,
             "dp_epsilon": DP_EPSILON,
@@ -901,9 +918,15 @@ def main():
                     # CKKS-encrypted; everything else ("bulk") stays plain
                     # numpy, exactly what the Krum branch below needs to
                     # be able to score. Returns a dict — see he_local.
-                    client_enc = he_local.encrypt_params(
-                        params, MODEL_STATE_KEYS, he_context, HE_POLY_DEGREE
-                    )
+                    if USE_HEAD_NORM_GUARD:
+                        client_enc = he_local.encrypt_params_with_norm_guard(
+                            params, MODEL_STATE_KEYS, he_context, HE_POLY_DEGREE,
+                            global_params
+                        )
+                    else:
+                        client_enc = he_local.encrypt_params(
+                            params, MODEL_STATE_KEYS, he_context, HE_POLY_DEGREE
+                        )
                     if round_num == start_round + 1 and len(accepted_params) == 0:
                         print(f"  [HE hybrid] {client_enc['pct_encrypted']:.1f}% of "
                               f"params encrypted (classifier head), rest plaintext "
@@ -923,6 +946,7 @@ def main():
             krum_discarded_ids  = set()
             krum_detected_byz   = set()
             krum_score_diag     = None
+            krum_scored_client_indices = None
 
             if len(accepted_params) == 0:
                 print("  WARNING: All clients rejected — skipping round.")
@@ -939,7 +963,66 @@ def main():
                 # <encrypted classifier head>, "bulk": <plaintext everything
                 # else>, "sensitive_idx"/"bulk_idx": layer index mappings}.
 
-                if len(accepted_params) - NUM_BYZANTINE - 2 < 1:
+                # ── Layer 2 extension: ciphertext-bound head-norm guard ──
+                # Pre-filters BEFORE Krum ever runs, on LOCAL copies —
+                # never mutates the shared accepted_params/weights/indices
+                # lists other branches/logging rely on. See defences/zkp.py
+                # Part 2 for the full design and its disclosed limits.
+                if USE_HEAD_NORM_GUARD:
+                    verified_positions = []
+                    verified_norms = []
+                    norm_guard_rejected_ids = set()
+                    for pos, c in enumerate(accepted_params):
+                        proof = c.get("head_norm_proof")
+                        chunks = c["sensitive_enc"]["chunks"]
+                        is_valid, reason = (
+                            zkp.verify_head_norm_proof(proof, chunks)
+                            if proof is not None else (False, "PROOF_MISSING")
+                        )
+                        if is_valid:
+                            verified_positions.append(pos)
+                            verified_norms.append(proof["norm"])
+                        else:
+                            norm_guard_rejected_ids.add(accepted_client_indices[pos])
+                            print(f"  [Head-norm guard] Client "
+                                  f"{accepted_client_indices[pos]+1} REJECTED "
+                                  f"at verification: {reason}")
+
+                    guard_kept_rel, guard_dropped_rel, norm_guard_diag = \
+                        zkp.mad_threshold_head_norms(
+                            verified_norms, k=HEAD_NORM_GUARD_K,
+                            min_keep_fraction=HEAD_NORM_GUARD_MIN_KEEP_FRACTION
+                        )
+                    norm_guard_survivor_positions = [
+                        verified_positions[i] for i in guard_kept_rel
+                    ]
+                    for i in guard_dropped_rel:
+                        norm_guard_rejected_ids.add(
+                            accepted_client_indices[verified_positions[i]]
+                        )
+
+                    print(f"  [Head-norm guard] {norm_guard_diag} "
+                          f"kept={len(norm_guard_survivor_positions)}/"
+                          f"{len(accepted_params)}  "
+                          f"rejected_ids={sorted(norm_guard_rejected_ids)}")
+
+                    hybrid_accepted_params = [
+                        accepted_params[pos] for pos in norm_guard_survivor_positions
+                    ]
+                    hybrid_accepted_weights = [
+                        accepted_weights[pos] for pos in norm_guard_survivor_positions
+                    ]
+                    hybrid_accepted_client_indices = [
+                        accepted_client_indices[pos] for pos in norm_guard_survivor_positions
+                    ]
+                else:
+                    norm_guard_rejected_ids = set()
+                    norm_guard_diag = None
+                    hybrid_accepted_params = accepted_params
+                    hybrid_accepted_weights = accepted_weights
+                    hybrid_accepted_client_indices = accepted_client_indices
+
+                if len(hybrid_accepted_params) - NUM_BYZANTINE - 2 < 1:
                     # Matches adaptive_multi_krum()'s actual HARD requirement
                     # (theoretical_neighbours=n-f-2 > 0, i.e. n >= f+3) — this
                     # is deliberately weaker than the Blanchard n>=2f+3 bound,
@@ -948,22 +1031,32 @@ def main():
                     # not its soft one, or this fallback fires too eagerly
                     # and silently blocks the exact beyond-guarantee sweep
                     # region the soft-warning design exists to allow.
-                    selected_positions = list(range(len(accepted_params)))
+                    selected_positions = list(range(len(hybrid_accepted_params)))
                     krum_score_diag = None
-                    agg_label = ("HE+Krum hybrid (fallback — too few accepted "
-                                 "clients for plaintext-slice Krum; all accepted "
-                                 "clients included in both slices)")
+                    agg_label = ("HE+Krum hybrid (fallback — too few "
+                                 "norm-guard-surviving clients for "
+                                 "plaintext-slice Krum; all survivors "
+                                 "included in both slices)")
                 else:
-                    bulk_param_lists = [c["bulk"] for c in accepted_params]
+                    bulk_param_lists = [c["bulk"] for c in hybrid_accepted_params]
                     _, selected_positions, krum_score_diag = adaptive_multi_krum(
                         bulk_param_lists,
-                        accepted_weights,
+                        hybrid_accepted_weights,
                         num_byzantine=NUM_BYZANTINE,
                         k=ADAPTIVE_KRUM_K,
                         method=ADAPTIVE_KRUM_METHOD,
                         min_keep_fraction=ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
                         return_diagnostics=True,
                     )
+                    # krum_score_diag["scores"] is indexed against
+                    # hybrid_accepted_params/hybrid_accepted_client_indices
+                    # (the POST-norm-guard-filtered list), NOT the original
+                    # accepted_client_indices — those can differ in length
+                    # whenever the norm guard rejected anyone this round.
+                    # The downstream diagnostics block below must walk the
+                    # SAME list this was scored against, or it indexes past
+                    # the end of krum_score_diag["scores"].
+                    krum_scored_client_indices = hybrid_accepted_client_indices
                     # NOTE: the aggregated_params Krum returns (position 0,
                     # discarded via `_`) is the bulk-only weighted average of
                     # kept clients — we don't use it directly because
@@ -974,22 +1067,25 @@ def main():
                     agg_label = None  # set below, after selected ids are known
 
                 krum_selected_ids  = {
-                    accepted_client_indices[pos] for pos in selected_positions
+                    hybrid_accepted_client_indices[pos] for pos in selected_positions
                 }
-                krum_discarded_ids = {
-                    idx for idx in accepted_client_indices
-                    if idx not in krum_selected_ids
-                }
+                krum_discarded_ids = (
+                    {idx for idx in hybrid_accepted_client_indices
+                     if idx not in krum_selected_ids}
+                    | norm_guard_rejected_ids
+                )
                 krum_detected_byz = krum_discarded_ids & set(BYZANTINE_CLIENTS)
 
                 # Encrypted-slice aggregation, RESTRICTED to whichever clients
-                # Krum selected using plaintext evidence only. Krum never sees
-                # the ciphertext; the server still excludes a flagged client's
-                # encrypted contribution too, it just couldn't have used the
-                # encrypted data to make that call. See master doc, Experiment
-                # 2's hybrid design step 3.
-                selected_enc_clients = [accepted_params[pos] for pos in selected_positions]
-                selected_weights     = [accepted_weights[pos] for pos in selected_positions]
+                # survived BOTH the norm guard AND Krum's plaintext-evidence
+                # selection. Krum never sees the ciphertext; the norm guard
+                # never sees the plaintext bulk; between them the server
+                # still excludes a flagged client's encrypted contribution
+                # even though neither check alone could have made that call
+                # from the encrypted data directly. See master doc, Experiment
+                # 2's hybrid design step 3, and defences/zkp.py Part 2.
+                selected_enc_clients = [hybrid_accepted_params[pos] for pos in selected_positions]
+                selected_weights     = [hybrid_accepted_weights[pos] for pos in selected_positions]
                 enc_aggregate = he_local.aggregate_encrypted(
                     selected_enc_clients, selected_weights, he_context
                 )
@@ -1000,8 +1096,9 @@ def main():
                         f"HE+Krum hybrid (adaptive, {ADAPTIVE_KRUM_METHOD}, "
                         f"k={ADAPTIVE_KRUM_K})  plaintext-slice "
                         f"selected={sorted(krum_selected_ids)}  "
-                        f"discarded={sorted(krum_discarded_ids)}  "
-                        f"detected_byz={sorted(krum_detected_byz)}  "
+                        f"discarded={sorted(krum_discarded_ids)}"
+                        f"{'  (incl. norm-guard-rejected: ' + str(sorted(norm_guard_rejected_ids)) + ')' if norm_guard_rejected_ids else ''}"
+                        f"  detected_byz={sorted(krum_detected_byz)}  "
                         f"(encrypted classifier-head slice aggregated over "
                         f"selected clients only)"
                     )
@@ -1061,6 +1158,10 @@ def main():
                         if idx not in krum_selected_ids
                     }
                     krum_detected_byz = krum_discarded_ids & set(BYZANTINE_CLIENTS)
+                    # No norm-guard pre-filter in this (non-hybrid) branch —
+                    # scored against the full accepted list, so this is the
+                    # same list to walk in the downstream diagnostics block.
+                    krum_scored_client_indices = accepted_client_indices
 
                     agg_label = (f"Adaptive Multi-Krum ({ADAPTIVE_KRUM_METHOD}, "
                                  f"k={ADAPTIVE_KRUM_K})  "
@@ -1160,8 +1261,19 @@ def main():
             if krum_score_diag is not None:
                 nan_this_round = krum_score_diag["num_nan"] > 0
                 pos_scores = krum_score_diag["scores"]
+                # Walk whichever client-index list this round's Krum call
+                # was actually scored against — accepted_client_indices for
+                # USE_ADAPTIVE_KRUM, hybrid_accepted_client_indices (a
+                # possibly-shorter, norm-guard-filtered list) for
+                # USE_HE_KRUM_HYBRID. Using the wrong one here indexes past
+                # the end of pos_scores whenever the two lists differ in
+                # length, which they will any round the norm guard rejects
+                # someone.
+                scored_indices = (krum_scored_client_indices
+                                  if krum_scored_client_indices is not None
+                                  else accepted_client_indices)
                 byz_scores, honest_scores = [], []
-                for pos, orig_id in enumerate(accepted_client_indices):
+                for pos, orig_id in enumerate(scored_indices):
                     s = pos_scores[pos]
                     if not np.isfinite(s):
                         continue
