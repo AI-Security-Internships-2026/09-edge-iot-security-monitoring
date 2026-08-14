@@ -117,12 +117,15 @@ _parser.add_argument("--tag", type=str, default=None,
                           "e.g. --tag dp15 → results_network_dp15.csv, "
                           "replaces manual mv-archiving between sweep runs")
 _parser.add_argument("--byzantine", type=str, default=None,
-                     help="Comma-separated 0-indexed client IDs to make "
-                          "Byzantine, e.g. --byzantine 0,1 (default) or "
-                          "--byzantine 2,5,7 for a 3-attacker sweep. "
-                          "Overrides both BYZANTINE_CLIENTS and NUM_BYZANTINE "
-                          "below — NUM_BYZANTINE becomes len(this list). IDs "
-                          "must be in [0, NUM_CLIENTS).")
+                     help="Comma-separated client numbers to make Byzantine, "
+                          "using the SAME 1-indexed numbering the console "
+                          "output prints everywhere ('Client 4', 'Client 10', "
+                          "etc.) — e.g. --byzantine 4,10 to attack the "
+                          "clients labelled 'Client 4' and 'Client 10' in the "
+                          "logs. Default (no flag) is clients 1,2. Overrides "
+                          "both BYZANTINE_CLIENTS and NUM_BYZANTINE below — "
+                          "NUM_BYZANTINE becomes len(this list). Numbers must "
+                          "be in [1, NUM_CLIENTS].")
 _parser.add_argument("--krum-k", type=float, default=None,
                      help="Override ADAPTIVE_KRUM_K (default 2.5) — the MAD "
                           "sensitivity multiplier. Larger k -> more "
@@ -148,17 +151,25 @@ PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
 USE_BYZANTINE_ATTACK = True
 
 if _args.byzantine is not None:
-    # --byzantine "2,5,7" -> BYZANTINE_CLIENTS=[2,5,7], NUM_BYZANTINE=3.
-    # This is the easy path to change WHICH clients or HOW MANY without
-    # touching this file — e.g. for a future Byzantine-fraction sweep.
-    BYZANTINE_CLIENTS = sorted(int(c.strip()) for c in _args.byzantine.split(","))
-    NUM_BYZANTINE     = len(BYZANTINE_CLIENTS)
+    # --byzantine "4,10" -> the clients printed as "Client 4" and "Client 10"
+    # everywhere in the console output (score tables, [BYZANTINE] tags, etc.)
+    # are attacked. Internally BYZANTINE_CLIENTS/client_idx are 0-indexed
+    # (they're array positions), so this is where that translation happens
+    # -- one place, so the mismatch between "what the logs show" and "what
+    # the code stores" can't leak out and cause an off-by-one mistake at
+    # every call site the way it did before this flag existed.
+    _byzantine_1indexed = sorted(int(c.strip()) for c in _args.byzantine.split(","))
+    BYZANTINE_CLIENTS   = [c - 1 for c in _byzantine_1indexed]
+    NUM_BYZANTINE       = len(BYZANTINE_CLIENTS)
     assert len(set(BYZANTINE_CLIENTS)) == NUM_BYZANTINE, \
-        f"--byzantine has duplicate client IDs: {_args.byzantine}"
-    assert all(0 <= c < NUM_CLIENTS for c in BYZANTINE_CLIENTS), \
-        f"--byzantine client IDs must be in [0, {NUM_CLIENTS}), got {BYZANTINE_CLIENTS}"
+        f"--byzantine has duplicate client numbers: {_args.byzantine}"
+    assert all(1 <= c <= NUM_CLIENTS for c in _byzantine_1indexed), \
+        (f"--byzantine client numbers must be in [1, {NUM_CLIENTS}] "
+        f"(1-indexed, matching the console output's 'Client N' labels), "
+        f"got {_byzantine_1indexed}")
 else:
-    # Default, unchanged from before -- clients 0 and 1 are malicious.
+    # Default, unchanged from before -- clients 0 and 1 (0-indexed) are
+    # malicious, i.e. "Client 1" and "Client 2" in the console output.
     NUM_BYZANTINE     = 2
     BYZANTINE_CLIENTS = list(range(NUM_BYZANTINE))
 
@@ -208,7 +219,16 @@ ZKP_MAX_NORM = 10.0
 
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
-ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 2.5
+ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 3.5
+# Raised from 2.5 -> 3.5. Confirmed via print_data_split() that the honest
+# clients Krum was persistently excluding (network: clients 4, 10) simply
+# hold 3-6x more data than the fleet median, with a heavily skewed class
+# mix on top (clients 4+10 alone hold ~73% of the network model's entire
+# DDoS_ICMP class) -- a legitimate, data-driven deviation, not an attack
+# signature. 3.5 is a starting point to loosen the threshold past that
+# effect while still catching the much larger deviation an actual
+# sign-flip/scale attack produces -- verify against real run logs, not
+# assumed correct on paper. Still overridable via --krum-k.
 ADAPTIVE_KRUM_METHOD             = "mad"
 ADAPTIVE_KRUM_MIN_KEEP_FRACTION  = 0.5
 
@@ -229,7 +249,13 @@ ADAPTIVE_KRUM_MIN_KEEP_FRACTION  = 0.5
 # population that's already mostly been screened. Does NOT affect
 # detection-rate bookkeeping (BYZANTINE_CLIENTS/NUM_BYZANTINE, used for
 # ground truth, are untouched) -- only Krum's own internal neighbour math.
-ADAPTIVE_KRUM_HYBRID_ASSUMED_F  = NUM_BYZANTINE
+# Lowered from NUM_BYZANTINE (2) -> 1: the norm guard is now confirmed
+# (both mitigated runs, 100% detection every round) to catch every
+# ciphertext-visible attacker before Krum ever scores anything, so Krum's
+# own math only needs to defensively assume ONE residual/adaptive threat
+# might have slipped past it, not the full original attacker count.
+# min(1, NUM_BYZANTINE) keeps this sane if NUM_BYZANTINE is ever 0.
+ADAPTIVE_KRUM_HYBRID_ASSUMED_F  = min(1, NUM_BYZANTINE)
 
 # ---------------------------------------------------------------------------
 # Device / parallelization settings
@@ -714,7 +740,9 @@ def main():
         print(f"  *** SANITY_CHECK MODE — {NUM_ROUNDS} rounds only ***")
     print(f"  Rounds={NUM_ROUNDS}  Clients={NUM_CLIENTS}  Epochs={LOCAL_EPOCHS}")
     print(f"  Device={_DEVICE}  (CUDA available: {_CUDA_AVAILABLE})")
-    print(f"  Byzantine={NUM_BYZANTINE} (clients {BYZANTINE_CLIENTS})  "
+    print(f"  Byzantine={NUM_BYZANTINE} (clients "
+          f"{[c+1 for c in BYZANTINE_CLIENTS]}, matching the console "
+          f"output's 'Client N' numbering)  "
           f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}"
           f"{'  [--byzantine override]' if _args.byzantine is not None else ''}")
     print(f"  USE_KRUM={USE_KRUM}  USE_ADAPTIVE_KRUM={USE_ADAPTIVE_KRUM}  "
