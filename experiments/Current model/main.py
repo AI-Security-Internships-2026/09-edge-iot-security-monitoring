@@ -116,6 +116,20 @@ _parser.add_argument("--tag", type=str, default=None,
                      help="Suffix on every output filename — "
                           "e.g. --tag dp15 → results_network_dp15.csv, "
                           "replaces manual mv-archiving between sweep runs")
+_parser.add_argument("--byzantine", type=str, default=None,
+                     help="Comma-separated 0-indexed client IDs to make "
+                          "Byzantine, e.g. --byzantine 0,1 (default) or "
+                          "--byzantine 2,5,7 for a 3-attacker sweep. "
+                          "Overrides both BYZANTINE_CLIENTS and NUM_BYZANTINE "
+                          "below — NUM_BYZANTINE becomes len(this list). IDs "
+                          "must be in [0, NUM_CLIENTS).")
+_parser.add_argument("--krum-k", type=float, default=None,
+                     help="Override ADAPTIVE_KRUM_K (default 2.5) — the MAD "
+                          "sensitivity multiplier. Larger k -> more "
+                          "permissive (fewer clients dropped). Raise this "
+                          "if adaptive Krum is excluding honest clients that "
+                          "aren't actually attackers (likely non-IID "
+                          "variance, not malice) — try 3.5-4.5 as a start.")
 _args = _parser.parse_args()
 
 MODEL_TYPE = _args.model_type
@@ -132,8 +146,22 @@ PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
 
 # Byzantine attack
 USE_BYZANTINE_ATTACK = True
-NUM_BYZANTINE        = 2
-BYZANTINE_CLIENTS    = list(range(NUM_BYZANTINE))   # clients 0 and 1 are malicious
+
+if _args.byzantine is not None:
+    # --byzantine "2,5,7" -> BYZANTINE_CLIENTS=[2,5,7], NUM_BYZANTINE=3.
+    # This is the easy path to change WHICH clients or HOW MANY without
+    # touching this file — e.g. for a future Byzantine-fraction sweep.
+    BYZANTINE_CLIENTS = sorted(int(c.strip()) for c in _args.byzantine.split(","))
+    NUM_BYZANTINE     = len(BYZANTINE_CLIENTS)
+    assert len(set(BYZANTINE_CLIENTS)) == NUM_BYZANTINE, \
+        f"--byzantine has duplicate client IDs: {_args.byzantine}"
+    assert all(0 <= c < NUM_CLIENTS for c in BYZANTINE_CLIENTS), \
+        f"--byzantine client IDs must be in [0, {NUM_CLIENTS}), got {BYZANTINE_CLIENTS}"
+else:
+    # Default, unchanged from before -- clients 0 and 1 are malicious.
+    NUM_BYZANTINE     = 2
+    BYZANTINE_CLIENTS = list(range(NUM_BYZANTINE))
+
 ATTACK_SCALE         = 5.0 if MODEL_TYPE == "network" else 2.0
 
 # ─── Defence flags ──────────────────────────────────────────────────────────
@@ -180,9 +208,28 @@ ZKP_MAX_NORM = 10.0
 
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
-ADAPTIVE_KRUM_K                 = 2.5
+ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 2.5
 ADAPTIVE_KRUM_METHOD             = "mad"
 ADAPTIVE_KRUM_MIN_KEEP_FRACTION  = 0.5
+
+# In USE_HE_KRUM_HYBRID, Krum only ever scores clients that ALREADY survived
+# the head-norm guard (see zkp.py Part 2) -- by the time Krum runs, the
+# obvious ciphertext-visible attackers are gone. Scoring with
+# num_byzantine=NUM_BYZANTINE (the GROUND-TRUTH attacker count, still needed
+# elsewhere for detection-rate bookkeeping) means Krum's neighbour count
+# (n-f-2) stays sized for a threat level that's already been mostly
+# addressed by Layer 2 -- fewer neighbours per client sharpens sensitivity
+# to any deviation, including ordinary non-IID variance among honest
+# clients, which is the likely cause of the persistent 2-honest-client
+# exclusion seen in every hybrid run so far (see RUN_NOTES for
+# network_he_krum_hybrid_v1 / _norm_guard_v1). Lower this to reflect the
+# smaller RESIDUAL threat the hybrid branch's Krum call actually needs to
+# assume -- e.g. 1, to still catch an adaptive attacker that somehow slips
+# past the norm guard, without being as aggressive as f=2 against a
+# population that's already mostly been screened. Does NOT affect
+# detection-rate bookkeeping (BYZANTINE_CLIENTS/NUM_BYZANTINE, used for
+# ground truth, are untouched) -- only Krum's own internal neighbour math.
+ADAPTIVE_KRUM_HYBRID_ASSUMED_F  = NUM_BYZANTINE
 
 # ---------------------------------------------------------------------------
 # Device / parallelization settings
@@ -668,7 +715,8 @@ def main():
     print(f"  Rounds={NUM_ROUNDS}  Clients={NUM_CLIENTS}  Epochs={LOCAL_EPOCHS}")
     print(f"  Device={_DEVICE}  (CUDA available: {_CUDA_AVAILABLE})")
     print(f"  Byzantine={NUM_BYZANTINE} (clients {BYZANTINE_CLIENTS})  "
-          f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}")
+          f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}"
+          f"{'  [--byzantine override]' if _args.byzantine is not None else ''}")
     print(f"  USE_KRUM={USE_KRUM}  USE_ADAPTIVE_KRUM={USE_ADAPTIVE_KRUM}  "
           f"USE_HE={USE_HE}  USE_HE_KRUM_HYBRID={USE_HE_KRUM_HYBRID}  "
           f"USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
@@ -694,7 +742,9 @@ def main():
               f"(clients dropped per round is DYNAMIC, not fixed)")
     if USE_HE_KRUM_HYBRID:
         print(f"  HE+Krum Hybrid: adaptive Krum (method={ADAPTIVE_KRUM_METHOD}  "
-              f"k={ADAPTIVE_KRUM_K}) scores the PLAINTEXT (bulk) slice only; "
+              f"k={ADAPTIVE_KRUM_K}  assumed_f={ADAPTIVE_KRUM_HYBRID_ASSUMED_F}"
+              f"{' [ground-truth NUM_BYZANTINE=' + str(NUM_BYZANTINE) + ']' if ADAPTIVE_KRUM_HYBRID_ASSUMED_F != NUM_BYZANTINE else ''}"
+              f") scores the PLAINTEXT (bulk) slice only; "
               f"classifier-head slice (CKKS, poly_degree={HE_POLY_DEGREE}) is "
               f"aggregated only over whichever clients that scoring selects.")
         print(f"  Byzantine head-only attack: {BYZANTINE_HEAD_ONLY} "
@@ -716,6 +766,30 @@ def main():
     sample_features = clients_data[0][0].shape[1]
     print(f"\nFeature count (measured, not assumed): {sample_features}")
     print(f"All {NUM_CLIENTS} clients loaded.\n")
+
+    def print_data_split():
+        """
+        Per-client train-partition sample counts, broken down by class.
+        Printed at the start of every round (not just once) so it sits
+        right next to that round's Krum decision in the log — no
+        scrolling back to correlate "did client X get excluded because
+        its partition is small/skewed" with what Krum actually did. The
+        partition itself is fixed at load time and doesn't change
+        round-to-round; reprinting every round is a deliberate log-
+        readability choice, not new computation of any real cost.
+        """
+        print("  ── Data split (train partition, per client) ──")
+        name_w = 8
+        header = "    Client  Total   " + "  ".join(
+            f"{n[:name_w]:>{name_w}}" for n in ATTACK_NAMES
+        )
+        print(header)
+        for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
+            counts = np.bincount(y_tr.astype(int), minlength=NUM_CLASSES)
+            tag = " [BYZANTINE]" if i in BYZANTINE_CLIENTS else ""
+            counts_str = "  ".join(f"{c:>{name_w}}" for c in counts)
+            print(f"    {i+1:>2}      {len(y_tr):>5}  {counts_str}{tag}")
+        print()
 
     print("Building criterion once (class weights, FocalLoss)...")
     precomputed_criterion = build_criterion().to(_DEVICE)
@@ -828,6 +902,8 @@ def main():
             "krum_discards": NUM_CLIENTS - KRUM_M,
             "use_adaptive_krum": USE_ADAPTIVE_KRUM,
             "adaptive_krum_k": ADAPTIVE_KRUM_K,
+            "adaptive_krum_hybrid_assumed_f": ADAPTIVE_KRUM_HYBRID_ASSUMED_F,
+            "byzantine_clients_cli_override": _args.byzantine,
             "adaptive_krum_method": ADAPTIVE_KRUM_METHOD,
             "adaptive_krum_min_keep_fraction": ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
             "use_he": USE_HE,
@@ -873,6 +949,7 @@ def main():
         for round_num in range(start_round + 1, NUM_ROUNDS + 1):
             round_start = time.time()
             print(f"[ROUND {round_num}/{NUM_ROUNDS}]")
+            print_data_split()
 
             round_client_cfg = client_cfg
 
@@ -1022,11 +1099,14 @@ def main():
                     hybrid_accepted_weights = accepted_weights
                     hybrid_accepted_client_indices = accepted_client_indices
 
-                if len(hybrid_accepted_params) - NUM_BYZANTINE - 2 < 1:
+                if len(hybrid_accepted_params) - ADAPTIVE_KRUM_HYBRID_ASSUMED_F - 2 < 1:
                     # Matches adaptive_multi_krum()'s actual HARD requirement
                     # (theoretical_neighbours=n-f-2 > 0, i.e. n >= f+3) — this
                     # is deliberately weaker than the Blanchard n>=2f+3 bound,
                     # which the function now only WARNS about, not raises on.
+                    # Uses ADAPTIVE_KRUM_HYBRID_ASSUMED_F, not NUM_BYZANTINE —
+                    # must stay in sync with whatever f the actual call below
+                    # passes, or this fallback fires at the wrong threshold.
                     # Must stay in sync with defences/krum.py's hard check,
                     # not its soft one, or this fallback fires too eagerly
                     # and silently blocks the exact beyond-guarantee sweep
@@ -1042,7 +1122,7 @@ def main():
                     _, selected_positions, krum_score_diag = adaptive_multi_krum(
                         bulk_param_lists,
                         hybrid_accepted_weights,
-                        num_byzantine=NUM_BYZANTINE,
+                        num_byzantine=ADAPTIVE_KRUM_HYBRID_ASSUMED_F,
                         k=ADAPTIVE_KRUM_K,
                         method=ADAPTIVE_KRUM_METHOD,
                         min_keep_fraction=ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
