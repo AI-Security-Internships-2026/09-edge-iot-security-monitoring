@@ -1,0 +1,83 @@
+{
+  "runs": [
+    {
+      "run_id": "network_he_krum_hybrid_norm_guard_v1",
+      "model_type": "network",
+      "defence": "adaptive_krum + Layer 2 ciphertext-bound head-norm guard (ZKP-style commitment, HE-hybrid)",
+      "attack": {"active": true, "clients_1indexed": [1, 2], "scale": 5.0, "type": "classifier_head_flip_attack"},
+      "krum_config": {"k": 2.5, "assumed_f": "NUM_BYZANTINE (pre-tuning defaults)"},
+      "results_csv_path": "models/network_he_krum_hybrid_norm_guard_v1/results_reconstructed.csv",
+      "best_round": 25,
+      "best_f1_macro": 0.8282,
+      "krum_detection_rate": 1.0,
+      "device": "cuda",
+      "git_commit": null,
+      "status": "complete_with_anomalies",
+      "status_note": "SSH disconnect around round 13, resumed cleanly. Rounds 9-13 per-round metrics not captured in console log."
+    },
+    {
+      "run_id": "application_he_krum_hybrid_norm_guard_v1",
+      "model_type": "application",
+      "defence": "adaptive_krum + Layer 2 ciphertext-bound head-norm guard (ZKP-style commitment, HE-hybrid)",
+      "attack": {"active": true, "clients_1indexed": [1, 2], "scale": 2.0, "type": "classifier_head_flip_attack"},
+      "krum_config": {"k": 2.5, "assumed_f": "NUM_BYZANTINE (pre-tuning defaults)"},
+      "results_csv_path": "models/application_he_krum_hybrid_norm_guard_v1/results_reconstructed.csv",
+      "best_round": 24,
+      "best_f1_macro": 0.7286,
+      "krum_detection_rate": 1.0,
+      "device": "cuda",
+      "git_commit": null,
+      "status": "complete_clean"
+    },
+    {
+      "run_id": "network_he_krum_hybrid_norm_guard_byz4_10_v1",
+      "model_type": "network",
+      "defence": "adaptive_krum + Layer 2 ciphertext-bound head-norm guard (ZKP-style commitment, HE-hybrid)",
+      "attack": {"active": true, "clients_1indexed": [4, 10], "scale": 5.0, "type": "classifier_head_flip_attack"},
+      "krum_config": {"k": 3.5, "assumed_f": 1},
+      "results_csv_path": null,
+      "results_csv_note": "Console-log only, not yet backfilled -- real results_network_byz4_10.csv should be pulled from the DGX.",
+      "best_round": 20,
+      "best_f1_macro": 0.8360,
+      "krum_detection_rate": 1.0,
+      "device": "cuda",
+      "git_commit": null,
+      "status": "complete_console_only",
+      "status_note": "Attackers hold clients with largest+near-smallest partitions. Detection 100% every round, but high utility volatility rounds 19-25 -- attackers hold ~73% of Vulnerability_scanner class, excluding them costs that class's signal every round."
+    },
+    {
+      "run_id": "application_he_krum_hybrid_norm_guard_byz4_10_v1",
+      "model_type": "application",
+      "defence": "adaptive_krum + Layer 2 ciphertext-bound head-norm guard (ZKP-style commitment, HE-hybrid)",
+      "attack": {"active": true, "clients_1indexed": [4, 10], "scale": 2.0, "type": "classifier_head_flip_attack"},
+      "krum_config": {"k": 3.5, "assumed_f": 1},
+      "results_csv_path": null,
+      "results_csv_note": "Console-log only, not yet backfilled -- real results_application_byz4_10.csv should be pulled from the DGX.",
+      "best_round": 23,
+      "best_f1_macro": 0.6954,
+      "krum_detection_rate": 1.0,
+      "device": "cuda",
+      "git_commit": null,
+      "status": "complete_console_only",
+      "status_note": "100% detection every round, no round-25 crash this time. Extra Krum exclusions symmetric by partition size (largest+smallest honest clients)."
+    },
+    {
+      "run_id": "network_he_krum_hybrid_norm_guard_byz2_7_v1",
+      "model_type": "network",
+      "defence": "adaptive_krum + Layer 2 ciphertext-bound head-norm guard (ZKP-style commitment, HE-hybrid)",
+      "attack": {"active": true, "clients_1indexed": [2, 7], "scale": 5.0, "type": "classifier_head_flip_attack"},
+      "krum_config": {"k": 3.5, "assumed_f": 1},
+      "results_csv_path": null,
+      "results_csv_note": "Console-log only, not yet backfilled -- real results_network_byz2_7.csv should be pulled from the DGX.",
+      "best_round": 21,
+      "best_f1_macro": 0.8237,
+      "krum_detection_rate": 1.0,
+      "device": "cuda",
+      "git_commit": null,
+      "status": "complete_with_anomalies",
+      "status_note": "Attackers are ordinary-partition clients, used as control condition. Extra Krum exclusions are STILL clients 4/10 (same as all other network runs) -- confirms exclusion is data-driven, not attack-driven. One-off third exclusion at round 24 only, self-corrected by round 25."
+    }
+  ],
+  "manifest_schema_version": 1,
+  "manifest_note": "Five Layer 2 (ZKP-style ciphertext-bound head-norm guard) mitigated runs. All show 100% detection regardless of which clients are attacked or their data characteristics. Cross-run comparison in COMBINED_MANIFEST.md's 'Cross-Byzantine-Configuration Summary' table shows Krum's extra (non-attacker) exclusions are consistently tied to specific clients' partition data (network: clients 4,10; application: clients 6,7) across every attack configuration tested, strong evidence the exclusion mechanism is non-IID-driven, not attack-driven. Runs 3-5 are console-log reconstructions only -- real CSV/checkpoint files should replace these once pulled from the DGX."
+}
