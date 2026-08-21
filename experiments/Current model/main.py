@@ -177,11 +177,11 @@ ATTACK_SCALE         = 5.0 if MODEL_TYPE == "network" else 2.0
 
 # ─── Defence flags ──────────────────────────────────────────────────────────
 USE_KRUM            = False
-USE_ADAPTIVE_KRUM   = False
+USE_ADAPTIVE_KRUM   = True
 USE_HE              = False
-USE_HE_KRUM_HYBRID  = True    # Experiment 2 — plaintext-slice Krum + encrypted-slice HE
+USE_HE_KRUM_HYBRID  = False   # Experiment 2 — plaintext-slice Krum + encrypted-slice HE
 
-USE_DP   = False   # Experiment 2 isolates HE x Krum only, same philosophy as
+USE_DP   = True  # Experiment 2 isolates HE x Krum only, same philosophy as
                     # Experiment 1 isolating DP x Krum (USE_ZKP=False there) —
                     # see master doc's Layer 3 / Experiment 2 "Not used" notes.
 USE_ZKP  = False
@@ -219,7 +219,7 @@ ZKP_MAX_NORM = 10.0
 
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
-ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 3.5
+ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 2.5
 # Raised from 2.5 -> 3.5. Confirmed via print_data_split() that the honest
 # clients Krum was persistently excluding (network: clients 4, 10) simply
 # hold 3-6x more data than the fleet median, with a heavily skewed class
