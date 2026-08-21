@@ -167,6 +167,7 @@ None faced.
 - Established the edge RAM floor: CKKS at n=4096 on this model requires roughly 210-245MB for cryptographic steps alone; combined with the PyTorch runtime, the effective container floor sits around 340-350MB
 
 **Production run validation and debugging**)
+**Production run validation and debugging**)
 - Found and fixed a stray `×0.01` scaling bug in `zkp.py`'s norm-threshold formula that made validation ~100x too strict, causing the server to reject every legitimate update; corrected with a proper `NOISE_NORM_SAFETY_FACTOR = 1.15` applied to the theoretically correct `σ × √n_params` formula
 - Achieved a clean end-to-end 3-round production run: 100% update retention (2/2 clients per round, HTTP 200), server-side ZKP re-verification passing independently
 - Measured privacy-utility tradeoff directly: moving DP epsilon from 3.0 to 15.0 brought the noise-to-signal ratio down from ~450:1 to ~91:1, but this still manifests as non-monotonic loss between rounds (Client 0: round 1 ends at loss 1.4365, round 2 begins at loss 1.6583 before recovering to 1.4666) — confirms a real limitation of high-dimensional local DP at this model size
@@ -243,7 +244,6 @@ None faced.
 
 - Complete experiment 1 after fixing krum to properly discard 3 clients instead of 4, increase speed of training model.
 - Build the combined DP-SGD + partial-HE experiment (Experiment 2)
-<<<<<<< HEAD
 ---
 
 ## Week 8
@@ -289,6 +289,27 @@ None faced.
 - Run `confusion_matrix.py` on Experiment 1's best-round checkpoints — proposed multiple weeks ago, still never actually run, and now low-effort since the checkpoints are confirmed recoverable.
 - Confirm whether the application model's ε=9 outperforming ε=15 (non-monotonic w.r.t. noise) is real or a single-seed artifact — would need a repeat run with a different seed.
 - **Is it ok if DP resets epsilon each round?** — Resolved as a documented design decision, not an open question: yes, this is intentional (Opacus's "Option A"). Each round reports its own per-round ε (3/9/15), with no cross-round composition accountant tracking cumulative privacy spend across all 25 rounds. This is stated explicitly as a caveat in the write-up rather than treated as a bug — a full composition-tracking implementation is a possible future addition if a stronger cumulative guarantee is ever needed, but isn't required for the current experiments.
-=======
----
->>>>>>> origin/dev
+
+
+
+## Week 9
+
+**Branch:** `zarawar-week-8`
+**PR link:**
+
+### Completed this week
+
+-Built the HE+Krum hybrid aggregation branch, unblocking Experiment 2. main.py previously asserted USE_HE and USE_KRUM/USE_ADAPTIVE_KRUM were mutually exclusive; added USE_HE_KRUM_HYBRID, which splits each client's parameters into "sensitive" (classifier.*, CKKS-encrypted via he_local.py) and "bulk" (everything else, plaintext) using split_sensitive_bulk(). Adaptive Krum scores only the plaintext slice; the encrypted slice is aggregated afterward, restricted to whichever clients Krum selected from plaintext evidence alone. This also replaced the old full-model USE_HE path's two known bugs (no decrypt-before-return, unweighted averaging) with a correct implementation, without touching the old path.
+- Found and fixed a critical bug in the stealthy attack itself before trusting any results from it. The first version of classifier_head_flip_attack's call site skipped local training entirely for Byzantine clients, returning last round's unmodified global model for the backbone. This made Krum's detection trivial for the wrong reason — it was catching "this client never trained," not "this client's encrypted head is poisoned." Fixed: Byzantine clients now train normally on the full model first, and only the trained classifier head gets flipped/scaled before encryption.
+
+- Headline result, replicated on both models: 0% Byzantine detection, every round, with the corrected attack. krum_score_ratio stayed flat at ≈0.38 (application) / ≈0.237 (network) across all 25 rounds — the attackers didn't just blend in, they scored as more trustworthy than the average honest client. Best F1-Macro collapsed from a 0.73/0.83 clean baseline to 0.13 (application) and 0.72 (network); Normal-class F1 (application) and Vulnerability_scanner F1 (network) both sat at 0.0000 every single round while aggregate accuracy still climbed past 90% on the network model — a clean demonstration that aggregate accuracy can hide a fully destroyed class.
+- Surfaced a persistent honest-client exclusion anomaly on the network model (clients 4/5/10 dropped every round regardless of attack), connecting to a previously-documented, unresolved Condition-5 anomaly that had grown from 1 excluded client to 3. Round-25 instability also recurred (5th documented occurrence in this project) — recommended round 24 as the headline number instead of the final round.
+
+- Designed and built the Layer 2 mitigation: extended defences/zkp.py with a ciphertext-bound head-norm guard. Each client computes the L2 norm of its classifier-head delta (trained head minus the round's starting global head) before encrypting, signs it bound to a hash of the actual ciphertext bytes being submitted (so a client can't swap in a different ciphertext after the fact), and the server runs a MAD-threshold outlier check over all verified clients' committed norms — a magnitude-only analogue of Krum, applied to the one number the encrypted slice reveals, run as a pre-filter before Krum. Explicitly documented limitation: catches magnitude attacks, not a bounded-magnitude directional attack under threshold — same split the project already draws between ZKP and Krum for the full-model case. Reviewed and rejected a weaker alternative implementation with no ciphertext binding, confirmed via a standalone proof-of-concept that it would have been trivially bypassable.
+
+- Confirmed the mitigation works — five runs, 100% detection in every one, across both models and three different attacked-client configurations (default clients 1,2; extreme-data clients 4,10; ordinary-data clients 2,7). Vulnerability_scanner F1 recovered from 0.0000 to 0.7864 (matching/exceeding baseline); application per-class F1 recovered broadly across previously-dead classes. Best F1-Macro landed within ~0.001 of the clean baseline for the default-client runs on both models.
+- Cross-attack-configuration finding: Krum's extra (non-attacker) exclusions are consistently the same clients (network: 4, 10; application: 6, 7) across every attack configuration tested, including ones that don't target them at all — strong evidence the exclusion is driven by partition size/composition, not the attack. Confirmed directly via a new print_data_split() diagnostic added to main.py: clients 4/10 (network) hold 3–6x the fleet-median sample count and ~73% of the entire Vulnerability_scanner class between them.
+
+- Added --byzantine <clients> and --krum-k <float> CLI args (change which/how many clients attack and the MAD sensitivity multiplier without editing the file), and raised ADAPTIVE_KRUM_K's default 2.5→3.5 plus added a new ADAPTIVE_KRUM_HYBRID_ASSUMED_F knob (default lowered from NUM_BYZANTINE to 1) — both justified by the data-split evidence and the norm guard's now-proven track record.
+
+- Assembled manifests, configs, metrics, and run notes for all five mitigated runs plus a cross-configuration comparison table.
