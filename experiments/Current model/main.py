@@ -36,32 +36,59 @@ CHANGELOG (this revision)
 
 18. SANITY_CHECK toggle added (see prior revision).
 
-19. FIX — fork+CUDA hang. The GPU sanity-check run hung indefinitely at
-    round 1 with 0% CPU and 0% GPU utilization on the worker process —
-    confirmed via `top` (worker process essentially idle, not doing
-    kernel-JIT-compile CPU work) rather than crashing outright. Root
-    cause: ProcessPoolExecutor's worker was still being created via
-    Linux's default 'fork' start method, AFTER CUDA had already been
-    initialized in the main process (torch.cuda.is_available() runs at
-    module import time, before the pool exists). Forking a process
-    that already holds an active CUDA context hands the child a
-    half-initialized, unsafe context — a well-known PyTorch/CUDA
-    footgun that hangs rather than erroring.
+19. FIX — fork+CUDA hang (see prior revision — sequential in-process
+    training/eval on GPU runs instead of a forked ProcessPoolExecutor).
 
-    FIX: when CUDA is available, the ProcessPoolExecutor is no longer
-    created at all — client training/eval for each round now runs via
-    a plain sequential in-process loop (see _run_training_wave() /
-    _run_eval_wave() below), calling _train_one_client()/
-    _eval_one_client() directly with no subprocess involved. This is
-    strictly safer than trying to force 'spawn' as an alternative fix,
-    and also resolves the "revisit if per-client IPC overhead turns
-    out to matter" open item from revision 17 — at CLIENT_POOL_WORKERS=1
-    there was zero parallelism benefit from the pool anyway, only
-    IPC/pickling overhead and, as it turned out, an actual hang risk.
-    CPU-only runs are UNCHANGED — still use the original 4-way
-    ProcessPoolExecutor pool (fork is safe there since no CUDA context
-    ever exists in the parent process).
+20. FIX — sign_flip_attack was non-standard versus the literature (see
+    prior revision — sign_flip_attack_trained() now used, trains the
+    attacking client first, then negates the result).
 
+21. ADDED — Gaussian noise attack, trains-first version
+    (gaussian_attack_trained), wired in as a second selectable attack
+    type alongside sign-flip via the new --attack-type CLI flag.
+    Genuinely different attack geometry from sign-flip: no consistent
+    direction, and — unlike either attack's untrained/naive version —
+    two Byzantine clients under Gaussian noise are NOT bitwise-
+    identical to each other (independent noise draws), giving Krum's
+    distance-based scoring a meaningfully different shape to contend
+    with than a coordinated negation. --attack-type zero_gradient also
+    added as a third option (zero_gradient_attack was already defined
+    in defences/byzantine.py but never wired into main.py's dispatch).
+
+22. FIX — "attack_function" in experiment_config_*.json was hardcoded
+    to "sign_flip_attack_trained" regardless of which attack actually
+    ran (including when BYZANTINE_HEAD_ONLY routed to
+    classifier_head_flip_attack instead) — misleading experiment
+    provenance. Now computed dynamically from the actual attack path
+    taken, including the new attack-type dispatch from #21.
+
+23. FIX — stale comment on USE_DP. Read "Experiment 2 isolates HE x
+    Krum only" (which implies USE_DP should be False) directly above
+    USE_DP=True — a leftover from an earlier Experiment-2 config that
+    no longer matches this file's actual current experiment (adaptive
+    Krum + DP epsilon sweep, USE_HE_KRUM_HYBRID=False). The True value
+    was already correct for what's actually running; only the
+    misleading comment text is fixed here.
+
+24. FIX — GAUSSIAN_STD had a flat default (10.0) with no model-type
+    split, unlike ATTACK_SCALE (5.0 network / 2.0 application).
+    Measured via measure_param_scale.py against this codebase's ACTUAL
+    trained-delta magnitude (network: mean delta_std ~= 4.17,
+    application: mean delta_std ~= 2.64) — the old default of 10.0 was
+    only ~2.4x the honest signal on network and ~3.8x on application,
+    weaker than intended relative to how dominant ATTACK_SCALE is for
+    sign-flip. RSA's cited sigma=10000 is NOT directly portable here:
+    unlike sign-flip's multiplicative scale (which is automatically
+    proportional to whatever a model's parameter magnitudes are),
+    additive Gaussian noise requires knowing the ACTUAL parameter
+    scale in THIS codebase, which a different paper's number cannot
+    supply. New model-aware defaults (network=50.0, application=30.0)
+    sit in the "aggressive" tier (~10-12x measured delta std),
+    matching how dominant ATTACK_SCALE already is for sign-flip. Still
+    fully overridable via --gaussian-std. NOT YET NaN/overflow-tested
+    at these new defaults -- run a short sanity check on both models
+    before committing to a full Gaussian sweep, same caution
+    ATTACK_SCALE itself originally needed.
 --------------------------------------------------------------------------
 KNOWN OPEN ITEMS — NOT YET RESOLVED, FLAGGED FOR NEXT REVISION
 --------------------------------------------------------------------------
@@ -78,6 +105,20 @@ KNOWN OPEN ITEMS — NOT YET RESOLVED, FLAGGED FOR NEXT REVISION
   system rather than cleanly killing the job — watch `free -h` on the
   first real (non-sanity-check) DP round; drop DP_BATCH_SIZE if memory
   pressure shows up.
+- Any epsilon-sweep results collected BEFORE the sign-flip fix (revision
+  20), including Experiment 1's original ε=3/9/15 anchors, used the
+  non-standard sign_flip_attack — not directly comparable to new runs.
+- Gaussian attack results collected BEFORE revision 24 used the old flat
+  std=10.0 default -- weaker than the new model-aware defaults intended.
+  Re-run any prior Gaussian-attack condition under the new defaults
+  before comparing against sign-flip results.
+- Gaussian noise draws are UNSEEDED (np.random.normal, no explicit seed)
+  -- two runs at identical config will get different attacker noise
+  each time. This is a deliberate open question, not yet decided: seed
+  it for exact reproducibility of a specific run, or leave it unseeded
+  to argue any "detection stays flat" finding is robust across draws,
+  not a single lucky/unlucky seed. Pick one and state it explicitly in
+  the write-up before publishing any Gaussian-attack result.
 --------------------------------------------------------------------------
 """
 
@@ -133,6 +174,24 @@ _parser.add_argument("--krum-k", type=float, default=None,
                           "if adaptive Krum is excluding honest clients that "
                           "aren't actually attackers (likely non-IID "
                           "variance, not malice) — try 3.5-4.5 as a start.")
+_parser.add_argument("--attack-type", type=str, default="sign_flip",
+                     choices=["sign_flip", "gaussian", "zero_gradient"],
+                     help="Which Byzantine attack the malicious clients use "
+                          "(ignored when BYZANTINE_HEAD_ONLY triggers the "
+                          "classifier_head_flip_attack path instead — that "
+                          "path is orthogonal to this flag, since it targets "
+                          "the HE-hybrid classifier-head slice specifically, "
+                          "not a full-model attack). Default sign_flip.")
+_parser.add_argument("--gaussian-std", type=float, default=None,
+                     help="Standard deviation for --attack-type gaussian. "
+                          "Ignored for other attack types. Default is "
+                          "model-aware (network=50.0, application=30.0), "
+                          "measured via measure_param_scale.py against "
+                          "this codebase's actual trained-delta magnitude "
+                          "-- NOT RSA's cited sigma=10000, which is a "
+                          "different model's units (additive noise doesn't "
+                          "transfer across models the way a multiplicative "
+                          "scale factor does).")
 _args = _parser.parse_args()
 
 MODEL_TYPE = _args.model_type
@@ -173,7 +232,20 @@ else:
     NUM_BYZANTINE     = 2
     BYZANTINE_CLIENTS = list(range(NUM_BYZANTINE))
 
-ATTACK_SCALE         = 5.0 if MODEL_TYPE == "network" else 2.0
+ATTACK_SCALE  = 5.0 if MODEL_TYPE == "network" else 2.0
+ATTACK_TYPE   = _args.attack_type
+
+# FIX (changelog #24): model-aware default, same philosophy as
+# ATTACK_SCALE -- measured via measure_param_scale.py against this
+# codebase's actual trained-delta magnitude (network: delta_std~4.17,
+# application: delta_std~2.64; measured on this DGX). NOT ported from
+# RSA's sigma=10000 (different model/units -- additive noise doesn't
+# transfer the way a multiplicative scale does). Picked from the
+# "aggressive" tier (~10-12x measured delta std) so the attack clearly
+# dominates honest signal, mirroring how dominant ATTACK_SCALE=5.0/2.0
+# already is for sign-flip. Still fully overridable via --gaussian-std.
+_GAUSSIAN_STD_DEFAULT = 50.0 if MODEL_TYPE == "network" else 30.0
+GAUSSIAN_STD  = _args.gaussian_std if _args.gaussian_std is not None else _GAUSSIAN_STD_DEFAULT
 
 # ─── Defence flags ──────────────────────────────────────────────────────────
 USE_KRUM            = False
@@ -181,9 +253,15 @@ USE_ADAPTIVE_KRUM   = True
 USE_HE              = False
 USE_HE_KRUM_HYBRID  = False   # Experiment 2 — plaintext-slice Krum + encrypted-slice HE
 
-USE_DP   = True  # Experiment 2 isolates HE x Krum only, same philosophy as
-                    # Experiment 1 isolating DP x Krum (USE_ZKP=False there) —
-                    # see master doc's Layer 3 / Experiment 2 "Not used" notes.
+# NOTE (fixed comment, revision 23): this flag's value (True) is correct
+# for THIS file's current active experiment (adaptive Krum + DP epsilon
+# sweep, USE_HE_KRUM_HYBRID=False). The old comment here implied
+# Experiment 2's "isolate HE x Krum only, DP off" design (which needs
+# USE_DP=False) — that comment belonged to a different config than the
+# one actually running now and has been removed to avoid misleading
+# whoever reads this next. If/when USE_HE_KRUM_HYBRID=True is flipped
+# back on for an actual Experiment-2 run, set USE_DP=False accordingly.
+USE_DP   = True
 USE_ZKP  = False
 
 assert sum([USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE, USE_HE_KRUM_HYBRID]) <= 1, \
@@ -298,7 +376,9 @@ else:
     from task import (get_model, get_model_parameters, set_model_parameters,
                       train, test, build_criterion_application as build_criterion)
 
-from defences.byzantine import sign_flip_attack, classifier_head_flip_attack
+from defences.byzantine import (sign_flip_attack, sign_flip_attack_trained,
+                                classifier_head_flip_attack, gaussian_attack,
+                                gaussian_attack_trained, zero_gradient_attack)
 
 if USE_KRUM:
     from defences.krum import multi_krum
@@ -427,7 +507,44 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                 trained_params, model_state_keys, scale=client_cfg["attack_scale"]
             )
         else:
-            params = sign_flip_attack(global_params, scale=client_cfg["attack_scale"])
+            # FIX (changelog #20): literature-standard attack -- train
+            # normally first (same call an honest client would make: same
+            # criterion, epochs, lr, global_params for the FedProx
+            # proximal term, mu), THEN corrupt the RESULT. Previously this
+            # called sign_flip_attack(global_params, ...) directly on the
+            # untouched global model -- non-standard versus every
+            # literature formulation checked. Mirrors
+            # classifier_head_flip_attack's already-correct train-first
+            # pattern above.
+            #
+            # ADDED (changelog #21): attack type is now selectable via
+            # client_cfg["attack_type"] instead of sign-flip being the
+            # only option. zero_gradient is the one exception to
+            # "train first" -- it doesn't need the trained result at all
+            # (a lazy client sending zeros IS the attack, independent of
+            # what it would have computed), so it's applied directly to
+            # global_params without a wasted training pass, per
+            # zero_gradient_attack()'s own docstring.
+            attack_type = client_cfg["attack_type"]
+
+            if attack_type == "zero_gradient":
+                params = zero_gradient_attack(global_params)
+            else:
+                criterion = client_cfg["criterion"]
+                train(model, X_tr, y_tr, criterion,
+                      epochs=client_cfg["local_epochs"],
+                      lr=client_cfg["learning_rate"],
+                      global_params=global_params,
+                      mu=client_cfg["prox_mu"],
+                      device=device)
+                trained_params = get_model_parameters(model)
+
+                if attack_type == "gaussian":
+                    params = gaussian_attack_trained(trained_params,
+                                                     std=client_cfg["gaussian_std"])
+                else:  # "sign_flip", the default
+                    params = sign_flip_attack_trained(trained_params,
+                                                      scale=client_cfg["attack_scale"])
 
     else:
         if client_cfg["use_dp"] and _OPACUS_AVAILABLE:
@@ -734,6 +851,19 @@ def append_log_row(round_num, client_label, loss, accuracy,
 # ---------------------------------------------------------------------------
 
 def main():
+    # FIX (changelog #22): computed once, up front, so both the console
+    # banner and the experiment_config JSON reflect the SAME actual attack
+    # path -- previously the JSON hardcoded "sign_flip_attack_trained"
+    # regardless of what really ran.
+    if (USE_HE or USE_HE_KRUM_HYBRID) and BYZANTINE_HEAD_ONLY:
+        _attack_function_label = "classifier_head_flip_attack"
+    else:
+        _attack_function_label = {
+            "sign_flip":     "sign_flip_attack_trained",
+            "gaussian":      "gaussian_attack_trained",
+            "zero_gradient": "zero_gradient_attack",
+        }[ATTACK_TYPE]
+
     print(f"\n{'='*65}")
     print(f"  FL-IDS Unified Loop — MODEL: {MODEL_TYPE.upper()}")
     if SANITY_CHECK:
@@ -745,6 +875,8 @@ def main():
           f"output's 'Client N' numbering)  "
           f"Attack={'ON' if USE_BYZANTINE_ATTACK else 'OFF'}"
           f"{'  [--byzantine override]' if _args.byzantine is not None else ''}")
+    print(f"  Attack function: {_attack_function_label}"
+          f"{f'  (std={GAUSSIAN_STD})' if _attack_function_label == 'gaussian_attack_trained' else ''}")
     print(f"  USE_KRUM={USE_KRUM}  USE_ADAPTIVE_KRUM={USE_ADAPTIVE_KRUM}  "
           f"USE_HE={USE_HE}  USE_HE_KRUM_HYBRID={USE_HE_KRUM_HYBRID}  "
           f"USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
@@ -831,6 +963,8 @@ def main():
         "criterion":            precomputed_criterion,
         "byzantine_clients":    BYZANTINE_CLIENTS,
         "attack_scale":         ATTACK_SCALE,
+        "attack_type":          ATTACK_TYPE,
+        "gaussian_std":         GAUSSIAN_STD,
         "use_he":                USE_HE,
         "use_he_hybrid":        USE_HE_KRUM_HYBRID,
         "byzantine_head_only":  BYZANTINE_HEAD_ONLY,
@@ -925,6 +1059,9 @@ def main():
             "num_byzantine": NUM_BYZANTINE,
             "byzantine_clients": BYZANTINE_CLIENTS,
             "attack_scale": ATTACK_SCALE,
+            "attack_type": ATTACK_TYPE,
+            "gaussian_std": GAUSSIAN_STD if ATTACK_TYPE == "gaussian" else None,
+            "attack_function": _attack_function_label,
             "use_krum": USE_KRUM,
             "krum_m": KRUM_M,
             "krum_discards": NUM_CLIENTS - KRUM_M,
@@ -1001,8 +1138,14 @@ def main():
                 params, dp_eps_spent, dp_noise_mult = results_by_client[i]
 
                 if USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
-                    tag = ("head-only" if ((USE_HE or USE_HE_KRUM_HYBRID) and BYZANTINE_HEAD_ONLY)
-                          else "sign-flip")
+                    if (USE_HE or USE_HE_KRUM_HYBRID) and BYZANTINE_HEAD_ONLY:
+                        tag = "head-only"
+                    elif ATTACK_TYPE == "gaussian":
+                        tag = "gaussian (trained)"
+                    elif ATTACK_TYPE == "zero_gradient":
+                        tag = "zero-gradient"
+                    else:
+                        tag = "sign-flip (trained)"
                     print(f"  Client {i+1:2d}  [BYZANTINE — {tag} ×{ATTACK_SCALE}]")
 
                 if USE_ZKP:
@@ -1128,17 +1271,6 @@ def main():
                     hybrid_accepted_client_indices = accepted_client_indices
 
                 if len(hybrid_accepted_params) - ADAPTIVE_KRUM_HYBRID_ASSUMED_F - 2 < 1:
-                    # Matches adaptive_multi_krum()'s actual HARD requirement
-                    # (theoretical_neighbours=n-f-2 > 0, i.e. n >= f+3) — this
-                    # is deliberately weaker than the Blanchard n>=2f+3 bound,
-                    # which the function now only WARNS about, not raises on.
-                    # Uses ADAPTIVE_KRUM_HYBRID_ASSUMED_F, not NUM_BYZANTINE —
-                    # must stay in sync with whatever f the actual call below
-                    # passes, or this fallback fires at the wrong threshold.
-                    # Must stay in sync with defences/krum.py's hard check,
-                    # not its soft one, or this fallback fires too eagerly
-                    # and silently blocks the exact beyond-guarantee sweep
-                    # region the soft-warning design exists to allow.
                     selected_positions = list(range(len(hybrid_accepted_params)))
                     krum_score_diag = None
                     agg_label = ("HE+Krum hybrid (fallback — too few "
@@ -1156,23 +1288,8 @@ def main():
                         min_keep_fraction=ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
                         return_diagnostics=True,
                     )
-                    # krum_score_diag["scores"] is indexed against
-                    # hybrid_accepted_params/hybrid_accepted_client_indices
-                    # (the POST-norm-guard-filtered list), NOT the original
-                    # accepted_client_indices — those can differ in length
-                    # whenever the norm guard rejected anyone this round.
-                    # The downstream diagnostics block below must walk the
-                    # SAME list this was scored against, or it indexes past
-                    # the end of krum_score_diag["scores"].
                     krum_scored_client_indices = hybrid_accepted_client_indices
-                    # NOTE: the aggregated_params Krum returns (position 0,
-                    # discarded via `_`) is the bulk-only weighted average of
-                    # kept clients — we don't use it directly because
-                    # he_local.aggregate_encrypted() below recomputes the
-                    # identical plaintext-weighted average over the SAME
-                    # selected clients/weights as part of handling the bulk
-                    # half, so nothing is lost, just not duplicated.
-                    agg_label = None  # set below, after selected ids are known
+                    agg_label = None
 
                 krum_selected_ids  = {
                     hybrid_accepted_client_indices[pos] for pos in selected_positions
@@ -1184,14 +1301,6 @@ def main():
                 )
                 krum_detected_byz = krum_discarded_ids & set(BYZANTINE_CLIENTS)
 
-                # Encrypted-slice aggregation, RESTRICTED to whichever clients
-                # survived BOTH the norm guard AND Krum's plaintext-evidence
-                # selection. Krum never sees the ciphertext; the norm guard
-                # never sees the plaintext bulk; between them the server
-                # still excludes a flagged client's encrypted contribution
-                # even though neither check alone could have made that call
-                # from the encrypted data directly. See master doc, Experiment
-                # 2's hybrid design step 3, and defences/zkp.py Part 2.
                 selected_enc_clients = [hybrid_accepted_params[pos] for pos in selected_positions]
                 selected_weights     = [hybrid_accepted_weights[pos] for pos in selected_positions]
                 enc_aggregate = he_local.aggregate_encrypted(
@@ -1241,9 +1350,6 @@ def main():
 
             elif USE_ADAPTIVE_KRUM:
                 if len(accepted_params) - NUM_BYZANTINE - 2 < 1:
-                    # Matches adaptive_multi_krum()'s actual HARD requirement
-                    # (n >= f+3) — see matching comment in the hybrid branch
-                    # above for why this is deliberately not the 2f+3 bound.
                     global_params = fedprox_aggregate(accepted_params,
                                                       accepted_weights)
                     agg_label = "FedProx (Adaptive-Krum fallback — too few accepted clients)"
@@ -1266,9 +1372,6 @@ def main():
                         if idx not in krum_selected_ids
                     }
                     krum_detected_byz = krum_discarded_ids & set(BYZANTINE_CLIENTS)
-                    # No norm-guard pre-filter in this (non-hybrid) branch —
-                    # scored against the full accepted list, so this is the
-                    # same list to walk in the downstream diagnostics block.
                     krum_scored_client_indices = accepted_client_indices
 
                     agg_label = (f"Adaptive Multi-Krum ({ADAPTIVE_KRUM_METHOD}, "
@@ -1369,14 +1472,6 @@ def main():
             if krum_score_diag is not None:
                 nan_this_round = krum_score_diag["num_nan"] > 0
                 pos_scores = krum_score_diag["scores"]
-                # Walk whichever client-index list this round's Krum call
-                # was actually scored against — accepted_client_indices for
-                # USE_ADAPTIVE_KRUM, hybrid_accepted_client_indices (a
-                # possibly-shorter, norm-guard-filtered list) for
-                # USE_HE_KRUM_HYBRID. Using the wrong one here indexes past
-                # the end of pos_scores whenever the two lists differ in
-                # length, which they will any round the norm guard rejects
-                # someone.
                 scored_indices = (krum_scored_client_indices
                                   if krum_scored_client_indices is not None
                                   else accepted_client_indices)

@@ -111,61 +111,13 @@ def gaussian_attack(global_params, std=10.0):
 
     NOTE: this ALSO operates on global_params, not a trained update --
     same non-standard pattern flagged in sign_flip_attack()'s docstring
-    above. KEPT FOR REPRODUCIBILITY / AS A REFERENCE ONLY, same status
-    as sign_flip_attack(). See gaussian_attack_trained() below for the
-    literature-standard, train-first version -- use that one for any
-    new experiment.
+    above. Not yet used in any completed experiment per the master doc,
+    so no prior results depend on it, but apply the same trains-first
+    fix here before using it in any new experiment that needs a
+    literature-comparable attack.
     """
     return [p + np.random.normal(0, std, p.shape).astype(np.float32)
             for p in global_params]
-
-
-def gaussian_attack_trained(trained_params, std=10.0):
-    """
-    Gaussian noise attack applied to a client's OWN locally-trained
-    parameters -- same "train first, then corrupt" fix pattern as
-    sign_flip_attack_trained() and classifier_head_flip_attack() above.
-    Adds i.i.d. Gaussian noise on top of an otherwise-honest trained
-    update, rather than perturbing the untouched global model directly
-    (see gaussian_attack()'s docstring for why the untouched-global-
-    model version carries the same non-standard-attacker problem
-    sign_flip_attack() did).
-
-    A genuinely different attack signature from sign-flip, worth having
-    alongside it: no consistent direction (each attacking client's
-    noise draw is independent), so two Byzantine clients under this
-    attack are NOT bitwise-identical to each other the way the naive
-    (untrained) versions of either attack were -- a meaningfully
-    different geometric shape for Krum's distance-based scoring to
-    contend with than a coordinated negation.
-
-    Call this AFTER training the attacking client normally, exactly
-    like sign_flip_attack_trained():
-
-        train(model, X_tr, y_tr, criterion, epochs=..., lr=...,
-              global_params=global_params, mu=prox_mu, device=device)
-        trained_params = get_model_parameters(model)
-        params = gaussian_attack_trained(trained_params, std=GAUSSIAN_STD)
-
-    Parameters
-    ----------
-    trained_params : list[np.ndarray]
-        The attacking client's own locally-trained parameters -- NOT
-        global_params.
-    std : float
-        Standard deviation of the added Gaussian noise. Default 10.0
-        matches gaussian_attack()'s existing default, so any earlier
-        informal experimentation with that magnitude stays a valid
-        reference point for this version too.
-
-    Returns
-    -------
-    poisoned : list[np.ndarray]
-        trained_params with i.i.d. Gaussian noise (mean 0, std=std)
-        added elementwise to every layer.
-    """
-    return [p + np.random.normal(0, std, p.shape).astype(np.float32)
-            for p in trained_params]
 
 
 def zero_gradient_attack(global_params):
@@ -179,9 +131,7 @@ def zero_gradient_attack(global_params):
     NOTE: this one is arguably fine as-is -- "send all zeros" doesn't
     have a meaningful "trained-then-negated" version; a lazy client
     sending zeros IS the attack, independent of what it would have
-    computed. No fix needed here. Callers may pass either global_params
-    or a trained client's params -- output is identical either way
-    since only the input's SHAPE is used, all values become zero.
+    computed. No fix needed here.
     """
     return [np.zeros_like(p) for p in global_params]
 

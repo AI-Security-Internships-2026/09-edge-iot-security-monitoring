@@ -9,7 +9,16 @@
 # Prerequisite: main.py must have USE_ADAPTIVE_KRUM=True, USE_HE=False,
 # USE_HE_KRUM_HYBRID=False, USE_KRUM=False, USE_DP=True (see chat notes).
 #
-# ε=3, 9, 15 are intentionally excluded — already completed in Experiment 1.
+# ε=3, 9, 15 are now INCLUDED in this run using the same consistent tag
+# scheme as the rest of the grid (dp03/dp09/dp15, zero-padded) — distinct
+# from the original Experiment 1 tags (dp3/dp9/dp09/dp15), so this does
+# NOT overwrite that earlier data. Re-running these three under the same
+# consistent tagging is useful on its own (closes the dp9/dp09 naming
+# inconsistency), and becomes essential once the trained-sign-flip attack
+# fix lands, since the original dp3/dp9/dp15 runs used the untrained
+# global_params-based sign_flip_attack — a like-for-like re-run at every
+# epsilon, including these three, is what a clean before/after comparison
+# needs.
 #
 # Usage:
 #   chmod +x run_epsilon_sweep.sh
@@ -30,16 +39,19 @@ EPS_TAGS=(
     "0.5:dp0p5"
     "1.0:dp01"
     "2.0:dp02"
+    "3.0:dp03"
     "4.0:dp04"
     "5.0:dp05"
     "6.0:dp06"
     "7.0:dp07"
     "8.0:dp08"
+    "9.0:dp09"
     "10.0:dp10"
     "11.0:dp11"
     "12.0:dp12"
     "13.0:dp13"
     "14.0:dp14"
+    "15.0:dp15"
 )
 
 MODELS=("network" "application")
