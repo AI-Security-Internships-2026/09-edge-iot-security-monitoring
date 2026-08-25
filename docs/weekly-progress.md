@@ -50,7 +50,6 @@ None faced.
 - Run first end-to-end FL training loop and record accuracy against the 92.49% Rashid et al. benchmark
 - Begin implementing Krum aggregation as the first defence baseline
 
-
 ## Week 3
 
 **Branch:** `zarawar-week-03`
