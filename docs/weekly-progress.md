@@ -288,7 +288,7 @@ None faced.
 
 ## Week 9
 
-**Branch:** `zarawar-week-8`
+**Branch:** `zarawar-week-9`
 **PR link:**
 
 ### Completed this week
@@ -307,3 +307,68 @@ None faced.
 - Added --byzantine <clients> and --krum-k <float> CLI args (change which/how many clients attack and the MAD sensitivity multiplier without editing the file), and raised ADAPTIVE_KRUM_K's default 2.5→3.5 plus added a new ADAPTIVE_KRUM_HYBRID_ASSUMED_F knob (default lowered from NUM_BYZANTINE to 1) — both justified by the data-split evidence and the norm guard's now-proven track record.
 
 - Assembled manifests, configs, metrics, and run notes for all five mitigated runs plus a cross-configuration comparison table.
+
+
+
+
+
+## Week 10
+
+**Branch:** `zarawar-week-10`
+**PR link:**
+
+
+### Completed this week
+
+## 1. Epsilon Sweep — Extension, Critical Bug, and Re-Run
+
+- Extended Experiment 1's original 3-point sweep (ε=3,9,15) to a full 1-increment grid (ε ∈ {0.5,1,2,4,5,6,7,8,10,11,12,13,14}).
+- **Major bug found and fixed:** `sign_flip_attack()` operated on the **untouched global model**, not a client's own trained update — Byzantine clients never trained and were bitwise-identical to each other every round. Confirmed non-standard via literature search (RSA, SpectralKrum, FedSV all define the attack as "train first, then negate"). Fixed via `sign_flip_attack_trained()`, wired into `main.py`'s dispatch (train the attacker normally, then corrupt the result — mirroring the already-correct `classifier_head_flip_attack` pattern). The attack **scale** (5.0/2.0) was confirmed fine — only the missing training step was wrong.
+
+
+## 2. Byzantine Attack Diversity
+
+- Added `gaussian_attack_trained()` (same train-first pattern as the sign-flip fix) and wired the previously-dead `zero_gradient_attack` into the dispatch. Added `--attack-type` and `--gaussian-std` CLI flags.
+- `GAUSSIAN_STD` had a flat default (10.0) with no model-type split. Built `measure_param_scale.py`, ran it on the DGX (network delta_std≈4.17, application≈2.64), and recalibrated to model-aware defaults (network=50.0, application=30.0) — explicitly *not* ported from RSA's σ=10000, since additive noise doesn't transfer across models like a multiplicative scale does.
+- Built `run_gaussian_sweep.sh` as a companion to the sign-flip v2 sweep (same grid/conventions, `gaussian_` tag prefix). Run in a second tmux session concurrently with the sign-flip sweep — GPU-contention risk explicitly flagged and knowingly accepted. **Gaussian sweep's completion status was never confirmed.**
+- Unseeded Gaussian noise (reproducibility across runs) remains an explicitly unresolved open decision.
+
+## 3. Experiment 1 Results (on the corrected, 32-condition sweep)
+
+- **Headline Finding 1:** the original hypothesis does not hold — Krum's Byzantine-detection separation (`krum_score_ratio`) changed by under 2.3% across ε∈{3,9,15} on both models, and detection stayed at **100.00% in every round of every run**. Mechanistic explanation: sign-flip's parameter deviation is orders of magnitude larger than anything DP-SGD's noise injects at these ε values. This resolves the original open question — the data does not support restricting DP noise to the classifier head as a Krum-preservation measure.
+- **Headline Finding 2 (more novel):** DP noise strongly delays/suppresses rare-class learning, independent of Krum. Clearest on Fingerprinting (application model's rarest class): stays at F1=0.000 for 23 of 25 rounds at ε=3, reaches ~0.6 by round 25 at ε=9/15.
+- Network model's F1-Macro vs. epsilon was clean and monotonic; **application model was non-monotonic** (ε=9 beat ε=15 on best F1-Macro and tightness of last-5-round std) — a second independent signal (per-client accuracy spread) showed the same pattern on both models, somewhat strengthening but not confirming a genuine ε=9 sweet spot. **Flagged as needing repeat-seed confirmation — still open.**
+- The network model's known round-25 instability pattern recurred a 4th time (now treated as structural to this FedProx/non-IID setup, not noise).
+- DP calibration confirmed highly accurate (achieved ε within 0.25% of target in every run). Krum's client selection was clean across all six anchor conditions — zero collateral exclusion of honest clients (unlike the earlier HE-hybrid Condition 5 anomaly).
+- Deliverables produced: `Experiment1_DP_vs_Krum_Analysis_v2.md` and `FL-IDS_Experiment1_Code_Manifest.md`.
+
+## 4. Ablation Testing — Two Different Approaches, One Superseded
+
+**Bugs found in the original (pre-refactor) single `main.py`'s ablation flags**, all now resolved by the `ABLATION_MODE` refactor:
+
+2. `USE_HE=True` (standalone) was fundamentally broken — its local `he_aggregate()` never decrypted, returning still-encrypted CKKS vectors that would crash the next `set_model_parameters()` call; also used an unweighted average. **Fixed** — `pure_he` now routes through the same validated `he_local.encrypt_params()`/`aggregate_encrypted()`/`decrypt_params()` pipeline Experiment 2 already used.
+3. `BYZANTINE_HEAD_ONLY=True` was hardcoded globally, contaminating a "just HE" ablation with the wrong attack type. **Fixed** — now set explicitly per ablation mode (`False` for pure_dp/pure_he, `True` for pure_zkp).
+4. `USE_ZKP=True` never called `defences/zkp.py` at all — used a bare `||params||≤10.0` check on the **full trained weight vector** (not a clipped gradient), almost certainly rejecting every client every round. **Fixed** — `pure_zkp` now genuinely runs `zkp.py` Part 2's ciphertext-bound HMAC head-norm guard, in isolation, with the correct MAD-based threshold.
+- Fixed `pure_he` to route through the already-validated `he_local.py` pipeline (encrypt → aggregate → decrypt), all clients, no Krum.
+- Rebuilt `pure_zkp` as the ciphertext-bound HMAC head-norm guard running **standalone, no Krum**, with the classifier-head-only Byzantine attack active — deleted the old broken norm check entirely.
+
+
+**Deeper ZKP review (separate thread, using the real `zkp.py`):**
+- Clarified HMAC ≠ encryption — CKKS provides confidentiality of the classifier head; HMAC only provides authenticity/binding of the norm claim to that specific ciphertext.
+- Confirmed the real `zkp.py`'s exact mechanism and its own honest caveat: it doesn't prove the claimed norm matches what's actually inside the ciphertext (a client holding the shared key could sign a false norm for a real ciphertext with nothing to catch it).
+- Gave cost estimates for a genuine ZKP (Bulletproofs range proof): low seconds to ~10s/client/round, hundreds of MB–low GB RAM, mostly Rust tooling — recommended keeping the current commitment+MAC scheme as the main pipeline rather than converting everything.
+- Began reviewing the real `he_local.py`: confirmed all function signatures match `main.py`'s calls, confirmed the norm proof is computed on the **delta** (trained head − round-starting global head, not the absolute head) and that `main.py` passes the correct pre-training `global_params`. **Left unfinished:** a full end-to-end test using the real `he_local.py` + real `zkp.py` together (was mid-way through writing a stub `he_aggregation.py` to complete this) — the earlier successful executions used stand-in fake modules, not the real encryption math.
+
+
+
+- Retrieved all 6 result CSVs plus a separate 16-point epsilon-sweep summary table.
+- Produced two markdown reports:
+  - **`FL-IDS_Ablation_Analysis.md`** — headline finding: the standalone ZKP guard hits 100% detection, 0% false positives, on both models, all 25 rounds, with no Krum involved at all; it also fully absorbs the attack's utility cost (network `pure_zkp` beat the clean baseline) and runs faster than `pure_he` since it aggregates fewer clients.
+  - **`FL-IDS_Epsilon_Sweep_Analysis.md`** — extended Krum-robustness-under-DP down to ε=0.5, but pushed back on the earlier "ε=9 sweet spot" claim (the real best point across 16 values is ε=14 on both models), and flagged that DP calibration error grows to ~1.16% at the lowest epsilon rather than staying within the previously claimed 0.25%.
+
+Both reports end with explicit caveats (single-seed noise, recipe differences, what the guard-alone result does and doesn't imply about Krum's role) so you know what's solid enough to cite as-is versus what needs a repeat run first.
+
+
+
+BLOCKERS:::
+2. **Full real-encryption end-to-end ZKP+HE test unfinished** — the `he_aggregation.py` stub needed to run real `he_local.py`+`zkp.py` together (vs. stand-in modules) was never completed.

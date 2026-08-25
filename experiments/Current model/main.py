@@ -5,19 +5,32 @@ Merges:
   - DP/ZKP/HE main.py  (privacy stack structure)
   - Krum main.py        (working Multi-Krum aggregation)
 
-Four aggregation branches, selected by flags:
-  1. USE_HE=True                   → CKKS homomorphic aggregation (no Krum possible)
-  2. USE_KRUM=True, USE_HE=False   → Multi-Krum, fixed m (plaintext, Byzantine-robust)
-  3. USE_ADAPTIVE_KRUM=True, USE_HE=False → Adaptive Multi-Krum, dynamic MAD/Z-score
+Aggregation / defence branches, selected by flags (normally set for you by
+ABLATION_MODE below -- see that section):
+  1. USE_HE=True                   -> CKKS homomorphic aggregation (partial,
+                                       classifier-head-only, via he_local.py),
+                                       ALL accepted clients averaged, no Krum.
+  2. USE_KRUM=True, USE_HE=False   -> Multi-Krum, fixed m (plaintext, Byzantine-robust)
+  3. USE_ADAPTIVE_KRUM=True        -> Adaptive Multi-Krum, dynamic MAD/Z-score
                                        threshold instead of a fixed m (plaintext)
-  4. All of the above False        → plain FedAvg / FedProx
+  4. USE_HE_KRUM_HYBRID=True       -> Experiment 2: plaintext-slice Adaptive
+                                       Krum + encrypted-slice HE, gated by an
+                                       optional HMAC head-norm guard pre-filter.
+  5. USE_ZKP=True                  -> NEW: defences/zkp.py Part 2's
+                                       ciphertext-bound HMAC head-norm guard,
+                                       in ISOLATION -- no Krum call at all.
+                                       Decouples the guard stage from branch 4's
+                                       hybrid pipeline so it can be tested as
+                                       its own standalone defence.
+  6. All of the above False        -> plain FedAvg / FedProx
 
-Bug fixed: ZKP-rejected clients are removed from accepted_params before Krum
-is called, so accepted_params is a COMPACTED list. Multi-Krum returns positions
-within that compacted list. We track accepted_client_indices in parallel so we
-can map positions back to original 0-indexed client IDs before comparing against
-BYZANTINE_CLIENTS for detection-rate logging. Adaptive Multi-Krum uses the exact
-same compaction/translation logic — see its branch below.
+Bug fixed (kept from earlier revisions): ZKP-rejected clients are removed
+from accepted_params before Krum is called, so accepted_params is a
+COMPACTED list. Multi-Krum returns positions within that compacted list.
+We track accepted_client_indices in parallel so we can map positions back
+to original 0-indexed client IDs before comparing against BYZANTINE_CLIENTS
+for detection-rate logging. Adaptive Multi-Krum and the new standalone ZKP
+guard branch use the exact same compaction/translation logic.
 
 Run:
     python src/main.py network      # network-layer model
@@ -26,99 +39,121 @@ Run:
 --------------------------------------------------------------------------
 CHANGELOG (this revision)
 --------------------------------------------------------------------------
-1-16. (see previous revisions — krum_detected truthy fix, KRUM_M=7,
+1-16. (see previous revisions -- krum_detected truthy fix, KRUM_M=7,
       measured feature count logging, DP_MAX_GRAD_NORM=1.5, params
       extraction UnboundLocalError fix, parallel client training,
       adaptive Multi-Krum / Condition 5, criterion built once,
       eval parallelized, EMA removed, noise_multiplier caching)
 
-17. GPU DEVICE SUPPORT — added (see prior revision).
+17. GPU DEVICE SUPPORT -- added (see prior revision).
 
 18. SANITY_CHECK toggle added (see prior revision).
 
-19. FIX — fork+CUDA hang (see prior revision — sequential in-process
+19. FIX -- fork+CUDA hang (see prior revision -- sequential in-process
     training/eval on GPU runs instead of a forked ProcessPoolExecutor).
 
-20. FIX — sign_flip_attack was non-standard versus the literature (see
-    prior revision — sign_flip_attack_trained() now used, trains the
+20. FIX -- sign_flip_attack was non-standard versus the literature (see
+    prior revision -- sign_flip_attack_trained() now used, trains the
     attacking client first, then negates the result).
 
-21. ADDED — Gaussian noise attack, trains-first version
+21. ADDED -- Gaussian noise attack, trains-first version
     (gaussian_attack_trained), wired in as a second selectable attack
     type alongside sign-flip via the new --attack-type CLI flag.
-    Genuinely different attack geometry from sign-flip: no consistent
-    direction, and — unlike either attack's untrained/naive version —
-    two Byzantine clients under Gaussian noise are NOT bitwise-
-    identical to each other (independent noise draws), giving Krum's
-    distance-based scoring a meaningfully different shape to contend
-    with than a coordinated negation. --attack-type zero_gradient also
-    added as a third option (zero_gradient_attack was already defined
-    in defences/byzantine.py but never wired into main.py's dispatch).
+    --attack-type zero_gradient also added as a third option.
 
-22. FIX — "attack_function" in experiment_config_*.json was hardcoded
-    to "sign_flip_attack_trained" regardless of which attack actually
-    ran (including when BYZANTINE_HEAD_ONLY routed to
-    classifier_head_flip_attack instead) — misleading experiment
-    provenance. Now computed dynamically from the actual attack path
-    taken, including the new attack-type dispatch from #21.
+22. FIX -- "attack_function" in experiment_config_*.json is now computed
+    dynamically from the actual attack path taken (including head-only
+    routing), not hardcoded.
 
-23. FIX — stale comment on USE_DP. Read "Experiment 2 isolates HE x
-    Krum only" (which implies USE_DP should be False) directly above
-    USE_DP=True — a leftover from an earlier Experiment-2 config that
-    no longer matches this file's actual current experiment (adaptive
-    Krum + DP epsilon sweep, USE_HE_KRUM_HYBRID=False). The True value
-    was already correct for what's actually running; only the
-    misleading comment text is fixed here.
+23. FIX -- stale comment on USE_DP removed.
 
-24. FIX — GAUSSIAN_STD had a flat default (10.0) with no model-type
-    split, unlike ATTACK_SCALE (5.0 network / 2.0 application).
-    Measured via measure_param_scale.py against this codebase's ACTUAL
-    trained-delta magnitude (network: mean delta_std ~= 4.17,
-    application: mean delta_std ~= 2.64) — the old default of 10.0 was
-    only ~2.4x the honest signal on network and ~3.8x on application,
-    weaker than intended relative to how dominant ATTACK_SCALE is for
-    sign-flip. RSA's cited sigma=10000 is NOT directly portable here:
-    unlike sign-flip's multiplicative scale (which is automatically
-    proportional to whatever a model's parameter magnitudes are),
-    additive Gaussian noise requires knowing the ACTUAL parameter
-    scale in THIS codebase, which a different paper's number cannot
-    supply. New model-aware defaults (network=50.0, application=30.0)
-    sit in the "aggressive" tier (~10-12x measured delta std),
-    matching how dominant ATTACK_SCALE already is for sign-flip. Still
-    fully overridable via --gaussian-std. NOT YET NaN/overflow-tested
-    at these new defaults -- run a short sanity check on both models
-    before committing to a full Gaussian sweep, same caution
-    ATTACK_SCALE itself originally needed.
+24. FIX -- GAUSSIAN_STD now model-aware (network=50.0, application=30.0)
+    instead of a flat default, matching how ATTACK_SCALE already varies
+    per model. Still fully overridable via --gaussian-std.
+
+25. NEW -- Three standalone-mechanism ABLATION runs added,
+    selected via the new ABLATION_MODE switch below ("pure_dp", "pure_he",
+    "pure_zkp"). Specifically:
+      a. FIX -- the old standalone USE_HE branch built its own local
+         he_aggregate() function, which never decrypted before returning
+         and averaged unweighted -- global_params ended up as a list of
+         still-encrypted CKKS vectors, which would crash the very next
+         set_model_parameters() call in eval. USE_HE now routes through
+         the SAME he_local.encrypt_params()/aggregate_encrypted()/
+         decrypt_params() pipeline USE_HE_KRUM_HYBRID already validated
+         (Experiment 2), just without any Krum call -- all accepted
+         clients are encrypted (classifier-head-only, partial CKKS) and
+         averaged unconditionally. The old he_aggregate() function and
+         the old ts.ckks_vector()-based per-client encryption loop are
+         DELETED -- nothing should ever call the old broken path again.
+      b. FIX -- the old standalone USE_ZKP branch used a bare, uncalibrated
+         zkp_verify_norm(params, max_norm=ZKP_MAX_NORM=10.0) check on the
+         FULL trained parameter vector -- not defences/zkp.py's actual
+         HMAC commitment/proof machinery at all (that module was never
+         imported under USE_ZKP). USE_ZKP is now redefined as: run
+         defences/zkp.py Part 2's ciphertext-bound HMAC head-norm guard
+         (the same mechanism USE_HE_KRUM_HYBRID's USE_HEAD_NORM_GUARD
+         uses) on the classifier-head slice, IN ISOLATION -- no Krum call
+         at all in this branch. This directly tests whether the guard
+         alone (decoupled from Experiment 2's hybrid pipeline's second,
+         redundant Krum stage) detects a classifier-head-only Byzantine
+         attacker. zkp_verify_norm() and ZKP_MAX_NORM are DELETED.
+      c. USE_HE and USE_ZKP now both trigger the classifier_head_flip_attack
+         path when BYZANTINE_HEAD_ONLY=True, exactly like USE_HE_KRUM_HYBRID
+         already did -- both new branches operate on the classifier-head
+         CKKS slice, so an attacker corrupting that slice (not the whole
+         model) is the relevant threat model for both.
+      d. USE_HE + USE_ADAPTIVE_KRUM together is UNCHANGED and still
+         forbidden by the mutual-exclusion assert below -- that combination
+         is intentionally NOT implemented; USE_HE_KRUM_HYBRID is the correct
+         (already-implemented, already-validated) way to combine partial HE
+         with plaintext-slice Krum. Bypassing the assert would let Krum
+         score a mismatched/incomplete parameter structure (encrypt_params()
+         dicts, not flat param lists) and produce meaningless results.
+
+26. NEW (this revision) -- Fourth ABLATION_MODE, "krum_dp_sweep", added.
+    Reproduces Experiment 1's exact recipe (USE_ADAPTIVE_KRUM=True,
+    USE_DP=True, USE_BYZANTINE_ATTACK=True, BYZANTINE_HEAD_ONLY=False,
+    k=2.5 default) so that Sweep 2 (Gaussian-noise attack, via
+    --attack-type gaussian) can reuse the exact same aggregation/DP
+    recipe as the original/corrected sign-flip sweep, differing only in
+    which --attack-type is passed on the CLI. None of pure_dp/pure_he/
+    pure_zkp activate Adaptive Krum + DP + an active attack together, so
+    this was previously only reachable by hand-editing flags outside the
+    ABLATION_MODE block entirely (as the block's own docstring describes)
+    -- that approach is error-prone across a multi-run sweep since it's
+    easy to forget the edit is even flag-driven at all. This mode makes
+    that recipe a named, reproducible option instead.
+    NOTE: ABLATION_MODE is still not CLI-controllable (open item) --
+    switch it back to "pure_dp"/"pure_he"/"pure_zkp" by hand for other
+    ablation work after this sweep completes.
 --------------------------------------------------------------------------
-KNOWN OPEN ITEMS — NOT YET RESOLVED, FLAGGED FOR NEXT REVISION
+KNOWN OPEN ITEMS -- NOT YET RESOLVED, FLAGGED FOR NEXT REVISION
 --------------------------------------------------------------------------
 - PROX_MU is 0.02 here (user-confirmed intended value).
-- LR decay disabled (user-confirmed decision) — get_round_lr() kept but unused.
-- USE_ADAPTIVE_KRUM=True is a deliberate deviation from the master planning
-  doc's "Experiment 1 must use fixed-m Krum" instruction (user decision) —
-  any comparison against a fixed-m Condition 3 anchor is not apples-to-apples.
+- LR decay disabled (user-confirmed decision) -- get_round_lr() kept but unused.
 - task.py has been patched (separately) to register FocalLoss's weight via
-  register_buffer() and accept a `device` kwarg on train()/test() — confirm
+  register_buffer() and accept a `device` kwarg on train()/test() -- confirm
   the version on disk matches before running; this file's calls assume it.
 - DP_BATCH_SIZE=512 was tuned for CPU. DGX Spark's unified CPU/GPU memory
   means an Opacus per-sample-gradient OOM here can degrade the WHOLE
-  system rather than cleanly killing the job — watch `free -h` on the
+  system rather than cleanly killing the job -- watch `free -h` on the
   first real (non-sanity-check) DP round; drop DP_BATCH_SIZE if memory
   pressure shows up.
-- Any epsilon-sweep results collected BEFORE the sign-flip fix (revision
-  20), including Experiment 1's original ε=3/9/15 anchors, used the
-  non-standard sign_flip_attack — not directly comparable to new runs.
-- Gaussian attack results collected BEFORE revision 24 used the old flat
-  std=10.0 default -- weaker than the new model-aware defaults intended.
-  Re-run any prior Gaussian-attack condition under the new defaults
-  before comparing against sign-flip results.
-- Gaussian noise draws are UNSEEDED (np.random.normal, no explicit seed)
-  -- two runs at identical config will get different attacker noise
-  each time. This is a deliberate open question, not yet decided: seed
-  it for exact reproducibility of a specific run, or leave it unseeded
-  to argue any "detection stays flat" finding is robust across draws,
-  not a single lucky/unlucky seed. Pick one and state it explicitly in
-  the write-up before publishing any Gaussian-attack result.
+- Gaussian noise draws are UNSEEDED (np.random.normal, no explicit seed).
+  This affects exact reproducibility of a given run's specific noise
+  realization only -- it is independent of GAUSSIAN_STD's calibrated
+  value (network=50.0, application=30.0, set via measure_param_scale.py),
+  which is a fixed constant, not a random draw. Two runs at the same
+  epsilon/std will differ in exact numbers but not in statistical
+  behavior. Still an open, undecided item as of this revision.
+- The pure_zkp ablation's detection rate is NOT directly comparable to
+  Experiment 2's mitigated hybrid runs (which had Krum as a second,
+  redundant layer behind the guard) -- a discrepancy here (guard alone
+  missing an attacker Krum would've caught, or vice versa) is exactly the
+  kind of result that tells you whether the two stages do independent
+  work or the guard alone was already carrying the whole defence. State
+  this explicitly in any write-up using this ablation's numbers.
 --------------------------------------------------------------------------
 """
 
@@ -134,14 +169,14 @@ import torch
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------------
-# Path setup — allow running from project root OR from src/
+# Path setup -- allow running from project root OR from src/
 # ---------------------------------------------------------------------------
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 # ---------------------------------------------------------------------------
-# ─── CONFIGURATION ──────────────────────────────────────────────────────────
+# CONFIGURATION
 # ---------------------------------------------------------------------------
 
 import argparse
@@ -154,49 +189,36 @@ _parser.add_argument("model_type", choices=["network", "application"],
 _parser.add_argument("--epsilon", type=float, default=None,
                      help="Override DP_EPSILON, e.g. --epsilon 9.0")
 _parser.add_argument("--tag", type=str, default=None,
-                     help="Suffix on every output filename — "
-                          "e.g. --tag dp15 → results_network_dp15.csv, "
-                          "replaces manual mv-archiving between sweep runs")
+                     help="Suffix on every output filename -- "
+                          "e.g. --tag dp15 -> results_network_dp15.csv. "
+                          "If omitted, defaults to '<model_type>_<ABLATION_MODE>' "
+                          "so ablation runs are auto-labelled.")
 _parser.add_argument("--byzantine", type=str, default=None,
                      help="Comma-separated client numbers to make Byzantine, "
                           "using the SAME 1-indexed numbering the console "
                           "output prints everywhere ('Client 4', 'Client 10', "
-                          "etc.) — e.g. --byzantine 4,10 to attack the "
-                          "clients labelled 'Client 4' and 'Client 10' in the "
-                          "logs. Default (no flag) is clients 1,2. Overrides "
-                          "both BYZANTINE_CLIENTS and NUM_BYZANTINE below — "
-                          "NUM_BYZANTINE becomes len(this list). Numbers must "
-                          "be in [1, NUM_CLIENTS].")
+                          "etc.) -- e.g. --byzantine 4,10. Default (no flag) "
+                          "is clients 1,2. Overrides both BYZANTINE_CLIENTS "
+                          "and NUM_BYZANTINE below -- NUM_BYZANTINE becomes "
+                          "len(this list). Numbers must be in [1, NUM_CLIENTS].")
 _parser.add_argument("--krum-k", type=float, default=None,
-                     help="Override ADAPTIVE_KRUM_K (default 2.5) — the MAD "
-                          "sensitivity multiplier. Larger k -> more "
-                          "permissive (fewer clients dropped). Raise this "
-                          "if adaptive Krum is excluding honest clients that "
-                          "aren't actually attackers (likely non-IID "
-                          "variance, not malice) — try 3.5-4.5 as a start.")
+                     help="Override ADAPTIVE_KRUM_K / HEAD_NORM_GUARD_K "
+                          "(default 2.5) -- the MAD sensitivity multiplier. "
+                          "Larger k -> more permissive (fewer clients dropped).")
 _parser.add_argument("--attack-type", type=str, default="sign_flip",
                      choices=["sign_flip", "gaussian", "zero_gradient"],
                      help="Which Byzantine attack the malicious clients use "
-                          "(ignored when BYZANTINE_HEAD_ONLY triggers the "
-                          "classifier_head_flip_attack path instead — that "
-                          "path is orthogonal to this flag, since it targets "
-                          "the HE-hybrid classifier-head slice specifically, "
-                          "not a full-model attack). Default sign_flip.")
+                          "(ignored when BYZANTINE_HEAD_ONLY routes to "
+                          "classifier_head_flip_attack instead). Default sign_flip.")
 _parser.add_argument("--gaussian-std", type=float, default=None,
                      help="Standard deviation for --attack-type gaussian. "
                           "Ignored for other attack types. Default is "
-                          "model-aware (network=50.0, application=30.0), "
-                          "measured via measure_param_scale.py against "
-                          "this codebase's actual trained-delta magnitude "
-                          "-- NOT RSA's cited sigma=10000, which is a "
-                          "different model's units (additive noise doesn't "
-                          "transfer across models the way a multiplicative "
-                          "scale factor does).")
+                          "model-aware (network=50.0, application=30.0).")
 _args = _parser.parse_args()
 
 MODEL_TYPE = _args.model_type
 
-# ── Sanity-check toggle ──────────────────────────────────────────────────
+# -- Sanity-check toggle --------------------------------------------------
 SANITY_CHECK = False
 
 # FL hyperparameters
@@ -206,17 +228,15 @@ LOCAL_EPOCHS  = 5
 LEARNING_RATE = 0.001
 PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
 
-# Byzantine attack
-USE_BYZANTINE_ATTACK = True
-
+# Byzantine client selection (WHICH clients are attackers, if any attack is
+# active this run -- whether the attack is actually active is decided below,
+# per ABLATION_MODE, via USE_BYZANTINE_ATTACK).
 if _args.byzantine is not None:
     # --byzantine "4,10" -> the clients printed as "Client 4" and "Client 10"
-    # everywhere in the console output (score tables, [BYZANTINE] tags, etc.)
-    # are attacked. Internally BYZANTINE_CLIENTS/client_idx are 0-indexed
-    # (they're array positions), so this is where that translation happens
-    # -- one place, so the mismatch between "what the logs show" and "what
-    # the code stores" can't leak out and cause an off-by-one mistake at
-    # every call site the way it did before this flag existed.
+    # everywhere in the console output are attacked. Internally
+    # BYZANTINE_CLIENTS/client_idx are 0-indexed (array positions); this is
+    # where that translation happens, one place, so the mismatch between
+    # "what the logs show" and "what the code stores" can't leak out.
     _byzantine_1indexed = sorted(int(c.strip()) for c in _args.byzantine.split(","))
     BYZANTINE_CLIENTS   = [c - 1 for c in _byzantine_1indexed]
     NUM_BYZANTINE       = len(BYZANTINE_CLIENTS)
@@ -227,65 +247,127 @@ if _args.byzantine is not None:
         f"(1-indexed, matching the console output's 'Client N' labels), "
         f"got {_byzantine_1indexed}")
 else:
-    # Default, unchanged from before -- clients 0 and 1 (0-indexed) are
-    # malicious, i.e. "Client 1" and "Client 2" in the console output.
+    # Default -- clients 0 and 1 (0-indexed) are malicious, i.e. "Client 1"
+    # and "Client 2" in the console output.
     NUM_BYZANTINE     = 2
     BYZANTINE_CLIENTS = list(range(NUM_BYZANTINE))
 
 ATTACK_SCALE  = 5.0 if MODEL_TYPE == "network" else 2.0
 ATTACK_TYPE   = _args.attack_type
 
-# FIX (changelog #24): model-aware default, same philosophy as
-# ATTACK_SCALE -- measured via measure_param_scale.py against this
-# codebase's actual trained-delta magnitude (network: delta_std~4.17,
-# application: delta_std~2.64; measured on this DGX). NOT ported from
-# RSA's sigma=10000 (different model/units -- additive noise doesn't
-# transfer the way a multiplicative scale does). Picked from the
-# "aggressive" tier (~10-12x measured delta std) so the attack clearly
-# dominates honest signal, mirroring how dominant ATTACK_SCALE=5.0/2.0
-# already is for sign-flip. Still fully overridable via --gaussian-std.
+# Model-aware default, same philosophy as ATTACK_SCALE -- measured via
+# measure_param_scale.py against this codebase's actual trained-delta
+# magnitude (network: delta_std~4.17, application: delta_std~2.64).
 _GAUSSIAN_STD_DEFAULT = 50.0 if MODEL_TYPE == "network" else 30.0
 GAUSSIAN_STD  = _args.gaussian_std if _args.gaussian_std is not None else _GAUSSIAN_STD_DEFAULT
 
-# ─── Defence flags ──────────────────────────────────────────────────────────
-USE_KRUM            = False
-USE_ADAPTIVE_KRUM   = True
-USE_HE              = False
-USE_HE_KRUM_HYBRID  = False   # Experiment 2 — plaintext-slice Krum + encrypted-slice HE
+# ---------------------------------------------------------------------------
+# ABLATION MODE SELECTOR (revision 25, extended revision 26)
+# ---------------------------------------------------------------------------
+# Picks one of the standalone-mechanism ablation runs, or the DP+Krum sweep
+# recipe. Each mode sets EVERY defence/privacy flag explicitly -- nothing is
+# left at a stale default from a previous experiment's config.
+#
+#   "pure_dp"        -> DP-SGD+FedProx only (fedprox_aggregate, no Krum/HE/
+#                        ZKP). No Byzantine attack -- clean utility-cost
+#                        ablation, matches Experiment 3's gap-table request
+#                        for a standalone +DP row with no attack in the
+#                        picture.
+#   "pure_he"         -> Partial (classifier-head-only) CKKS HE only, via
+#                        he_local.py. No Krum, no attack -- clean cost/
+#                        behaviour ablation. (Fixes the old broken
+#                        he_aggregate() path -- see changelog #25a above.)
+#   "pure_zkp"        -> defences/zkp.py Part 2's ciphertext-bound HMAC
+#                        head-norm guard, in ISOLATION -- NO Krum call at
+#                        all. WITH the classifier-head-only Byzantine
+#                        attack active, so this directly tests whether the
+#                        guard alone (decoupled from Experiment 2's hybrid
+#                        pipeline's second, redundant Krum stage) detects a
+#                        head-only attacker.
+#   "krum_dp_sweep"    -> Experiment 1's DP+Adaptive-Krum recipe, WITH a
+#                        full-model (not head-only) Byzantine attack active.
+#                        Attack type is chosen via --attack-type on the CLI
+#                        (sign_flip for the original/corrected Experiment 1
+#                        sweep, gaussian for Sweep 2). This is the mode to
+#                        use for any epsilon-sweep-style run that needs
+#                        Adaptive Krum, DP, and an active attack together --
+#                        none of the three modes above activate all three
+#                        at once.
+#
+# To run a config outside these four, set ABLATION_MODE to one of these as
+# a base and hand-edit the derived flags below -- or just set the flags
+# directly and remove/bypass this block.
+# ---------------------------------------------------------------------------
+ABLATION_MODE = "krum_dp_sweep"   # <-- set for the Gaussian-noise sweep
+                                   # (Sweep 2). Switch back to "pure_dp" /
+                                   # "pure_he" / "pure_zkp" for other
+                                   # single-mechanism ablation runs.
 
-# NOTE (fixed comment, revision 23): this flag's value (True) is correct
-# for THIS file's current active experiment (adaptive Krum + DP epsilon
-# sweep, USE_HE_KRUM_HYBRID=False). The old comment here implied
-# Experiment 2's "isolate HE x Krum only, DP off" design (which needs
-# USE_DP=False) — that comment belonged to a different config than the
-# one actually running now and has been removed to avoid misleading
-# whoever reads this next. If/when USE_HE_KRUM_HYBRID=True is flipped
-# back on for an actual Experiment-2 run, set USE_DP=False accordingly.
-USE_DP   = True
-USE_ZKP  = False
+if ABLATION_MODE == "pure_dp":
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_ZKP = False
+    USE_DP = True
+    USE_BYZANTINE_ATTACK = False
+    BYZANTINE_HEAD_ONLY = False
 
+elif ABLATION_MODE == "pure_he":
+    USE_HE = True
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE_KRUM_HYBRID = USE_ZKP = USE_DP = False
+    USE_BYZANTINE_ATTACK = False
+    BYZANTINE_HEAD_ONLY = False
+
+elif ABLATION_MODE == "pure_zkp":
+    USE_ZKP = True
+    USE_HE = USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE_KRUM_HYBRID = USE_DP = False
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = True   # the whole point of this ablation -- attack
+                                 # exactly the slice the HMAC guard covers
+
+elif ABLATION_MODE == "krum_dp_sweep":
+    # Experiment 1's recipe: Adaptive Krum (k=2.5 default, NOT the
+    # HE-hybrid-specific k=3.5) scoring plaintext params directly, plus
+    # DP-SGD+FedProx on honest clients, plus a full-model attack on the
+    # Byzantine clients (train-then-corrupt, per Week 10's fix -- routed
+    # via --attack-type, not the classifier-head-only stealthy path).
+    USE_ADAPTIVE_KRUM = True
+    USE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_ZKP = False
+    USE_DP = True
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = False   # full-model attack (sign_flip/gaussian/
+                                  # zero_gradient), not the classifier-head
+                                  # CKKS slice -- there is no CKKS slice in
+                                  # this mode at all (USE_HE/HYBRID/ZKP are
+                                  # all False here).
+
+else:
+    raise ValueError(f"Unknown ABLATION_MODE={ABLATION_MODE!r} -- must be "
+                     f"'pure_dp', 'pure_he', 'pure_zkp', or 'krum_dp_sweep'.")
+
+# UNCHANGED, deliberately -- USE_HE + USE_ADAPTIVE_KRUM (or USE_KRUM)
+# together is still forbidden. USE_HE_KRUM_HYBRID is the correct,
+# already-implemented, already-validated way to combine partial HE with
+# plaintext-slice Krum (Experiment 2). USE_ZKP's standalone head-norm guard
+# is a separate, non-Krum defence and is intentionally NOT part of this
+# mutual-exclusion group. krum_dp_sweep sets USE_ADAPTIVE_KRUM=True with
+# USE_HE=False, so it satisfies this assert trivially (sum=1).
 assert sum([USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE, USE_HE_KRUM_HYBRID]) <= 1, \
     "USE_KRUM, USE_ADAPTIVE_KRUM, USE_HE, and USE_HE_KRUM_HYBRID are mutually " \
-    "exclusive aggregation branches — pick at most one."
+    "exclusive aggregation branches -- pick at most one."
 
 DP_SAFE = USE_DP
 
-# Experiment 2's whole premise requires the head-only variant — a full-model
-# sign-flip would poison the plaintext ("bulk") slice too, and Krum would
-# just catch it the normal way, telling us nothing new.
-BYZANTINE_HEAD_ONLY = True
-
 # CKKS parameters for the partial (classifier-head-only) HE path, used by
-# USE_HE_KRUM_HYBRID. Matches the "standard, non-RAM-constrained" config
-# he_local.py already defines (n=8192, [60,40,40,60], scale=2**40) — same
-# parameters main.py's old full-model USE_HE path used, so HE timing/
-# security stays comparable to the earlier ablation numbers.
+# USE_HE, USE_HE_KRUM_HYBRID, and USE_ZKP (all three need real ciphertext to
+# either aggregate over or bind a proof to). Matches the "standard,
+# non-RAM-constrained" config he_local.py already defines (n=8192,
+# [60,40,40,60], scale=2**40). Unused (harmless) under krum_dp_sweep, since
+# none of USE_HE/USE_HE_KRUM_HYBRID/USE_ZKP are active in that mode.
 HE_POLY_DEGREE = 8192
 
-# Layer 2 extension (Experiment 2 mitigation) — see defences/zkp.py Part 2.
-# Only meaningful when USE_HE_KRUM_HYBRID=True; ignored otherwise.
+# Head-norm guard config -- used by USE_HE_KRUM_HYBRID (as a pre-filter
+# before Krum) and by USE_ZKP (as the ENTIRE defence, no Krum). See
+# defences/zkp.py Part 2. Unused (harmless) under krum_dp_sweep.
 USE_HEAD_NORM_GUARD = True
-HEAD_NORM_GUARD_K = 2.5   # same default/semantics as ADAPTIVE_KRUM_K
+HEAD_NORM_GUARD_K = _args.krum_k if _args.krum_k is not None else 2.5
 HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 
 DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
@@ -293,46 +375,13 @@ DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5
 DP_BATCH_SIZE    = 512
 
-ZKP_MAX_NORM = 10.0
-
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
 ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 2.5
-# Raised from 2.5 -> 3.5. Confirmed via print_data_split() that the honest
-# clients Krum was persistently excluding (network: clients 4, 10) simply
-# hold 3-6x more data than the fleet median, with a heavily skewed class
-# mix on top (clients 4+10 alone hold ~73% of the network model's entire
-# DDoS_ICMP class) -- a legitimate, data-driven deviation, not an attack
-# signature. 3.5 is a starting point to loosen the threshold past that
-# effect while still catching the much larger deviation an actual
-# sign-flip/scale attack produces -- verify against real run logs, not
-# assumed correct on paper. Still overridable via --krum-k.
 ADAPTIVE_KRUM_METHOD             = "mad"
 ADAPTIVE_KRUM_MIN_KEEP_FRACTION  = 0.5
 
-# In USE_HE_KRUM_HYBRID, Krum only ever scores clients that ALREADY survived
-# the head-norm guard (see zkp.py Part 2) -- by the time Krum runs, the
-# obvious ciphertext-visible attackers are gone. Scoring with
-# num_byzantine=NUM_BYZANTINE (the GROUND-TRUTH attacker count, still needed
-# elsewhere for detection-rate bookkeeping) means Krum's neighbour count
-# (n-f-2) stays sized for a threat level that's already been mostly
-# addressed by Layer 2 -- fewer neighbours per client sharpens sensitivity
-# to any deviation, including ordinary non-IID variance among honest
-# clients, which is the likely cause of the persistent 2-honest-client
-# exclusion seen in every hybrid run so far (see RUN_NOTES for
-# network_he_krum_hybrid_v1 / _norm_guard_v1). Lower this to reflect the
-# smaller RESIDUAL threat the hybrid branch's Krum call actually needs to
-# assume -- e.g. 1, to still catch an adaptive attacker that somehow slips
-# past the norm guard, without being as aggressive as f=2 against a
-# population that's already mostly been screened. Does NOT affect
-# detection-rate bookkeeping (BYZANTINE_CLIENTS/NUM_BYZANTINE, used for
-# ground truth, are untouched) -- only Krum's own internal neighbour math.
-# Lowered from NUM_BYZANTINE (2) -> 1: the norm guard is now confirmed
-# (both mitigated runs, 100% detection every round) to catch every
-# ciphertext-visible attacker before Krum ever scores anything, so Krum's
-# own math only needs to defensively assume ONE residual/adaptive threat
-# might have slipped past it, not the full original attacker count.
-# min(1, NUM_BYZANTINE) keeps this sane if NUM_BYZANTINE is ever 0.
+# Only meaningful for USE_HE_KRUM_HYBRID -- see that branch's comments.
 ADAPTIVE_KRUM_HYBRID_ASSUMED_F  = min(1, NUM_BYZANTINE)
 
 # ---------------------------------------------------------------------------
@@ -342,18 +391,19 @@ _CPU_COUNT      = os.cpu_count() or 4
 _CUDA_AVAILABLE = torch.cuda.is_available()
 _DEVICE         = torch.device("cuda" if _CUDA_AVAILABLE else "cpu")
 
-# GPU note: see changelog #19. When CUDA is available, no
-# ProcessPoolExecutor is created at all — client training/eval runs
-# sequentially in-process (see _run_training_wave/_run_eval_wave).
-# CLIENT_POOL_WORKERS is kept as a reported/logged value (still 1 on
-# GPU) even though no pool actually exists in that case.
+# GPU note: when CUDA is available, no ProcessPoolExecutor is created at
+# all -- client training/eval runs sequentially in-process (see
+# _run_training_wave/_run_eval_wave). CLIENT_POOL_WORKERS is kept as a
+# reported/logged value (still 1 on GPU) even though no pool actually
+# exists in that case.
 CLIENT_POOL_WORKERS = 1 if _CUDA_AVAILABLE else min(4, NUM_CLIENTS)
 _THREADS_PER_WORKER = max(1, _CPU_COUNT // CLIENT_POOL_WORKERS)
 
 # ---------------------------------------------------------------------------
-# Output paths — one set per model type so both can run simultaneously
+# Output paths -- one set per model type/ablation so runs don't collide
 # ---------------------------------------------------------------------------
-_TAG               = MODEL_TYPE if _args.tag is None else f"{MODEL_TYPE}_{_args.tag}"
+_TAG               = (f"{MODEL_TYPE}_{ABLATION_MODE}" if _args.tag is None
+                      else f"{MODEL_TYPE}_{_args.tag}")
 CHECKPOINT_PARAMS       = f"checkpoint_{_TAG}.npz"
 CHECKPOINT_PROGRESS     = f"checkpoint_{_TAG}_progress.json"
 CHECKPOINT_BEST_PARAMS   = f"checkpoint_{_TAG}_best.npz"
@@ -386,13 +436,22 @@ if USE_KRUM:
 if USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID:
     # Experiment 2 uses adaptive Krum on the plaintext slice, for direct
     # comparability with Experiment 1's already-completed adaptive-Krum
-    # results — see master doc, Experiment 2 Prerequisites #4.
+    # results. krum_dp_sweep also lands here (USE_ADAPTIVE_KRUM=True).
     from defences.krum import adaptive_multi_krum
 
-if USE_HE_KRUM_HYBRID:
+# he_local is needed by all three encryption-touching branches: USE_HE
+# (revision 25 fix -- routes through the SAME correct pipeline
+# USE_HE_KRUM_HYBRID uses), USE_HE_KRUM_HYBRID (Experiment 2), and USE_ZKP
+# (revision 25 -- needs real ciphertext to bind its proof to). NOT imported
+# under krum_dp_sweep (all three flags False there) -- this run needs no
+# TenSEAL/CKKS dependency at all.
+if USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP:
     from defences import he_local
 
-if USE_HE_KRUM_HYBRID and USE_HEAD_NORM_GUARD:
+# zkp is needed whenever the head-norm guard actually runs: standalone
+# (USE_ZKP) or as USE_HE_KRUM_HYBRID's pre-filter. NOT imported under
+# krum_dp_sweep.
+if USE_ZKP or (USE_HE_KRUM_HYBRID and USE_HEAD_NORM_GUARD):
     from defences import zkp
 
 if USE_DP:
@@ -400,25 +459,32 @@ if USE_DP:
         from opacus import PrivacyEngine
         _OPACUS_AVAILABLE = True
     except ImportError:
-        warnings.warn("Opacus not installed — USE_DP will be skipped. "
+        warnings.warn("Opacus not installed -- USE_DP will be skipped. "
                       "Install with: pip install opacus")
         _OPACUS_AVAILABLE = False
 else:
     _OPACUS_AVAILABLE = False
 
-if USE_HE or USE_HE_KRUM_HYBRID:
+if USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP:
     try:
         import tenseal as ts
         _TENSEAL_AVAILABLE = True
     except ImportError:
-        raise ImportError("TenSEAL required for USE_HE/USE_HE_KRUM_HYBRID=True. "
-                          "Install with Python 3.11: pip install tenseal")
+        raise ImportError("TenSEAL required for USE_HE/USE_HE_KRUM_HYBRID/"
+                          "USE_ZKP=True. Install with Python 3.11: "
+                          "pip install tenseal")
+# NOTE: _TENSEAL_AVAILABLE is intentionally left UNDEFINED when none of
+# USE_HE/USE_HE_KRUM_HYBRID/USE_ZKP are True (e.g. krum_dp_sweep). Every
+# later reference to it is of the form
+# "(USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP) and _TENSEAL_AVAILABLE", and
+# Python's `and` short-circuits on a False left operand -- _TENSEAL_AVAILABLE
+# is never evaluated in that case, so this is safe, not an oversight.
 
 _noise_multiplier_cache = {}
 
 
 # ---------------------------------------------------------------------------
-# ─── ROUND-LEVEL LEARNING RATE DECAY ────────────────────────────────────────
+# ROUND-LEVEL LEARNING RATE DECAY
 # ---------------------------------------------------------------------------
 
 def get_round_lr(base_lr, round_num, num_rounds, min_lr_frac=0.15):
@@ -430,16 +496,14 @@ def get_round_lr(base_lr, round_num, num_rounds, min_lr_frac=0.15):
 def _apply_dp_safe_prox_step(real_model, global_dict, mu, lr):
     """
     Applies FedProx's proximal pull as a SEPARATE, non-privatized
-    parameter update — not via loss.backward(). See changelog #20:
-    Opacus's DPOptimizer builds its update entirely from .grad_sample,
-    which the prox term never populates (it's a direct function of the
-    parameter, not of any per-sample activation a hooked layer would
-    capture) — so adding it to the loss under DP-SGD silently does
-    nothing. This applies mu*(w - w_global) as a deterministic SGD
+    parameter update -- not via loss.backward(). Opacus's DPOptimizer
+    builds its update entirely from .grad_sample, which the prox term
+    never populates -- so adding it to the loss under DP-SGD silently
+    does nothing. This applies mu*(w - w_global) as a deterministic SGD
     step, decoupled from the clipped/noised data-gradient step. Safe:
     the prox term depends only on current params + last round's public
-    global model, never on client data, so it costs zero privacy
-    budget applied this way.
+    global model, never on client data, so it costs zero privacy budget
+    applied this way.
     """
     if global_dict is None or mu == 0:
         return
@@ -452,13 +516,13 @@ def _apply_dp_safe_prox_step(real_model, global_dict, mu, lr):
             param -= lr * mu * (param - g)
 
 # ---------------------------------------------------------------------------
-# ─── PARALLEL / SEQUENTIAL CLIENT TRAINING ──────────────────────────────────
+# PARALLEL / SEQUENTIAL CLIENT TRAINING
 # ---------------------------------------------------------------------------
 
 def _pool_worker_init():
     """
-    Runs once per worker process at pool startup — CPU-only path.
-    Never invoked on GPU runs since no pool exists there (see #19).
+    Runs once per worker process at pool startup -- CPU-only path.
+    Never invoked on GPU runs since no pool exists there.
     """
     import torch as _torch
     _torch.set_num_threads(_THREADS_PER_WORKER)
@@ -466,8 +530,8 @@ def _pool_worker_init():
 
 def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
     """
-    Called either via ProcessPoolExecutor (CPU) or directly in-process
-    (GPU — see changelog #19). Signature/behavior identical either way.
+    Called either via ProcessPoolExecutor (CPU) or directly in-process (GPU).
+    Signature/behavior identical either way.
 
     Returns (client_idx, params, dp_eps_spent, dp_noise_multiplier).
     """
@@ -483,17 +547,18 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
     dp_noise_multiplier = None
 
     if client_cfg["use_byzantine_attack"] and client_idx in client_cfg["byzantine_clients"]:
-        if (client_cfg["use_he"] or client_cfg["use_he_hybrid"]) and client_cfg["byzantine_head_only"]:
+        # Revision 25: widened to include use_zkp -- the standalone ZKP
+        # ablation also operates on the classifier-head CKKS slice (via
+        # he_local.encrypt_params_with_norm_guard), so a client attacking
+        # under that ablation needs the SAME "train first, then poison only
+        # the head" stealthy path USE_HE_KRUM_HYBRID already uses -- not a
+        # full-model attack, which wouldn't test the guard at all.
+        if (client_cfg["use_he"] or client_cfg["use_he_hybrid"] or client_cfg["use_zkp"]) \
+                and client_cfg["byzantine_head_only"]:
             # Stealthy variant: train normally on the FULL model first, so
             # the bulk/backbone slice looks like a real locally-computed
-            # update -- not a frozen, unmodified copy of last round's
-            # global model (which is what the old version returned, and
-            # which Krum can trivially spot regardless of HE, since it's
-            # just "this client didn't train," not "this client's
-            # encrypted head is hiding something"). ONLY THEN overwrite
-            # the classifier-head slice with the poisoned values. This is
-            # what actually tests whether an encrypted classifier head
-            # creates a blind spot for an otherwise-normal-looking client.
+            # update -- ONLY THEN overwrite the classifier-head slice with
+            # the poisoned values.
             criterion = client_cfg["criterion"]
             train(model, X_tr, y_tr, criterion,
                   epochs=client_cfg["local_epochs"],
@@ -507,24 +572,11 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                 trained_params, model_state_keys, scale=client_cfg["attack_scale"]
             )
         else:
-            # FIX (changelog #20): literature-standard attack -- train
-            # normally first (same call an honest client would make: same
-            # criterion, epochs, lr, global_params for the FedProx
-            # proximal term, mu), THEN corrupt the RESULT. Previously this
-            # called sign_flip_attack(global_params, ...) directly on the
-            # untouched global model -- non-standard versus every
-            # literature formulation checked. Mirrors
-            # classifier_head_flip_attack's already-correct train-first
-            # pattern above.
-            #
-            # ADDED (changelog #21): attack type is now selectable via
-            # client_cfg["attack_type"] instead of sign-flip being the
-            # only option. zero_gradient is the one exception to
-            # "train first" -- it doesn't need the trained result at all
-            # (a lazy client sending zeros IS the attack, independent of
-            # what it would have computed), so it's applied directly to
-            # global_params without a wasted training pass, per
-            # zero_gradient_attack()'s own docstring.
+            # Literature-standard attack -- train normally first, THEN
+            # corrupt the RESULT. This is the path krum_dp_sweep takes for
+            # its Byzantine clients (use_he/use_he_hybrid/use_zkp are all
+            # False in that mode, so the condition above is always False
+            # regardless of byzantine_head_only's value).
             attack_type = client_cfg["attack_type"]
 
             if attack_type == "zero_gradient":
@@ -596,10 +648,6 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                 )
                 dp_noise_multiplier = cached_sigma
 
-            # Computed ONCE here, after BOTH branches above (cached or not)
-            # have finished wrapping model/optimizer/loader — not duplicated
-            # inside just one branch, since round 1 always takes the
-            # "cached_sigma is None" path first.
             real_model_for_prox = model._module if hasattr(model, "_module") else model
             _model_state_keys = list(real_model_for_prox.state_dict().keys())
             _global_dict = (
@@ -638,8 +686,7 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
 
 def _eval_one_client(client_idx, global_params, X_te, y_te, eval_cfg):
     """
-    Called either via ProcessPoolExecutor (CPU) or directly in-process
-    (GPU — see changelog #19).
+    Called either via ProcessPoolExecutor (CPU) or directly in-process (GPU).
 
     Returns (client_idx, loss, accuracy, per_class_f1).
     """
@@ -659,10 +706,9 @@ def _eval_one_client(client_idx, global_params, X_te, y_te, eval_cfg):
 
 def _run_training_wave(executor, clients_data, global_params, round_client_cfg):
     """
-    Runs _train_one_client() for all clients this round, either through
-    the persistent ProcessPoolExecutor (CPU path) or as a plain
-    sequential in-process loop (GPU path — executor is None). See
-    changelog #19 for why the GPU path avoids the pool entirely.
+    Runs _train_one_client() for all clients this round, either through the
+    persistent ProcessPoolExecutor (CPU path) or as a plain sequential
+    in-process loop (GPU path -- executor is None).
 
     Returns a dict {client_idx: (params, dp_eps_spent, dp_noise_mult)}.
     """
@@ -716,7 +762,7 @@ def _run_eval_wave(executor, clients_data, global_params, eval_cfg):
 
 
 # ---------------------------------------------------------------------------
-# ─── AGGREGATION HELPERS ────────────────────────────────────────────────────
+# AGGREGATION HELPERS
 # ---------------------------------------------------------------------------
 
 def fedprox_aggregate(all_params: list, weights: list) -> list:
@@ -731,30 +777,19 @@ def fedprox_aggregate(all_params: list, weights: list) -> list:
     return result
 
 
-def he_aggregate(encrypted_params_list, context):
-    if not _TENSEAL_AVAILABLE:
-        raise RuntimeError("TenSEAL not available.")
-
-    n = len(encrypted_params_list)
-    summed = []
-    for layer_idx in range(len(encrypted_params_list[0])):
-        acc = encrypted_params_list[0][layer_idx].copy()
-        for client_idx in range(1, n):
-            acc += encrypted_params_list[client_idx][layer_idx]
-        summed.append(acc)
-
-    averaged = [layer * (1.0 / n) for layer in summed]
-    return averaged
-
-
-def zkp_verify_norm(params: list, max_norm: float = ZKP_MAX_NORM) -> bool:
-    flat = np.concatenate([p.flatten() for p in params])
-    norm = float(np.linalg.norm(flat))
-    return norm <= max_norm
+# NOTE (revision 25): the old local he_aggregate() function that lived here
+# has been DELETED. It never decrypted before returning and averaged
+# unweighted, meaning global_params ended up as still-encrypted CKKS
+# vectors -- the very next set_model_parameters() call in eval would have
+# crashed. USE_HE now routes through he_local.aggregate_encrypted() +
+# he_local.decrypt_params() instead, in the round loop below -- the same,
+# already-validated pipeline USE_HE_KRUM_HYBRID uses. Do not re-add a local
+# he_aggregate() function -- if you need raw ciphertext summation, it lives
+# in defences/he_aggregation.py, wrapped correctly by he_local.py.
 
 
 # ---------------------------------------------------------------------------
-# ─── CHECKPOINT HELPERS ─────────────────────────────────────────────────────
+# CHECKPOINT HELPERS
 # ---------------------------------------------------------------------------
 
 def save_checkpoint(global_params: list, round_num: int):
@@ -775,18 +810,16 @@ def load_checkpoint():
 
 def save_best_checkpoint(global_params: list, round_num: int, f1_macro: float):
     """
-    Separate checkpoint saved only when this round beats every prior
-    round's F1-Macro this run — so the best round stays recoverable
-    even if a later round degrades and overwrites the per-round
-    checkpoint. This is exactly what was lost for the original locked
-    baselines (round 20/22) — not repeating that here.
+    Separate checkpoint saved only when this round beats every prior round's
+    F1-Macro this run -- so the best round stays recoverable even if a later
+    round degrades and overwrites the per-round checkpoint.
     """
     np.savez(CHECKPOINT_BEST_PARAMS, *global_params)
     with open(CHECKPOINT_BEST_PROGRESS, "w") as f:
         json.dump({"best_round": round_num, "best_f1_macro": float(f1_macro)}, f)
 
 # ---------------------------------------------------------------------------
-# ─── CSV LOGGING ────────────────────────────────────────────────────────────
+# CSV LOGGING
 # ---------------------------------------------------------------------------
 
 _CSV_HEADER = (
@@ -847,15 +880,14 @@ def append_log_row(round_num, client_label, loss, accuracy,
 
 
 # ---------------------------------------------------------------------------
-# ─── MAIN TRAINING LOOP ─────────────────────────────────────────────────────
+# MAIN TRAINING LOOP
 # ---------------------------------------------------------------------------
 
 def main():
-    # FIX (changelog #22): computed once, up front, so both the console
-    # banner and the experiment_config JSON reflect the SAME actual attack
-    # path -- previously the JSON hardcoded "sign_flip_attack_trained"
-    # regardless of what really ran.
-    if (USE_HE or USE_HE_KRUM_HYBRID) and BYZANTINE_HEAD_ONLY:
+    # Computed once, up front, so both the console banner and the
+    # experiment_config JSON reflect the SAME actual attack path.
+    # Revision 25: widened to include use_zkp.
+    if (USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP) and BYZANTINE_HEAD_ONLY:
         _attack_function_label = "classifier_head_flip_attack"
     else:
         _attack_function_label = {
@@ -865,9 +897,10 @@ def main():
         }[ATTACK_TYPE]
 
     print(f"\n{'='*65}")
-    print(f"  FL-IDS Unified Loop — MODEL: {MODEL_TYPE.upper()}")
+    print(f"  FL-IDS Unified Loop -- MODEL: {MODEL_TYPE.upper()}")
+    print(f"  Ablation mode: {ABLATION_MODE}")
     if SANITY_CHECK:
-        print(f"  *** SANITY_CHECK MODE — {NUM_ROUNDS} rounds only ***")
+        print(f"  *** SANITY_CHECK MODE -- {NUM_ROUNDS} rounds only ***")
     print(f"  Rounds={NUM_ROUNDS}  Clients={NUM_CLIENTS}  Epochs={LOCAL_EPOCHS}")
     print(f"  Device={_DEVICE}  (CUDA available: {_CUDA_AVAILABLE})")
     print(f"  Byzantine={NUM_BYZANTINE} (clients "
@@ -881,14 +914,14 @@ def main():
           f"USE_HE={USE_HE}  USE_HE_KRUM_HYBRID={USE_HE_KRUM_HYBRID}  "
           f"USE_DP={USE_DP}  USE_ZKP={USE_ZKP}")
     if _CUDA_AVAILABLE:
-        print(f"  Client training: SEQUENTIAL, in-process (no worker pool — "
-              f"see changelog #19, avoids fork+CUDA hang)")
+        print(f"  Client training: SEQUENTIAL, in-process (no worker pool -- "
+              f"avoids fork+CUDA hang)")
     else:
         print(f"  Parallel client training: {CLIENT_POOL_WORKERS} worker(s), "
               f"{_THREADS_PER_WORKER} threads/worker "
               f"({_CPU_COUNT} cores detected)")
     if USE_DP:
-        print(f"  DP: ε={DP_EPSILON}  δ={DP_DELTA}  "
+        print(f"  DP: eps={DP_EPSILON}  delta={DP_DELTA}  "
               f"max_grad_norm={DP_MAX_GRAD_NORM}  batch_size={DP_BATCH_SIZE}  "
               f"accountant=rdp")
     if USE_KRUM:
@@ -900,6 +933,10 @@ def main():
         print(f"  Adaptive Krum: method={ADAPTIVE_KRUM_METHOD}  k={ADAPTIVE_KRUM_K}  "
               f"min_keep_fraction={ADAPTIVE_KRUM_MIN_KEEP_FRACTION} "
               f"(clients dropped per round is DYNAMIC, not fixed)")
+    if USE_HE:
+        print(f"  HE (standalone, no Krum): partial CKKS on classifier head, "
+              f"poly_degree={HE_POLY_DEGREE}. ALL accepted clients "
+              f"encrypted + averaged unconditionally (via he_local.py).")
     if USE_HE_KRUM_HYBRID:
         print(f"  HE+Krum Hybrid: adaptive Krum (method={ADAPTIVE_KRUM_METHOD}  "
               f"k={ADAPTIVE_KRUM_K}  assumed_f={ADAPTIVE_KRUM_HYBRID_ASSUMED_F}"
@@ -907,13 +944,22 @@ def main():
               f") scores the PLAINTEXT (bulk) slice only; "
               f"classifier-head slice (CKKS, poly_degree={HE_POLY_DEGREE}) is "
               f"aggregated only over whichever clients that scoring selects.")
-        print(f"  Byzantine head-only attack: {BYZANTINE_HEAD_ONLY} "
-              f"(should be True — this is the whole point of Experiment 2)")
+        print(f"  Byzantine head-only attack: {BYZANTINE_HEAD_ONLY}")
         print(f"  Head-norm guard (Layer 2 extension): {USE_HEAD_NORM_GUARD} "
               f"(k={HEAD_NORM_GUARD_K}, min_keep_fraction="
-              f"{HEAD_NORM_GUARD_MIN_KEEP_FRACTION}) — ciphertext-bound "
+              f"{HEAD_NORM_GUARD_MIN_KEEP_FRACTION}) -- ciphertext-bound "
               f"MAD threshold on classifier-head delta norms, runs BEFORE "
               f"Krum each round")
+    if USE_ZKP:
+        print(f"  ZKP head-norm guard (STANDALONE, no Krum call at all): "
+              f"k={HEAD_NORM_GUARD_K}  "
+              f"min_keep_fraction={HEAD_NORM_GUARD_MIN_KEEP_FRACTION}  "
+              f"-- ciphertext-bound HMAC MAD threshold on classifier-head "
+              f"delta norms is the ONLY defence active this run.")
+        print(f"  Byzantine head-only attack: {BYZANTINE_HEAD_ONLY} "
+              f"(should be True -- this is the whole point of the "
+              f"pure_zkp ablation: does the guard alone catch a "
+              f"classifier-head-only attacker with no Krum backing it up?)")
     print(f"{'='*65}\n")
 
     torch.set_num_threads(_CPU_COUNT)
@@ -930,15 +976,10 @@ def main():
     def print_data_split():
         """
         Per-client train-partition sample counts, broken down by class.
-        Printed at the start of every round (not just once) so it sits
-        right next to that round's Krum decision in the log — no
-        scrolling back to correlate "did client X get excluded because
-        its partition is small/skewed" with what Krum actually did. The
-        partition itself is fixed at load time and doesn't change
-        round-to-round; reprinting every round is a deliberate log-
-        readability choice, not new computation of any real cost.
+        Printed at the start of every round so it sits right next to that
+        round's aggregation decision in the log.
         """
-        print("  ── Data split (train partition, per client) ──")
+        print("  -- Data split (train partition, per client) --")
         name_w = 8
         header = "    Client  Total   " + "  ".join(
             f"{n[:name_w]:>{name_w}}" for n in ATTACK_NAMES
@@ -953,7 +994,7 @@ def main():
 
     print("Building criterion once (class weights, FocalLoss)...")
     precomputed_criterion = build_criterion().to(_DEVICE)
-    print("Criterion built — workers will reuse this, no per-round reload.\n")
+    print("Criterion built -- workers will reuse this, no per-round reload.\n")
 
     client_cfg = {
         "sample_features":      sample_features,
@@ -967,6 +1008,7 @@ def main():
         "gaussian_std":         GAUSSIAN_STD,
         "use_he":                USE_HE,
         "use_he_hybrid":        USE_HE_KRUM_HYBRID,
+        "use_zkp":               USE_ZKP,
         "byzantine_head_only":  BYZANTINE_HEAD_ONLY,
         "use_dp":                USE_DP,
         "dp_epsilon":           DP_EPSILON,
@@ -986,34 +1028,22 @@ def main():
         "device":          _DEVICE,
     }
 
+    # Unified CKKS context init -- revision 25: USE_HE now shares the SAME
+    # he_local-backed context/pipeline as USE_HE_KRUM_HYBRID and USE_ZKP,
+    # instead of the old broken standalone ts.context()/ts.ckks_vector() path.
+    # Stays None under krum_dp_sweep (no HE/ZKP flag active there).
     he_context = None
-    if USE_HE and _TENSEAL_AVAILABLE:
-        he_context = ts.context(
-            ts.SCHEME_TYPE.CKKS,
-            poly_modulus_degree=8192,
-            coeff_mod_bit_sizes=[60, 40, 40, 60]
-        )
-        he_context.global_scale = 2 ** 40
-        he_context.generate_galois_keys()
-        print("TenSEAL CKKS context initialised.\n")
-
-    if USE_HE_KRUM_HYBRID and _TENSEAL_AVAILABLE:
-        # he_local.create_ckks_context() holds the secret key — fine here
-        # since this is a single-process simulation with no untrusted
-        # server/client network boundary (same reasoning as he_local.py's
-        # own docstring). Only the classifier-head slice will ever be
-        # encrypted under it — see split_sensitive_bulk()/SENSITIVE_PREFIX.
+    if (USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP) and _TENSEAL_AVAILABLE:
         he_context = he_local.create_ckks_context(HE_POLY_DEGREE)
-        print(f"Partial-HE (classifier-head-only) CKKS context initialised "
-              f"via he_local.create_ckks_context (poly_degree={HE_POLY_DEGREE}).\n")
+        print(f"CKKS context initialised via he_local.create_ckks_context "
+              f"(poly_degree={HE_POLY_DEGREE}, partial/classifier-head-only "
+              f"encryption).\n")
 
     # Model state_dict key order, needed to split each client's flat param
-    # list into "sensitive" (classifier.*) vs "bulk" layers for the hybrid
-    # branch's encryption/Krum split. Built once here, off a throwaway
-    # model instance — identical order to every client's own model since
-    # architecture + dp_safe are fixed for the whole run.
+    # list into "sensitive" (classifier.*) vs "bulk" layers. Built once
+    # here, off a throwaway model instance. Stays None under krum_dp_sweep.
     MODEL_STATE_KEYS = None
-    if USE_HE_KRUM_HYBRID:
+    if USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP:
         _keys_model = get_model(num_features=sample_features,
                                 num_classes=NUM_CLASSES, dp_safe=DP_SAFE)
         MODEL_STATE_KEYS = list(_keys_model.state_dict().keys())
@@ -1030,11 +1060,12 @@ def main():
         print("Starting fresh run.\n")
     else:
         print(f"Resuming from round {start_round}.\n")
-        print("  NOTE: if you changed DP_EPSILON, USE_KRUM, USE_ADAPTIVE_KRUM, "
-              "USE_HE, or any other experiment flag since the last run, delete "
-              f"{CHECKPOINT_PARAMS} and {CHECKPOINT_PROGRESS} before "
-              "continuing — resuming across different experiment "
-              "conditions silently contaminates round-1 comparability.\n")
+        print("  NOTE: if you changed ABLATION_MODE, DP_EPSILON, USE_KRUM, "
+              "USE_ADAPTIVE_KRUM, USE_HE, or any other experiment flag since "
+              f"the last run, delete {CHECKPOINT_PARAMS} and "
+              f"{CHECKPOINT_PROGRESS} before continuing -- resuming across "
+              "different experiment conditions silently contaminates "
+              "round-1 comparability.\n")
 
     resume = start_round > 0
     init_log_csv(resume=resume)
@@ -1047,6 +1078,7 @@ def main():
     meta_path = f"experiment_config_{_TAG}.json"
     with open(meta_path, "w") as f:
         json.dump({
+            "ablation_mode": ABLATION_MODE,
             "model_type": MODEL_TYPE,
             "sanity_check": SANITY_CHECK,
             "num_rounds": NUM_ROUNDS,
@@ -1073,18 +1105,17 @@ def main():
             "adaptive_krum_min_keep_fraction": ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
             "use_he": USE_HE,
             "use_he_krum_hybrid": USE_HE_KRUM_HYBRID,
+            "use_zkp": USE_ZKP,
             "use_head_norm_guard": USE_HEAD_NORM_GUARD,
-            "head_norm_guard_k": HEAD_NORM_GUARD_K if USE_HEAD_NORM_GUARD else None,
-            "head_norm_guard_min_keep_fraction": HEAD_NORM_GUARD_MIN_KEEP_FRACTION if USE_HEAD_NORM_GUARD else None,
-            "he_poly_degree": HE_POLY_DEGREE if (USE_HE or USE_HE_KRUM_HYBRID) else None,
+            "head_norm_guard_k": HEAD_NORM_GUARD_K if (USE_HEAD_NORM_GUARD or USE_ZKP) else None,
+            "head_norm_guard_min_keep_fraction": HEAD_NORM_GUARD_MIN_KEEP_FRACTION if (USE_HEAD_NORM_GUARD or USE_ZKP) else None,
+            "he_poly_degree": HE_POLY_DEGREE if (USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP) else None,
             "use_dp": USE_DP,
             "dp_epsilon": DP_EPSILON,
             "dp_delta": DP_DELTA,
             "dp_max_grad_norm": DP_MAX_GRAD_NORM,
             "dp_batch_size": DP_BATCH_SIZE,
             "dp_accountant": "rdp",
-            "use_zkp": USE_ZKP,
-            "zkp_max_norm": ZKP_MAX_NORM,
             "byzantine_head_only": BYZANTINE_HEAD_ONLY,
             "dp_safe": DP_SAFE,
             "device": str(_DEVICE),
@@ -1094,11 +1125,11 @@ def main():
             "framework": "custom Python simulation (direct, parallel client training)",
         }, f, indent=2)
 
-    # ════════════════════════════════════════════════════════════════════════
-    # ─── ROUND LOOP ──────────────────────────────────────────────────────────
-    # GPU: no pool at all (executor stays None throughout — see #19).
+    # ========================================================================
+    # ROUND LOOP
+    # GPU: no pool at all (executor stays None throughout).
     # CPU: original persistent 4-way ProcessPoolExecutor, unchanged.
-    # ════════════════════════════════════════════════════════════════════════
+    # ========================================================================
     pool_cm = (
         contextlib.nullcontext()
         if _CUDA_AVAILABLE
@@ -1107,10 +1138,6 @@ def main():
     )
 
     with pool_cm as executor:
-        # nullcontext()'s __enter__ returns None by default — executor
-        # is None on GPU runs, a real ProcessPoolExecutor on CPU runs.
-        # _run_training_wave/_run_eval_wave branch on this.
-
         for round_num in range(start_round + 1, NUM_ROUNDS + 1):
             round_start = time.time()
             print(f"[ROUND {round_num}/{NUM_ROUNDS}]")
@@ -1138,7 +1165,7 @@ def main():
                 params, dp_eps_spent, dp_noise_mult = results_by_client[i]
 
                 if USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
-                    if (USE_HE or USE_HE_KRUM_HYBRID) and BYZANTINE_HEAD_ONLY:
+                    if (USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP) and BYZANTINE_HEAD_ONLY:
                         tag = "head-only"
                     elif ATTACK_TYPE == "gaussian":
                         tag = "gaussian (trained)"
@@ -1146,27 +1173,17 @@ def main():
                         tag = "zero-gradient"
                     else:
                         tag = "sign-flip (trained)"
-                    print(f"  Client {i+1:2d}  [BYZANTINE — {tag} ×{ATTACK_SCALE}]")
+                    print(f"  Client {i+1:2d}  [BYZANTINE -- {tag} x{ATTACK_SCALE}]")
 
-                if USE_ZKP:
-                    passes = zkp_verify_norm(params, max_norm=ZKP_MAX_NORM)
-                    if not passes:
-                        print(f"  Client {i+1:2d}  [ZKP REJECTED — norm too large]")
-                        zkp_rejected_this_round.append(i)
-                        continue
+                # Revision 25: the old early zkp_verify_norm() rejection
+                # gate that used to live here has been REMOVED. USE_ZKP's
+                # proof needs a real ciphertext to bind to (it can't exist
+                # before encryption), so rejection now happens AFTER
+                # encryption, at aggregation time -- same structural
+                # position as USE_HE_KRUM_HYBRID's norm guard.
 
-                if USE_HE and _TENSEAL_AVAILABLE and he_context is not None:
-                    enc_params = [
-                        ts.ckks_vector(he_context, p.flatten().tolist())
-                        for p in params
-                    ]
-                    accepted_params.append(enc_params)
-                elif USE_HE_KRUM_HYBRID and _TENSEAL_AVAILABLE and he_context is not None:
-                    # Only the classifier-head ("sensitive") layers get
-                    # CKKS-encrypted; everything else ("bulk") stays plain
-                    # numpy, exactly what the Krum branch below needs to
-                    # be able to score. Returns a dict — see he_local.
-                    if USE_HEAD_NORM_GUARD:
+                if (USE_HE or USE_HE_KRUM_HYBRID or USE_ZKP) and _TENSEAL_AVAILABLE and he_context is not None:
+                    if (USE_HE_KRUM_HYBRID or USE_ZKP) and USE_HEAD_NORM_GUARD:
                         client_enc = he_local.encrypt_params_with_norm_guard(
                             params, MODEL_STATE_KEYS, he_context, HE_POLY_DEGREE,
                             global_params
@@ -1176,11 +1193,15 @@ def main():
                             params, MODEL_STATE_KEYS, he_context, HE_POLY_DEGREE
                         )
                     if round_num == start_round + 1 and len(accepted_params) == 0:
-                        print(f"  [HE hybrid] {client_enc['pct_encrypted']:.1f}% of "
-                              f"params encrypted (classifier head), rest plaintext "
-                              f"(bulk) — measured once, client {i+1}.")
+                        print(f"  [HE] {client_enc['pct_encrypted']:.1f}% of "
+                              f"params encrypted (classifier head), rest "
+                              f"plaintext (bulk) -- measured once, client {i+1}.")
                     accepted_params.append(client_enc)
                 else:
+                    # krum_dp_sweep always lands here -- accepted_params
+                    # holds raw plaintext parameter lists, exactly what
+                    # adaptive_multi_krum() expects (same shape Experiment
+                    # 1's original sign-flip sweep already validated).
                     accepted_params.append(params)
 
                 accepted_weights.append(len(X_tr))
@@ -1197,13 +1218,19 @@ def main():
             krum_scored_client_indices = None
 
             if len(accepted_params) == 0:
-                print("  WARNING: All clients rejected — skipping round.")
+                print("  WARNING: All clients rejected -- skipping round.")
                 save_checkpoint(global_params, round_num)
                 continue
 
             if USE_HE and _TENSEAL_AVAILABLE:
-                global_params = he_aggregate(accepted_params, he_context)
-                agg_label = "HE"
+                # Revision 25: routes through he_local, ALL accepted clients
+                # encrypted + averaged unconditionally -- no Krum call.
+                enc_aggregate = he_local.aggregate_encrypted(
+                    accepted_params, accepted_weights, he_context
+                )
+                global_params = he_local.decrypt_params(enc_aggregate)
+                agg_label = ("HE (partial, classifier-head-only -- "
+                             "full-client average, no Krum)")
 
             elif USE_HE_KRUM_HYBRID and _TENSEAL_AVAILABLE:
                 # accepted_params here is a list of he_local.encrypt_params()
@@ -1211,11 +1238,7 @@ def main():
                 # <encrypted classifier head>, "bulk": <plaintext everything
                 # else>, "sensitive_idx"/"bulk_idx": layer index mappings}.
 
-                # ── Layer 2 extension: ciphertext-bound head-norm guard ──
-                # Pre-filters BEFORE Krum ever runs, on LOCAL copies —
-                # never mutates the shared accepted_params/weights/indices
-                # lists other branches/logging rely on. See defences/zkp.py
-                # Part 2 for the full design and its disclosed limits.
+                # -- Layer 2 extension: ciphertext-bound head-norm guard --
                 if USE_HEAD_NORM_GUARD:
                     verified_positions = []
                     verified_norms = []
@@ -1273,7 +1296,7 @@ def main():
                 if len(hybrid_accepted_params) - ADAPTIVE_KRUM_HYBRID_ASSUMED_F - 2 < 1:
                     selected_positions = list(range(len(hybrid_accepted_params)))
                     krum_score_diag = None
-                    agg_label = ("HE+Krum hybrid (fallback — too few "
+                    agg_label = ("HE+Krum hybrid (fallback -- too few "
                                  "norm-guard-surviving clients for "
                                  "plaintext-slice Krum; all survivors "
                                  "included in both slices)")
@@ -1320,6 +1343,69 @@ def main():
                         f"selected clients only)"
                     )
 
+            elif USE_ZKP and _TENSEAL_AVAILABLE:
+                # Revision 25 (new): isolates the ciphertext-bound HMAC
+                # head-norm guard as the SOLE defence on the classifier-head
+                # slice -- NO Krum call at all. Direct component test of
+                # Experiment 2's hybrid pipeline's guard stage, decoupled
+                # from the plaintext-slice Krum stage.
+                verified_positions = []
+                verified_norms = []
+                zkp_rejected_ids = set()
+
+                for pos, c in enumerate(accepted_params):
+                    proof  = c.get("head_norm_proof")
+                    chunks = c["sensitive_enc"]["chunks"]
+                    is_valid, reason = (
+                        zkp.verify_head_norm_proof(proof, chunks)
+                        if proof is not None else (False, "PROOF_MISSING")
+                    )
+                    if is_valid:
+                        verified_positions.append(pos)
+                        verified_norms.append(proof["norm"])
+                    else:
+                        zkp_rejected_ids.add(accepted_client_indices[pos])
+                        print(f"  [ZKP head-norm guard] Client "
+                              f"{accepted_client_indices[pos]+1} REJECTED "
+                              f"at verification: {reason}")
+
+                guard_kept_rel, guard_dropped_rel, norm_guard_diag = \
+                    zkp.mad_threshold_head_norms(
+                        verified_norms, k=HEAD_NORM_GUARD_K,
+                        min_keep_fraction=HEAD_NORM_GUARD_MIN_KEEP_FRACTION,
+                    )
+                survivor_positions = [verified_positions[i] for i in guard_kept_rel]
+                for i in guard_dropped_rel:
+                    zkp_rejected_ids.add(accepted_client_indices[verified_positions[i]])
+
+                krum_selected_ids  = {accepted_client_indices[pos] for pos in survivor_positions}
+                krum_discarded_ids = zkp_rejected_ids
+                krum_detected_byz  = zkp_rejected_ids & set(BYZANTINE_CLIENTS)
+                zkp_rejected_this_round = sorted(zkp_rejected_ids)
+
+                print(f"  [ZKP head-norm guard] {norm_guard_diag} "
+                      f"kept={len(survivor_positions)}/{len(accepted_params)}  "
+                      f"rejected_ids={sorted(zkp_rejected_ids)}  "
+                      f"detected_byz={sorted(krum_detected_byz)}")
+
+                if len(survivor_positions) == 0:
+                    print("  WARNING: ZKP head-norm guard rejected ALL clients "
+                          "this round -- skipping round.")
+                    save_checkpoint(global_params, round_num)
+                    continue
+
+                survivor_enc     = [accepted_params[pos] for pos in survivor_positions]
+                survivor_weights = [accepted_weights[pos] for pos in survivor_positions]
+                enc_aggregate = he_local.aggregate_encrypted(
+                    survivor_enc, survivor_weights, he_context
+                )
+                global_params = he_local.decrypt_params(enc_aggregate)
+
+                agg_label = (f"ZKP head-norm guard only (no Krum)  "
+                             f"selected={sorted(krum_selected_ids)}  "
+                             f"rejected={sorted(zkp_rejected_ids)}  "
+                             f"detected_byz={sorted(krum_detected_byz)}")
+
             elif USE_KRUM:
                 effective_m = min(KRUM_M, len(accepted_params) - 1)
                 if effective_m < 1:
@@ -1349,10 +1435,11 @@ def main():
                                  f"detected_byz={sorted(krum_detected_byz)}")
 
             elif USE_ADAPTIVE_KRUM:
+                # krum_dp_sweep lands here.
                 if len(accepted_params) - NUM_BYZANTINE - 2 < 1:
                     global_params = fedprox_aggregate(accepted_params,
                                                       accepted_weights)
-                    agg_label = "FedProx (Adaptive-Krum fallback — too few accepted clients)"
+                    agg_label = "FedProx (Adaptive-Krum fallback -- too few accepted clients)"
                 else:
                     global_params, selected_positions, krum_score_diag = adaptive_multi_krum(
                         accepted_params,
@@ -1389,7 +1476,7 @@ def main():
             if zkp_rejected_this_round:
                 print(f"  ZKP rejected: {zkp_rejected_this_round}")
 
-            _krum_active = USE_KRUM or USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID
+            _krum_active = USE_KRUM or USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID or USE_ZKP
 
             _eval_wave_start = time.time()
             eval_results_by_client = _run_eval_wave(
@@ -1432,14 +1519,14 @@ def main():
                 best_f1_macro = round_f1_macro
                 save_best_checkpoint(global_params, round_num, best_f1_macro)
                 print(f"  [Best checkpoint] New best F1-Macro: {best_f1_macro:.4f} "
-                    f"(round {round_num}) → {CHECKPOINT_BEST_PARAMS}")
+                    f"(round {round_num}) -> {CHECKPOINT_BEST_PARAMS}")
             round_time = time.time() - round_start
 
             print(f"  Loss: {mean_loss:.4f}  Acc: {mean_acc:.4f}  "
                   f"F1-Macro: {mean_f1.mean():.4f}  [{round_time:.1f}s]")
             print("  Per-class F1:")
             for name, f1 in zip(ATTACK_NAMES, mean_f1):
-                bar = "█" * int(f1 * 20)
+                bar = "#" * int(f1 * 20)
                 print(f"    {name:<28} {f1:.4f}  {bar}")
             print()
 
@@ -1451,6 +1538,7 @@ def main():
             if _krum_active and krum_detection_rate is not None:
                 krum_label = ("Krum" if USE_KRUM
                              else "HE+Krum Hybrid (plaintext-slice)" if USE_HE_KRUM_HYBRID
+                             else "ZKP head-norm guard (classifier-head only, no Krum)" if USE_ZKP
                              else "Adaptive Krum")
                 print(f"  [{krum_label}] Detection rate this round: "
                       f"{krum_detection_rate:.2%}  "
@@ -1515,17 +1603,18 @@ def main():
             save_checkpoint(global_params, round_num)
 
     print("\n" + "="*65)
-    print(f"  Training complete — {NUM_ROUNDS} rounds  [{MODEL_TYPE.upper()}]")
+    print(f"  Training complete -- {NUM_ROUNDS} rounds  [{MODEL_TYPE.upper()}]  "
+          f"[ABLATION_MODE={ABLATION_MODE}]")
     if SANITY_CHECK:
         print(f"  *** This was a SANITY_CHECK run ({NUM_ROUNDS} rounds). ***")
         print(f"  *** Set SANITY_CHECK=False and delete the checkpoint before ***")
         print(f"  *** starting the real sweep. ***")
     print(f"  Results logged to:     {LOG_CSV}")
     print(f"  Checkpoint:            {CHECKPOINT_PARAMS} (round {NUM_ROUNDS})")
-    if USE_KRUM or USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID:
+    if USE_KRUM or USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID or USE_HE or USE_ZKP:
         print(f"\n  Reminder: delete checkpoint before changing flags")
-        print(f"  (Krum/Adaptive-Krum/HE/HE-Krum-Hybrid/DP flags change the")
-        print(f"  experiment — old checkpoint params will give misleading")
+        print(f"  (Krum/Adaptive-Krum/HE/HE-Krum-Hybrid/ZKP/DP flags change the")
+        print(f"  experiment -- old checkpoint params will give misleading")
         print(f"  results if reused.)")
     print("="*65 + "\n")
 
