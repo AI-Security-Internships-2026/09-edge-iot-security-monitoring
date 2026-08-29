@@ -365,7 +365,7 @@ HE_POLY_DEGREE = 8192
 
 # Head-norm guard config -- used by USE_HE_KRUM_HYBRID (as a pre-filter
 # before Krum) and by USE_ZKP (as the ENTIRE defence, no Krum). See
-# defences/zkp.py Part 2. Unused (harmless) under krum_dp_sweep.
+# defences/zkp.py Part 2. Unused (harmless) under krum_dp_swee
 USE_HEAD_NORM_GUARD = True
 HEAD_NORM_GUARD_K = _args.krum_k if _args.krum_k is not None else 2.5
 HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
