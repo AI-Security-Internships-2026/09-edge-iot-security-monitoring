@@ -224,7 +224,7 @@ SANITY_CHECK = False
 # FL hyperparameters
 NUM_ROUNDS    = 2 if SANITY_CHECK else 25
 NUM_CLIENTS   = 10
-LOCAL_EPOCHS  = 5
+LOCAL_EPOCHS  = 10
 LEARNING_RATE = 0.001
 PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
 
