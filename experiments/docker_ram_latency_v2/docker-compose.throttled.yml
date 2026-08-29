@@ -1,0 +1,10 @@
+services:
+  client0:
+    mem_limit: 400m
+    cpus: 0.5
+  client1:
+    mem_limit: 400m
+    cpus: 0.5
+  server:
+    mem_limit: 400m
+    cpus: 0.5

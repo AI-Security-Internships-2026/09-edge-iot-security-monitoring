@@ -1,0 +1,59 @@
+services:
+  client0:
+    build: .
+    command: client_runner.py
+    environment:
+      CLIENT_ID: "0"
+      MODE: ${MODE}
+      MODEL_TYPE: ${MODEL_TYPE}
+      PARTITION_DIR: /data/partitions/${MODEL_TYPE}
+      OUT_DIR: /data/results/${RUN_TAG}
+      EPOCHS: ${EPOCHS:-2}
+      ROUNDS: ${ROUNDS:-3}
+      HE_POLY_DEGREE: ${HE_POLY_DEGREE:-4096}
+      DP_EPSILON: ${DP_EPSILON:-3.0}
+      DP_MAX_GRAD_NORM: ${DP_MAX_GRAD_NORM:-1.0}
+      DP_BATCH_SIZE: ${DP_BATCH_SIZE:-512}
+    volumes:
+      - ./partitions:/data/partitions:ro
+      - ./results:/data/results
+    mem_limit: 700m
+    cpus: 1.0
+
+  client1:
+    build: .
+    command: client_runner.py
+    environment:
+      CLIENT_ID: "1"
+      MODE: ${MODE}
+      MODEL_TYPE: ${MODEL_TYPE}
+      PARTITION_DIR: /data/partitions/${MODEL_TYPE}
+      OUT_DIR: /data/results/${RUN_TAG}
+      EPOCHS: ${EPOCHS:-2}
+      ROUNDS: ${ROUNDS:-3}
+      HE_POLY_DEGREE: ${HE_POLY_DEGREE:-4096}
+      DP_EPSILON: ${DP_EPSILON:-3.0}
+      DP_MAX_GRAD_NORM: ${DP_MAX_GRAD_NORM:-1.0}
+      DP_BATCH_SIZE: ${DP_BATCH_SIZE:-512}
+    volumes:
+      - ./partitions:/data/partitions:ro
+      - ./results:/data/results
+    mem_limit: 700m
+    cpus: 1.0
+
+  server:
+    build: .
+    command: server_aggregate.py
+    environment:
+      MODE: ${MODE}
+      OUT_DIR: /data/results/${RUN_TAG}
+      ROUNDS: ${ROUNDS:-3}
+      HE_POLY_DEGREE: ${HE_POLY_DEGREE:-4096}
+      NUM_REAL_CLIENTS: "2"
+      SYNTHETIC_N_CLIENTS: ${SYNTHETIC_N_CLIENTS:-10}
+      NUM_BYZANTINE_ASSUMED: ${NUM_BYZANTINE_ASSUMED:-2}
+    volumes:
+      - ./results:/data/results
+    mem_limit: 700m
+    cpus: 1.0
+    profiles: ["server"]

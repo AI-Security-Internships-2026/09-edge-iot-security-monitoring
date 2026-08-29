@@ -373,7 +373,7 @@ HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
 DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5
-DP_BATCH_SIZE    = 512
+DP_BATCH_SIZE    = 256
 
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
