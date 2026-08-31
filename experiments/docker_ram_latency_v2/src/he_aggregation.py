@@ -57,6 +57,20 @@ also accepts explicit overrides for callers (e.g. a local, non-RAM-
 constrained research run encrypting the FULL model rather than just a
 classifier head) that want a different, more standard parameter set —
 see he_local.py.
+
+BUG FIXED IN THIS REVISION (plaintext_weighted_sum)
+----------------------------------------------------
+plaintext_weighted_sum() assumed every p[layer_idx] was already an
+ndarray, and multiplied/called .astype() on that assumption. When
+"bulk" (non-HE) layers arrive as plain Python lists -- e.g. after a
+JSON round-trip that doesn't automatically reconstruct ndarrays --
+`p[layer_idx] * (w / total)` raised
+`TypeError: can't multiply sequence by non-int of type 'float'`.
+Fixed by coercing each layer to a float32 ndarray via np.asarray()
+before multiplying -- a no-op (no copy) if it's already an ndarray,
+and a correct conversion if it's still a nested list. This makes the
+function robust regardless of what shape the caller passes in, rather
+than relying on every call site to pre-convert correctly.
 """
 
 import base64
@@ -264,13 +278,21 @@ def decrypt_aggregate(aggregated_chunks, total_len):
 # ── Plaintext fallback / bulk-layer averaging ──────────────────────────
 
 def plaintext_weighted_sum(all_params, weights):
-    """Plain weighted average — used for the non-HE 'bulk' layers, and
-    as a fallback if HE is unavailable/fails."""
+    """
+    Plain weighted average — used for the non-HE 'bulk' layers, and
+    as a fallback if HE is unavailable/fails.
+
+    Each layer is coerced via np.asarray() before multiplying — a
+    no-op if it's already an ndarray, and a correct conversion if it
+    arrived as a plain (possibly nested) Python list, e.g. after a
+    JSON round-trip. Without this, `p[layer_idx] * (w / total)` raises
+    TypeError when p[layer_idx] is a list rather than an ndarray.
+    """
     total = sum(weights)
     n_layers = len(all_params[0])
     result = []
     for layer_idx in range(n_layers):
-        layer_avg = sum(p[layer_idx] * (w / total)
+        layer_avg = sum(np.asarray(p[layer_idx], dtype=np.float32) * (w / total)
                          for p, w in zip(all_params, weights))
-        result.append(layer_avg.astype(np.float32))
+        result.append(np.asarray(layer_avg, dtype=np.float32))
     return result

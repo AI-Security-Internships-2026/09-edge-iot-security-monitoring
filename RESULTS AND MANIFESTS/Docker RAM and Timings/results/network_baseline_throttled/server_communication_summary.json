@@ -1,0 +1,50 @@
+{
+  "expected_total": 6,
+  "received_total": 6,
+  "submissions": [
+    {
+      "client_id": "0",
+      "round": "1",
+      "recv_time_s": 0.0929,
+      "payload_bytes": 1756649,
+      "wall_time_s": 412.398
+    },
+    {
+      "client_id": "1",
+      "round": "1",
+      "recv_time_s": 0.21647,
+      "payload_bytes": 1756879,
+      "wall_time_s": 471.876
+    },
+    {
+      "client_id": "0",
+      "round": "2",
+      "recv_time_s": 0.30616,
+      "payload_bytes": 1755566,
+      "wall_time_s": 862.432
+    },
+    {
+      "client_id": "1",
+      "round": "2",
+      "recv_time_s": 0.11925,
+      "payload_bytes": 1755833,
+      "wall_time_s": 985.33
+    },
+    {
+      "client_id": "0",
+      "round": "3",
+      "recv_time_s": 0.07214,
+      "payload_bytes": 1754799,
+      "wall_time_s": 1315.097
+    },
+    {
+      "client_id": "1",
+      "round": "3",
+      "recv_time_s": 0.11768,
+      "payload_bytes": 1754936,
+      "wall_time_s": 1509.371
+    }
+  ],
+  "avg_recv_time_s": 0.1541,
+  "total_bytes_received": 10534662
+}

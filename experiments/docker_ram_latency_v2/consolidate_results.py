@@ -37,6 +37,16 @@ def summarize(run):
         r["train_time_s"] for c in run["clients"] for r in c["rounds"]
     ) / sum(len(c["rounds"]) for c in run["clients"])
 
+    all_rounds = [r for c in run["clients"] for r in c["rounds"]]
+    avg_serialize = sum(r.get("serialize_time_s", 0) for r in all_rounds) / max(1, len(all_rounds))
+    avg_send = sum(r.get("communication_send_time_s", 0) for r in all_rounds) / max(1, len(all_rounds))
+    avg_payload_bytes = sum(r.get("payload_bytes", 0) for r in all_rounds) / max(1, len(all_rounds))
+    comm_failures = sum(1 for r in all_rounds if not r.get("communication_ok", True))
+
+    dp_setup_rounds = [r for r in all_rounds if "dp_setup_time_s" in r]
+    avg_dp_setup = (sum(r["dp_setup_time_s"] for r in dp_setup_rounds) / len(dp_setup_rounds)
+                     if dp_setup_rounds else None)
+
     real_mem_limits = {c["config"]["client_id"]: c["config"]["real_cgroup_mem_limit_mb"]
                         for c in run["clients"]}
     real_cpu_limits = {c["config"]["client_id"]: c["config"]["real_cgroup_cpu_limit_cores"]
@@ -50,10 +60,22 @@ def summarize(run):
         "total_params": run["clients"][0]["config"]["total_params"],
         "num_features": run["clients"][0]["config"]["num_features"],
         "avg_train_time_s_per_round": round(avg_train_time, 4),
+        "avg_dp_setup_time_s_per_round": round(avg_dp_setup, 4) if avg_dp_setup is not None else None,
+        "avg_serialize_time_s": round(avg_serialize, 5),
+        "avg_communication_send_time_s": round(avg_send, 5),
+        "avg_payload_bytes": round(avg_payload_bytes, 1),
+        "communication_failures": comm_failures,
         "real_cgroup_mem_limit_mb": real_mem_limits,
         "real_cgroup_cpu_limit_cores": real_cpu_limits,
         "client_peak_ram_mb": peak_ram,
     }
+
+    comm_summary_path = os.path.join("results", run["tag"], "server_communication_summary.json")
+    if os.path.exists(comm_summary_path):
+        with open(comm_summary_path) as f:
+            comm = json.load(f)
+        summary["server_avg_recv_time_s"] = comm.get("avg_recv_time_s")
+        summary["server_total_bytes_received"] = comm.get("total_bytes_received")
 
     if mode.startswith("he_") and run["server"]:
         he = run["server"].get("he_aggregation", {})
@@ -108,16 +130,24 @@ def main():
     with open(out_path, "w") as f:
         json.dump(summaries, f, indent=2)
 
-    print(f"\n{'tag':<35} {'train_s/rnd':>12} {'client_peak_MB':>16} {'notes'}")
+    print(f"\n{'tag':<35} {'train_s/rnd':>12} {'send_s':>9} {'payload_B':>10} {'client_peak_MB':>16} {'notes'}")
     for s in summaries:
         peak = s["client_peak_ram_mb"]
         peak_str = "/".join(str(v) for v in peak.values())
         extra = ""
         if "server_avg_aggregate_s" in s:
             extra += f" agg={s['server_avg_aggregate_s']}s dec={s['server_avg_decrypt_s']}s"
+        if "server_avg_zkp_verify_plus_threshold_s" in s:
+            extra += f" zkp_srv={s['server_avg_zkp_verify_plus_threshold_s']}s"
         if "server_avg_adaptive_krum_s" in s:
             extra += f" krum={s['server_avg_adaptive_krum_s']}s"
-        print(f"{s['tag']:<35} {s['avg_train_time_s_per_round']:>12} {peak_str:>16} {extra}")
+        if s.get("avg_dp_setup_time_s_per_round") is not None:
+            extra += f" dp_setup={s['avg_dp_setup_time_s_per_round']}s"
+        if s["communication_failures"]:
+            extra += f" [{s['communication_failures']} comm failures!]"
+        print(f"{s['tag']:<35} {s['avg_train_time_s_per_round']:>12} "
+              f"{s['avg_communication_send_time_s']:>9} {s['avg_payload_bytes']:>10.0f} "
+              f"{peak_str:>16} {extra}")
 
     print(f"\nWritten: {out_path}")
 

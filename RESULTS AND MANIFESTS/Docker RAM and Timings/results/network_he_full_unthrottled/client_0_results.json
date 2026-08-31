@@ -1,0 +1,61 @@
+{
+  "config": {
+    "client_id": 0,
+    "mode": "he_full",
+    "model_type": "network",
+    "num_features": 37,
+    "num_classes": 8,
+    "total_params": 79688,
+    "train_rows": 31332,
+    "test_rows": 7834,
+    "epochs_per_round": 2,
+    "rounds": 3,
+    "batch_size": 256,
+    "he_poly_degree": 4096,
+    "dp_epsilon_target": null,
+    "dp_max_grad_norm": null,
+    "real_cgroup_mem_limit_mb": 2048.0,
+    "real_cgroup_cpu_limit_cores": 1.0
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "train_time_s": 133.2797,
+      "he_encrypt_time_s": 0.294,
+      "n_chunks": 40,
+      "pct_encrypted": 100.0,
+      "serialize_time_s": 0.03036,
+      "communication_send_time_s": 0.06065,
+      "payload_bytes": 4562330,
+      "communication_ok": true,
+      "round_wall_time_s": 134.05
+    },
+    {
+      "round": 2,
+      "train_time_s": 132.3062,
+      "he_encrypt_time_s": 0.4178,
+      "n_chunks": 40,
+      "pct_encrypted": 100.0,
+      "serialize_time_s": 0.03181,
+      "communication_send_time_s": 0.03575,
+      "payload_bytes": 4563330,
+      "communication_ok": true,
+      "round_wall_time_s": 132.9805
+    },
+    {
+      "round": 3,
+      "train_time_s": 139.3151,
+      "he_encrypt_time_s": 0.2918,
+      "n_chunks": 40,
+      "pct_encrypted": 100.0,
+      "serialize_time_s": 0.02715,
+      "communication_send_time_s": 0.03917,
+      "payload_bytes": 4562874,
+      "communication_ok": true,
+      "round_wall_time_s": 140.0311
+    }
+  ],
+  "ram_peak_mb": 401.1,
+  "ram_avg_mb": 379.3,
+  "ram_n_samples": 1571
+}

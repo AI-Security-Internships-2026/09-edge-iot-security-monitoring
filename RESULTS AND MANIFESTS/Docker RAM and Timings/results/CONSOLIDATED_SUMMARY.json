@@ -1,0 +1,335 @@
+[
+  {
+    "tag": "network_baseline_throttled",
+    "mode": "baseline",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 465.2715,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.21767,
+    "avg_communication_send_time_s": 0.17406,
+    "avg_payload_bytes": 1755777.0,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 0.5,
+      "1": 0.5
+    },
+    "client_peak_ram_mb": {
+      "0": 385.9,
+      "1": 382.4
+    },
+    "server_avg_recv_time_s": 0.1541,
+    "server_total_bytes_received": 10534662,
+    "server_avg_adaptive_krum_s": 0.06178,
+    "server_peak_ram_mb": 63.1,
+    "krum_note": "Timing at n=SYNTHETIC_N_CLIENTS via jittered synthetic copies of real per-client trained params -- see module docstring. NOT an accuracy/detection result."
+  },
+  {
+    "tag": "network_baseline_unthrottled",
+    "mode": "baseline",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 118.7487,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.12271,
+    "avg_communication_send_time_s": 0.08415,
+    "avg_payload_bytes": 1755723.5,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 1.0,
+      "1": 1.0
+    },
+    "client_peak_ram_mb": {
+      "0": 382.9,
+      "1": 382.4
+    },
+    "server_avg_recv_time_s": 0.07103,
+    "server_total_bytes_received": 10534341,
+    "server_avg_adaptive_krum_s": 0.02354,
+    "server_peak_ram_mb": 63.3,
+    "krum_note": "Timing at n=SYNTHETIC_N_CLIENTS via jittered synthetic copies of real per-client trained params -- see module docstring. NOT an accuracy/detection result."
+  },
+  {
+    "tag": "network_dp_test",
+    "mode": "dp",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 1010.678,
+    "avg_dp_setup_time_s_per_round": 1.1724,
+    "avg_serialize_time_s": 0.21404,
+    "avg_communication_send_time_s": 0.23246,
+    "avg_payload_bytes": 2828327.7,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 1.0
+    },
+    "client_peak_ram_mb": {
+      "0": 788.5
+    },
+    "dp_epsilon_achieved_per_round": [
+      2.9962229977664316,
+      2.9962229977664316,
+      2.9962229977664316
+    ]
+  },
+  {
+    "tag": "network_dp_throttled",
+    "mode": "dp",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 2379.1961,
+    "avg_dp_setup_time_s_per_round": 2.502,
+    "avg_serialize_time_s": 0.39409,
+    "avg_communication_send_time_s": 0.49773,
+    "avg_payload_bytes": 2828776.0,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 0.5,
+      "1": 0.5
+    },
+    "client_peak_ram_mb": {
+      "0": 798.8,
+      "1": 792.6
+    },
+    "server_avg_recv_time_s": 0.34218,
+    "server_total_bytes_received": 16972656,
+    "server_avg_adaptive_krum_s": 0.08809,
+    "server_peak_ram_mb": 76.7,
+    "krum_note": "Timing at n=SYNTHETIC_N_CLIENTS via jittered synthetic copies of real per-client trained params -- see module docstring. NOT an accuracy/detection result.",
+    "dp_epsilon_achieved_per_round": [
+      2.9962229977664316,
+      2.9962229977664316,
+      2.9962229977664316,
+      2.9947667788941494,
+      2.9947667788941494,
+      2.9947667788941494
+    ]
+  },
+  {
+    "tag": "network_dp_unthrottled",
+    "mode": "dp",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 682.5402,
+    "avg_dp_setup_time_s_per_round": 1.1968,
+    "avg_serialize_time_s": 0.2008,
+    "avg_communication_send_time_s": 0.13267,
+    "avg_payload_bytes": 2828816.0,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 1.0,
+      "1": 1.0
+    },
+    "client_peak_ram_mb": {
+      "0": 799.4,
+      "1": 784.1
+    },
+    "server_avg_recv_time_s": 0.12,
+    "server_total_bytes_received": 16972896,
+    "server_avg_adaptive_krum_s": 0.03418,
+    "server_peak_ram_mb": 76.7,
+    "krum_note": "Timing at n=SYNTHETIC_N_CLIENTS via jittered synthetic copies of real per-client trained params -- see module docstring. NOT an accuracy/detection result.",
+    "dp_epsilon_achieved_per_round": [
+      2.9962229977664316,
+      2.9962229977664316,
+      2.9962229977664316,
+      2.9947667788941494,
+      2.9947667788941494,
+      2.9947667788941494
+    ]
+  },
+  {
+    "tag": "network_he_full_throttled",
+    "mode": "he_full",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 412.0758,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.0339,
+    "avg_communication_send_time_s": 0.08223,
+    "avg_payload_bytes": 4563279.3,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 0.5,
+      "1": 0.5
+    },
+    "client_peak_ram_mb": {
+      "0": 399.5,
+      "1": 399.5
+    },
+    "server_avg_recv_time_s": 0.05548,
+    "server_total_bytes_received": 27379676,
+    "server_avg_aggregate_s": 0.25567,
+    "server_avg_decrypt_s": 0.04482,
+    "server_peak_ram_mb": 72.9,
+    "client_avg_he_encrypt_s": 0.59403
+  },
+  {
+    "tag": "network_he_full_unthrottled",
+    "mode": "he_full",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 108.6063,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.03137,
+    "avg_communication_send_time_s": 0.04394,
+    "avg_payload_bytes": 4562887.3,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 1.0,
+      "1": 1.0
+    },
+    "client_peak_ram_mb": {
+      "0": 401.1,
+      "1": 396.2
+    },
+    "server_avg_recv_time_s": 0.03298,
+    "server_total_bytes_received": 27377324,
+    "server_avg_aggregate_s": 0.11675,
+    "server_avg_decrypt_s": 0.02738,
+    "server_peak_ram_mb": 72.9,
+    "client_avg_he_encrypt_s": 0.33612
+  },
+  {
+    "tag": "network_he_partial_throttled",
+    "mode": "he_partial",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 315.8417,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.03128,
+    "avg_communication_send_time_s": 0.01794,
+    "avg_payload_bytes": 366983.0,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 0.5,
+      "1": 0.5
+    },
+    "client_peak_ram_mb": {
+      "0": 392.6,
+      "1": 391.7
+    },
+    "server_avg_recv_time_s": 0.00941,
+    "server_total_bytes_received": 2201898
+  },
+  {
+    "tag": "network_he_partial_unthrottled",
+    "mode": "he_partial",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 113.5561,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.02156,
+    "avg_communication_send_time_s": 0.0104,
+    "avg_payload_bytes": 367201.8,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 1.0,
+      "1": 1.0
+    },
+    "client_peak_ram_mb": {
+      "0": 391.6,
+      "1": 392.4
+    },
+    "server_avg_recv_time_s": 0.00258,
+    "server_total_bytes_received": 2203211
+  },
+  {
+    "tag": "network_he_partial_zkp_throttled",
+    "mode": "he_partial_zkp",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 457.5288,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.0352,
+    "avg_communication_send_time_s": 0.01792,
+    "avg_payload_bytes": 367430.7,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 0.5,
+      "1": 0.5
+    },
+    "client_peak_ram_mb": {
+      "0": 391.8,
+      "1": 392.6
+    },
+    "server_avg_recv_time_s": 0.00285,
+    "server_total_bytes_received": 2204584
+  },
+  {
+    "tag": "network_he_partial_zkp_unthrottled",
+    "mode": "he_partial_zkp",
+    "model_type": "network",
+    "total_params": 79688,
+    "num_features": 37,
+    "avg_train_time_s_per_round": 119.7122,
+    "avg_dp_setup_time_s_per_round": null,
+    "avg_serialize_time_s": 0.02245,
+    "avg_communication_send_time_s": 0.01069,
+    "avg_payload_bytes": 367491.3,
+    "communication_failures": 0,
+    "real_cgroup_mem_limit_mb": {
+      "0": 2048.0,
+      "1": 2048.0
+    },
+    "real_cgroup_cpu_limit_cores": {
+      "0": 1.0,
+      "1": 1.0
+    },
+    "client_peak_ram_mb": {
+      "0": 392.4,
+      "1": 389.0
+    },
+    "server_avg_recv_time_s": 0.00248,
+    "server_total_bytes_received": 2204948
+  }
+]

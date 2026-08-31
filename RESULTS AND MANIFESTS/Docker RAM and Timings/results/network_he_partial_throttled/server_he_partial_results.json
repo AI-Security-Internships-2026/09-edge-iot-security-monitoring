@@ -1,0 +1,30 @@
+{
+  "mode": "he_partial",
+  "config": {
+    "num_real_clients": 2,
+    "synthetic_n_clients": 10,
+    "rounds": 3,
+    "he_poly_degree": 4096
+  },
+  "he_aggregation": {
+    "per_round": [
+      {
+        "round": 1,
+        "aggregate": 0.07151,
+        "decrypt": 0.0023
+      },
+      {
+        "round": 2,
+        "aggregate": 0.01662,
+        "decrypt": 0.00194
+      },
+      {
+        "round": 3,
+        "aggregate": 0.01382,
+        "decrypt": 0.00176
+      }
+    ],
+    "ram_peak_mb": 53.9,
+    "ram_avg_mb": 44.1
+  }
+}

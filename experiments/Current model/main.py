@@ -338,9 +338,39 @@ elif ABLATION_MODE == "krum_dp_sweep":
                                   # this mode at all (USE_HE/HYBRID/ZKP are
                                   # all False here).
 
+elif ABLATION_MODE == "exp2_unmitigated":
+    # Experiment 2's HEADLINE run: classifier-head-only attack against
+    # the HE+Krum hybrid with the Layer-2 guard turned OFF. This is the
+    # run that demonstrates the blind spot (Krum scores only the
+    # plaintext bulk slice; the encrypted head is aggregated blind).
+    # USE_HEAD_NORM_GUARD=False here is the ENTIRE point of this mode --
+    # do not flip it on and call the result "unmitigated".
+    USE_HE_KRUM_HYBRID = True
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_ZKP = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = True
+    USE_HEAD_NORM_GUARD = False
+
+elif ABLATION_MODE == "exp2_mitigated":
+    # Same attack, same hybrid pipeline, Layer-2 ciphertext-bound HMAC
+    # head-norm guard turned ON (ZKP Part 2 -- verify_head_norm_proof +
+    # mad_threshold_head_norms, the SAME mechanism pure_zkp uses, not a
+    # bare norm check). This is the mitigation-confirmation run, paired
+    # with exp2_unmitigated above -- run both with the SAME --byzantine
+    # selection so they're a real before/after pair, not just two
+    # differently-configured runs.
+    USE_HE_KRUM_HYBRID = True
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_ZKP = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = True
+    USE_HEAD_NORM_GUARD = True
+
 else:
     raise ValueError(f"Unknown ABLATION_MODE={ABLATION_MODE!r} -- must be "
-                     f"'pure_dp', 'pure_he', 'pure_zkp', or 'krum_dp_sweep'.")
+                     f"'pure_dp', 'pure_he', 'pure_zkp', 'krum_dp_sweep', "
+                     f"'exp2_unmitigated', or 'exp2_mitigated'.")
 
 # UNCHANGED, deliberately -- USE_HE + USE_ADAPTIVE_KRUM (or USE_KRUM)
 # together is still forbidden. USE_HE_KRUM_HYBRID is the correct,
@@ -365,8 +395,19 @@ HE_POLY_DEGREE = 8192
 
 # Head-norm guard config -- used by USE_HE_KRUM_HYBRID (as a pre-filter
 # before Krum) and by USE_ZKP (as the ENTIRE defence, no Krum). See
-# defences/zkp.py Part 2. Unused (harmless) under krum_dp_swee
-USE_HEAD_NORM_GUARD = True
+# defences/zkp.py Part 2. Unused (harmless) under krum_dp_sweep/pure_dp/
+# pure_he.
+#
+# FIX (this revision): previously this was an UNCONDITIONAL `= True`,
+# which silently clobbered exp2_unmitigated's explicit
+# `USE_HEAD_NORM_GUARD = False` set above in the ABLATION_MODE block --
+# the exact "not reset per-mode" fragility already flagged as an open
+# item. Only fall back to True if the mode above didn't already set it
+# (pure_zkp doesn't reference this flag at all -- its branch always runs
+# the guard unconditionally -- so this default only actually matters for
+# any future mode that omits the assignment).
+if "USE_HEAD_NORM_GUARD" not in globals():
+    USE_HEAD_NORM_GUARD = True
 HEAD_NORM_GUARD_K = _args.krum_k if _args.krum_k is not None else 2.5
 HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 

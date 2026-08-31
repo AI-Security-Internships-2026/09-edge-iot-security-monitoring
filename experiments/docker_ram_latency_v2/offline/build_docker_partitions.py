@@ -63,6 +63,14 @@ from sklearn.feature_selection import VarianceThreshold
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import data_loader as dl  # noqa: E402
 
+# data_loader.py's BASE_DIR is computed by walking up 3 directories from
+# its own file location, which assumes it lives directly in
+# experiments/Current model/ (2 levels below repo root). Our copy lives
+# one level deeper (inside offline/), which throws that off by one
+# level. Rather than depend on exact directory nesting, allow an
+# explicit override via --csv-path or the CSV_PATH env var.
+_csv_override = os.environ.get("CSV_PATH")
+
 
 def stratified_subsample(df, y, target_rows, seed=42):
     """Stratified subsample preserving class proportions of the
@@ -176,7 +184,24 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", type=str, default=None,
                      help="Output dir (default: ../partitions/<model>/ next to this script)")
+    ap.add_argument("--csv-path", type=str, default=None,
+                     help="Explicit path to DNN-EdgeIIoT-dataset.csv, overriding "
+                          "data_loader.py's auto-computed BASE_DIR path. Also settable "
+                          "via the CSV_PATH env var. Use this if you get a "
+                          "FileNotFoundError from the default path.")
     args = ap.parse_args()
+
+    csv_path = args.csv_path or _csv_override
+    if csv_path:
+        if not os.path.exists(csv_path):
+            print(f"ERROR: --csv-path/CSV_PATH given but file not found: {csv_path}")
+            sys.exit(1)
+        dl.DATASET_PATH = csv_path
+        print(f"Using explicit CSV path: {csv_path}")
+    elif not os.path.exists(dl.DATASET_PATH):
+        print(f"ERROR: dataset not found at the auto-computed path:\n  {dl.DATASET_PATH}")
+        print("Pass --csv-path \"<full path to DNN-EdgeIIoT-dataset.csv>\" to override.")
+        sys.exit(1)
 
     out_dir = args.out or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "partitions", args.model

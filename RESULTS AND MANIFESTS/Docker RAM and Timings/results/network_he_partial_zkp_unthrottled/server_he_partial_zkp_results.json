@@ -1,0 +1,36 @@
+{
+  "mode": "he_partial_zkp",
+  "config": {
+    "num_real_clients": 2,
+    "synthetic_n_clients": 10,
+    "rounds": 3,
+    "he_poly_degree": 4096
+  },
+  "he_aggregation": {
+    "per_round": [
+      {
+        "round": 1,
+        "aggregate": 0.01337,
+        "decrypt": 0.00177,
+        "zkp_verify": 0.00114,
+        "zkp_mad_threshold": 0.03281
+      },
+      {
+        "round": 2,
+        "aggregate": 0.01269,
+        "decrypt": 0.00162,
+        "zkp_verify": 0.00116,
+        "zkp_mad_threshold": 0.00027
+      },
+      {
+        "round": 3,
+        "aggregate": 0.01172,
+        "decrypt": 0.00169,
+        "zkp_verify": 0.00128,
+        "zkp_mad_threshold": 0.00025
+      }
+    ],
+    "ram_peak_mb": 60.6,
+    "ram_avg_mb": 50.1
+  }
+}

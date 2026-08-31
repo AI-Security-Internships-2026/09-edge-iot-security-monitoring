@@ -1,10 +1,15 @@
+# CPU-only throttle override (matches the old pure_he "constrained IoT
+# gateway" condition: half a core). RAM stays at the base file's 2g in
+# both profiles now -- the point of the 2GB ceiling is "don't crash",
+# not "simulate a tight IoT memory budget", so it's intentionally NOT
+# varied between throttled/unthrottled anymore. If you want a genuinely
+# tight memory ceiling back, override mem_limit here too.
 services:
   client0:
-    mem_limit: 400m
     cpus: 0.5
   client1:
-    mem_limit: 400m
     cpus: 0.5
   server:
-    mem_limit: 400m
+    cpus: 0.5
+  aggregator:
     cpus: 0.5

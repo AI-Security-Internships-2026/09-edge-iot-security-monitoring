@@ -13,6 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements-container.txt .
 RUN pip install --no-cache-dir -r requirements-container.txt
 
+# Without this, Python fully buffers stdout when it's not a real TTY
+# (which it isn't under Docker's log capture) -- print() output would
+# silently sit in a buffer instead of reaching `docker compose logs`
+# until the process exits or the buffer fills. This makes every print
+# show up immediately, which matters a lot for a script whose whole
+# point is timing/progress visibility.
+ENV PYTHONUNBUFFERED=1
+
 COPY src/ /app/
 
 ENTRYPOINT ["python"]

@@ -86,6 +86,14 @@ def run_he_aggregation():
             else:  # he_partial / he_partial_zkp
                 he_context = he.create_server_context(poly_modulus_degree=HE_POLY_DEGREE)
                 accepted = [a["enc"] for a in arts]
+                # "bulk" was converted to plain nested lists on the client
+                # side before JSON serialization (see client_runner.py's
+                # matching fix) -- convert back to real numpy arrays here,
+                # since he_local.aggregate_encrypted()'s plaintext
+                # weighted-average arithmetic (array * float, .astype())
+                # requires actual ndarrays, not lists.
+                for c in accepted:
+                    c["bulk"] = [np.array(b, dtype=np.float32) for b in c["bulk"]]
                 with timer.stage("aggregate"):
                     agg = he_local.aggregate_encrypted(accepted, weights, he_context)
                 with timer.stage("decrypt"):

@@ -1,0 +1,64 @@
+{
+  "config": {
+    "client_id": 1,
+    "mode": "dp",
+    "model_type": "network",
+    "num_features": 37,
+    "num_classes": 8,
+    "total_params": 79688,
+    "train_rows": 26566,
+    "test_rows": 6642,
+    "epochs_per_round": 2,
+    "rounds": 3,
+    "batch_size": 512,
+    "he_poly_degree": null,
+    "dp_epsilon_target": 3.0,
+    "dp_max_grad_norm": 1.0,
+    "real_cgroup_mem_limit_mb": 2048.0,
+    "real_cgroup_cpu_limit_cores": 1.0
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "dp_setup_time_s": 1.2232,
+      "train_time_s": 686.396,
+      "dp_epsilon_target": 3.0,
+      "dp_epsilon_achieved": 2.9947667788941494,
+      "dp_noise_multiplier": 0.8221435546875,
+      "serialize_time_s": 0.19724,
+      "communication_send_time_s": 0.14772,
+      "payload_bytes": 2829704,
+      "communication_ok": true,
+      "round_wall_time_s": 690.5665
+    },
+    {
+      "round": 2,
+      "dp_setup_time_s": 1.364,
+      "train_time_s": 677.6404,
+      "dp_epsilon_target": 3.0,
+      "dp_epsilon_achieved": 2.9947667788941494,
+      "dp_noise_multiplier": 0.8221435546875,
+      "serialize_time_s": 0.19752,
+      "communication_send_time_s": 0.12591,
+      "payload_bytes": 2829193,
+      "communication_ok": true,
+      "round_wall_time_s": 681.1296
+    },
+    {
+      "round": 3,
+      "dp_setup_time_s": 1.3832,
+      "train_time_s": 665.1348,
+      "dp_epsilon_target": 3.0,
+      "dp_epsilon_achieved": 2.9947667788941494,
+      "dp_noise_multiplier": 0.8221435546875,
+      "serialize_time_s": 0.19148,
+      "communication_send_time_s": 0.11822,
+      "payload_bytes": 2828752,
+      "communication_ok": true,
+      "round_wall_time_s": 668.1882
+    }
+  ],
+  "ram_peak_mb": 784.1,
+  "ram_avg_mb": 660.8,
+  "ram_n_samples": 7807
+}

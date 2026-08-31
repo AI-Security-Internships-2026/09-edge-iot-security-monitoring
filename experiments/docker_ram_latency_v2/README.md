@@ -16,24 +16,42 @@ after building.
 
 ## What this measures
 
-| Mode | What it times |
-|---|---|
-| `baseline` | Local training only (control condition) |
-| `he_full` | Local training + full-model CKKS encryption + server aggregate/decrypt |
-| `he_partial` | Local training + classifier-head-only CKKS encryption + server aggregate/decrypt |
-| `he_partial_zkp` | Same as `he_partial`, **plus** the ciphertext-bound head-norm proof (client-side) and its server-side verify + MAD-threshold (isolated as separate stages, so you can see the ZKP guard's added cost on top of partial HE alone) |
-| `dp` | Local training wrapped in Opacus DP-SGD (target ε=3.0, δ=1e-5, max_grad_norm=1.0, matching the old `pure_dp` Docker test's own config) |
+Every round, for every mode, captures **all** of: training time, the
+mode-specific mechanism's time, communication time, and (in a separate
+server-side pass) aggregation time. Nothing is measured in isolation.
+
+| Mode | Client-side per round | Server-side (separate pass) |
+|---|---|---|
+| `baseline` | train | Krum timing (see scope note below) |
+| `he_full` | train, full-model CKKS encrypt | HE aggregate + decrypt |
+| `he_partial` | train, classifier-head-only CKKS encrypt | HE aggregate + decrypt |
+| `he_partial_zkp` | train, partial encrypt, ciphertext-bound head-norm proof (isolated as its own stage) | HE aggregate + decrypt, ZKP verify + MAD threshold |
+| `dp` | Opacus DP-SGD, split into `dp_setup` (PrivacyEngine calibration) and `dp_train` (the actual per-sample-gradient loop) as separate stages | Krum timing |
+
+**Communication is measured on every round of every mode**, via a real
+network round trip — not a shared-volume file write. A `server_daemon`
+container runs concurrently with both clients for the whole run,
+listening on the Docker compose network; each client serializes its
+round's artifact (payload = the actual ciphertext dict for `he_*`
+modes, or the plaintext param list for `baseline`/`dp`), times the
+serialization, then POSTs it and times the full request/response round
+trip. Recorded per round: `serialize_time_s`, `communication_send_time_s`,
+`payload_bytes`. The daemon separately logs its own receive-side timing
+(`server_communication_summary.json`) so you can compare client-perceived
+vs. server-perceived communication cost if they diverge.
 
 Every mode also runs at two resource profiles:
-- **unthrottled**: 700MB / 1.0 vCPU (matches the old `pure_he` unthrottled condition)
-- **throttled**: 400MB / 0.5 vCPU (matches the old `pure_he` "constrained IoT gateway" condition)
+- **unthrottled**: 2GB RAM / 1.0 vCPU
+- **throttled**: 2GB RAM / 0.5 vCPU (matches the old `pure_he` "constrained IoT gateway" CPU condition)
 
-This gives you a consistent grid across all five mechanisms at both
-resource levels — the old runs used different, ad hoc limits per test
-(500m for He-Full/Partial, a possibly-unenforced 256MB for `pure_dp`,
-700MB/400MB for the throttle test). Standardizing here is a deliberate
-improvement, not a hidden deviation — flagging it so you can decide if
-you want it.
+**RAM is capped at 2GB in every profile, not varied.** This is
+deliberately a "don't crash, just measure peak/avg" ceiling rather than
+a tight simulated constraint — the old ablations used inconsistent,
+sometimes-too-tight limits (500m, a possibly-unenforced 256MB, 400MB)
+that risked OOM kills mid-run. Only CPU is throttled between the two
+profiles now; RAM is generous everywhere and `ram_peak_mb`/`ram_avg_mb`
+are reported for every run so you can see actual usage against real
+headroom instead of against an artificially tight ceiling.
 
 **Krum timing** (`baseline`/`dp` modes' server step) and the **ZKP MAD
 threshold** (`he_partial_zkp` mode's server step) both need more than 2
@@ -99,20 +117,69 @@ run. Don't assume 39/90 or any prior figure; read it from here.
 ### 2. Docker: run the full suite
 
 ```bash
-docker compose build
 ./run_suite.sh network        # or: ./run_suite.sh application
 ```
+(Windows: `powershell -ExecutionPolicy Bypass -File .\run_suite.ps1 network`)
 
-This runs all 5 modes × 2 resource profiles (10 runs total) for the
-given model, writing to `results/<model>_<mode>_<profile>/`.
+Builds the images once, then runs all 5 modes × 2 resource profiles
+(10 runs total) for the given model. Each run has two phases:
+1. `server` (communication daemon) comes up first and waits until
+   healthy. `client0` and `client1` then run as two independent
+   one-shot jobs, concurrently. **They are deliberately NOT run via
+   `docker compose up --abort-on-container-exit`** — client0 and
+   client1 almost never finish at the same time (different partition
+   sizes → different training time per round), and that flag kills
+   every other service the instant the *first* one exits, silently
+   truncating whichever client finishes second mid-run. Running them
+   as independent `run --rm` jobs means neither can kill the other.
+   The daemon self-exits once it's received every expected submission.
+2. The `aggregator` service runs once, reading the artifacts both
+   clients just wrote to the shared volume, timing HE aggregate/
+   decrypt, ZKP verify/threshold, or Krum depending on mode.
 
-### 3. Consolidate
+Results land in `results/<model>_<mode>_<profile>/`, including
+`server_communication_summary.json` (daemon's receive-side view) and
+`server_<mode>_results.json` (aggregation timing).
+
+If you ran an earlier version of this suite and hit
+`FileNotFoundError: Missing artifact: .../client_0_round_N_artifact.json`
+from the aggregator, that was this exact bug — delete `results/` and
+rerun; the fix is in `run_suite.sh`/`run_suite.ps1` now.
+
+### 3. Verify BEFORE exporting/zipping anything
+
+```bash
+python verify_results.py results
+```
+
+**Run this before you zip or upload any results folder, every time.**
+It checks each `results/<tag>/` folder's own internal `mode`/CPU config
+against what the folder name claims, flags any run that's missing
+rounds (a client that crashed before writing its final summary),
+flags any run missing its server-side aggregation file, and — this one
+matters — hashes every folder's `client_0_results.json` and flags any
+two folders that are byte-identical, since that means one of them is a
+duplicate export, not a second real run. Fix or rerun anything flagged
+here before it goes anywhere near a paper table.
+
+You can target just the specific mode/profile combos that need
+rerunning instead of the whole matrix:
+```bash
+./run_suite.sh network dp throttled           # just DP, throttled only
+./run_suite.sh network he_partial,he_partial_zkp   # both profiles, both modes
+```
+(Windows: `.\run_suite.ps1 -ModelType network -Modes dp -Profiles throttled`)
+
+### 4. Consolidate
 
 ```bash
 python consolidate_results.py results
 ```
 
 Writes `results/CONSOLIDATED_SUMMARY.json` and prints a summary table.
+Only run this after `verify_results.py` reports everything clean —
+consolidating over a mismatched or duplicated folder will silently
+produce a wrong-but-plausible-looking summary.
 
 ## Files
 
@@ -127,15 +194,18 @@ src/                            <- goes into the container image
   he_aggregation.py            <- unmodified copy
   he_local.py                  <- import paths patched for flat container layout
   mem_profiler.py              <- NEW: RAM sampler, stage timer, real cgroup-limit reader
-  client_runner.py             <- NEW: per-client test driver
-  server_aggregate.py          <- NEW: HE aggregate/decrypt, ZKP verify/threshold, Krum timing
+  client_runner.py             <- NEW: per-client test driver (train, mechanism, communication)
+  server_daemon.py             <- NEW: concurrent communication-timing daemon
+  server_aggregate.py          <- NEW: one-shot aggregation timing (HE/ZKP/Krum)
 Dockerfile
-docker-compose.yml              <- unthrottled base (700MB/1.0 vCPU)
-docker-compose.throttled.yml    <- throttled override (400MB/0.5 vCPU)
+docker-compose.yml              <- unthrottled base (2GB/1.0 vCPU); services: server, client0, client1, aggregator
+docker-compose.throttled.yml    <- CPU-only override (0.5 vCPU, RAM stays 2GB)
 requirements-container.txt      <- torch(cpu)/tenseal/opacus/numpy only
 requirements-offline.txt        <- pandas/sklearn/numpy, host-side only
-run_suite.sh                    <- runs the full mode x profile matrix
+run_suite.sh                    <- bash orchestrator (Linux/macOS/WSL/Git Bash)
+run_suite.ps1                   <- PowerShell orchestrator, same logic (native Windows)
 consolidate_results.py          <- collects results into one summary
+verify_results.py               <- run BEFORE zipping/uploading: catches mislabeled/duplicate/incomplete folders
 ```
 
 ## What this suite deliberately does NOT do

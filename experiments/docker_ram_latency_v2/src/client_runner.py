@@ -48,6 +48,17 @@ ENV VARS
                      Docker test's own documented config, not the main
                      FL loop's)
   DP_BATCH_SIZE     default 512
+  SERVER_PORT       default 8080 -- server_daemon.py's listen port
+  SEND_TIMEOUT_S    default 60 -- network send timeout; a failed/timed-
+                     out send is logged and skipped, never crashes the run
+
+EVERY round records ALL of: train_time_s (dp mode also splits out
+dp_setup_time_s separately), the mode-specific mechanism time
+(he_encrypt_time_s / zkp_proof_time_s where applicable), serialize_time_s,
+communication_send_time_s, payload_bytes, and round_wall_time_s -- i.e.
+training, encryption, DP overhead, ZKP, AND communication are all
+captured on every round, for every mode. See server_aggregate.py for
+the corresponding server-side aggregate/decrypt/Krum/ZKP-verify timings.
 """
 
 import json
@@ -82,12 +93,61 @@ DP_EPSILON = float(os.environ.get("DP_EPSILON", 3.0))
 DP_DELTA = float(os.environ.get("DP_DELTA", 1e-5))
 DP_MAX_GRAD_NORM = float(os.environ.get("DP_MAX_GRAD_NORM", 1.0))
 DP_BATCH_SIZE = int(os.environ.get("DP_BATCH_SIZE", 512))
+SERVER_PORT = int(os.environ.get("SERVER_PORT", 8080))
+SEND_TIMEOUT_S = float(os.environ.get("SEND_TIMEOUT_S", 60))
 
 VALID_MODES = {"baseline", "he_full", "he_partial", "he_partial_zkp", "dp"}
 if MODE not in VALID_MODES:
     raise ValueError(f"MODE={MODE!r} must be one of {VALID_MODES}")
 
 DP_SAFE = (MODE == "dp")
+
+
+def send_artifact_over_network(artifact_obj, round_idx):
+    """
+    Sends this round's artifact (ciphertext dict for he_* modes, plain
+    param list for baseline/dp) to the server_daemon service over real
+    Docker-network HTTP, so "communication" is an actual measured
+    network cost, not a shared-volume file write. Returns a dict with:
+      serialize_time_s -- json.dumps() cost for this payload
+      send_time_s       -- client-perceived round trip (request sent ->
+                            response received), i.e. the real network
+                            transfer + server receive/ack cost
+      payload_bytes     -- size of the serialized payload actually sent
+    Failures are caught and reported rather than crashing the run --
+    communication timing is a nice-to-have measurement, not something
+    that should take down an otherwise-successful training/encryption
+    run if the daemon isn't reachable for some reason.
+    """
+    import urllib.request
+    import urllib.error
+
+    t0 = time.time()
+    body = json.dumps(artifact_obj, default=str).encode("utf-8")
+    serialize_time_s = time.time() - t0
+
+    url = f"http://server:{SERVER_PORT}/submit?client_id={CLIENT_ID}&round={round_idx}"
+    req = urllib.request.Request(url, data=body, method="POST",
+                                  headers={"Content-Type": "application/json"})
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=SEND_TIMEOUT_S) as resp:
+            resp.read()
+        send_time_s = time.time() - t0
+        ok = True
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        send_time_s = time.time() - t0
+        ok = False
+        print(f"[client {CLIENT_ID}] WARNING: communication send failed "
+              f"(round {round_idx}): {e} -- continuing without this "
+              f"round's communication timing.")
+
+    return {
+        "serialize_time_s": round(serialize_time_s, 5),
+        "send_time_s": round(send_time_s, 5),
+        "payload_bytes": len(body),
+        "communication_ok": ok,
+    }
 
 
 def load_partition():
@@ -124,12 +184,24 @@ def plain_train(model, X_train, y_train, epochs, lr):
     return model
 
 
-def dp_train(model, X_train, y_train, epochs):
+def dp_train(model, X_train, y_train, epochs, timer):
     """Opacus DP-SGD training -- mirrors main.py's pattern (PrivacyEngine,
     make_private_with_epsilon), matching the old pure_dp Docker test's
     own config values (target_epsilon=3.0, max_grad_norm=1.0,
     dp_batch_size=512) rather than the main pipeline's (max_grad_norm=1.5).
-    Returns (model, achieved_epsilon, noise_multiplier)."""
+
+    Timed as TWO separate stages on the given StageTimer, since
+    "DP-SGD overhead" is really two different costs worth seeing
+    separately:
+      dp_setup  -- PrivacyEngine.make_private_with_epsilon(): noise
+                   multiplier search/calibration + wrapping the model/
+                   optimizer/loader for per-sample gradients. A one-time
+                   per-round cost, not proportional to epochs.
+      dp_train  -- the actual per-sample-gradient training loop (the
+                   part that's slower than plain training per batch).
+
+    Returns (model, achieved_epsilon, noise_multiplier).
+    """
     from opacus import PrivacyEngine
 
     criterion = nn.CrossEntropyLoss()
@@ -140,27 +212,40 @@ def dp_train(model, X_train, y_train, epochs):
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     privacy_engine = PrivacyEngine(accountant="rdp")
 
-    model, optimizer, loader = privacy_engine.make_private_with_epsilon(
-        module=model,
-        optimizer=optimizer,
-        data_loader=loader,
-        target_epsilon=DP_EPSILON,
-        target_delta=DP_DELTA,
-        epochs=epochs,
-        max_grad_norm=DP_MAX_GRAD_NORM,
-    )
+    with timer.stage("dp_setup"):
+        model, optimizer, loader = privacy_engine.make_private_with_epsilon(
+            module=model,
+            optimizer=optimizer,
+            data_loader=loader,
+            target_epsilon=DP_EPSILON,
+            target_delta=DP_DELTA,
+            epochs=epochs,
+            max_grad_norm=DP_MAX_GRAD_NORM,
+        )
 
-    model.train()
-    for _ in range(epochs):
-        for X_b, y_b in loader:
-            optimizer.zero_grad()
-            loss = criterion(model(X_b), y_b)
-            loss.backward()
-            optimizer.step()
+    with timer.stage("dp_train"):
+        model.train()
+        for _ in range(epochs):
+            for X_b, y_b in loader:
+                optimizer.zero_grad()
+                loss = criterion(model(X_b), y_b)
+                loss.backward()
+                optimizer.step()
 
     achieved_epsilon = privacy_engine.get_epsilon(delta=DP_DELTA)
     noise_multiplier = getattr(optimizer, "noise_multiplier", None)
 
+    # make_private_with_epsilon() wraps `model` in a GradSampleModule and
+    # attaches forward/backward hooks DIRECTLY onto its submodules
+    # (Conv1d, GroupNorm, DPLSTM) for per-sample gradient computation.
+    # Unwrapping via `._module` does NOT remove those hooks -- they stay
+    # attached. Since this harness reuses the same model object across
+    # ROUNDS (not a fresh model each round), the next round's
+    # make_private_with_epsilon() call tries to add a second set of hooks
+    # on top of the still-attached first set, and Opacus raises
+    # "Trying to add hooks twice to the same model". Explicitly removing
+    # them here is what makes safe reuse across rounds possible.
+    model.remove_hooks()
     real_model = model._module if hasattr(model, "_module") else model
     return real_model, achieved_epsilon, noise_multiplier
 
@@ -193,20 +278,28 @@ def run():
             timer = StageTimer()
             t_round0 = time.time()
 
-            with timer.stage("train"):
-                if MODE == "dp":
-                    model, dp_epsilon_achieved, dp_noise_multiplier = dp_train(
-                        model, X_train, y_train, EPOCHS
-                    )
-                else:
+            # ── Stage 1: local training ─────────────────────────────
+            if MODE == "dp":
+                model, dp_epsilon_achieved, dp_noise_multiplier = dp_train(
+                    model, X_train, y_train, EPOCHS, timer
+                )
+                record = {
+                    "round": rnd,
+                    "dp_setup_time_s": round(timer.durations.get("dp_setup", 0.0), 4),
+                    "train_time_s": round(timer.durations.get("dp_train", 0.0), 4),
+                }
+            else:
+                with timer.stage("train"):
                     model = plain_train(model, X_train, y_train, EPOCHS, LR)
+                record = {
+                    "round": rnd,
+                    "train_time_s": round(timer.durations.get("train", 0.0), 4),
+                }
 
             trained_params = get_model_parameters(model)
 
-            record = {
-                "round": rnd,
-                "train_time_s": round(timer.durations.get("train", 0.0), 4),
-            }
+            # ── Stage 2: mode-specific mechanism (encryption / ZKP / DP metadata) ──
+            artifact_obj = None
 
             if MODE == "he_full":
                 import he_aggregation as he
@@ -218,7 +311,7 @@ def run():
                 record["he_encrypt_time_s"] = round(timer.durations.get("he_encrypt_full", 0.0), 4)
                 record["n_chunks"] = enc["n_chunks"]
                 record["pct_encrypted"] = 100.0
-                _save_artifact(rnd, {"mode": "he_full", "enc": enc})
+                artifact_obj = {"mode": "he_full", "enc": enc}
 
             elif MODE in ("he_partial", "he_partial_zkp"):
                 import he_local
@@ -231,7 +324,7 @@ def run():
                             trained_params, keys, he_context, HE_POLY_DEGREE
                         )
                     record["he_encrypt_time_s"] = round(timer.durations.get("he_encrypt_partial", 0.0), 4)
-                    _save_artifact(rnd, {"mode": "he_partial", "enc": enc})
+                    artifact_obj = {"mode": "he_partial", "enc": enc}
                 else:
                     # he_partial_zkp: measure encryption and the norm-guard
                     # proof as two SEPARATE stages, so the guard's added
@@ -256,22 +349,55 @@ def run():
                         ]).astype(np.float64)
                         import zkp
                         proof = zkp.generate_head_norm_proof(delta_flat, enc["sensitive_enc"]["chunks"])
+                        # proof["salt"] is raw bytes (os.urandom(32)) --
+                        # not JSON-serializable, and would silently
+                        # become a garbled str() repr on round-trip like
+                        # the bulk-array bug above. verify_head_norm_proof()
+                        # never actually reads salt (confirmed in zkp.py --
+                        # kept only for interface symmetry with Part 1), so
+                        # this doesn't affect correctness either way, but
+                        # hex-encoding it keeps the artifact genuinely
+                        # round-trippable instead of silently lossy.
+                        proof["salt"] = proof["salt"].hex()
                     record["he_encrypt_time_s"] = round(timer.durations.get("he_encrypt_partial", 0.0), 4)
                     record["zkp_proof_time_s"] = round(timer.durations.get("zkp_head_norm_proof", 0.0), 4)
                     record["zkp_claimed_norm"] = proof["norm"]
-                    _save_artifact(rnd, {"mode": "he_partial_zkp", "enc": enc, "proof": proof})
+                    artifact_obj = {"mode": "he_partial_zkp", "enc": enc, "proof": proof}
 
                 record["n_chunks"] = enc["n_chunks"]
                 record["pct_encrypted"] = enc["pct_encrypted"]
+
+                # CRITICAL FIX: enc["bulk"] is a list of RAW numpy arrays
+                # (the plaintext, non-encrypted ~94% of the model).
+                # json.dumps(..., default=str) cannot serialize ndarrays
+                # directly and falls back to str(array) -- which numpy
+                # SILENTLY TRUNCATES for arrays over 1000 elements
+                # (summarized with "..."), destroying almost all the
+                # actual data while still "succeeding" with no error.
+                # Convert to plain nested lists BEFORE this artifact is
+                # written to disk or sent over the network, so the full
+                # data survives the round trip intact.
+                enc["bulk"] = [b.tolist() for b in enc["bulk"]]
 
             elif MODE == "dp":
                 record["dp_epsilon_target"] = DP_EPSILON
                 record["dp_epsilon_achieved"] = dp_epsilon_achieved
                 record["dp_noise_multiplier"] = dp_noise_multiplier
-                _save_artifact(rnd, {"mode": "dp", "params": [p.tolist() for p in trained_params]})
+                artifact_obj = {"mode": "dp", "params": [p.tolist() for p in trained_params]}
 
             else:  # baseline
-                _save_artifact(rnd, {"mode": "baseline", "params": [p.tolist() for p in trained_params]})
+                artifact_obj = {"mode": "baseline", "params": [p.tolist() for p in trained_params]}
+
+            # ── Stage 3: write artifact to disk (used by server_aggregate.py's
+            # aggregation timing) AND send it over the real Docker network to
+            # server_daemon.py (used for communication timing) ────────────
+            _save_artifact(rnd, artifact_obj)
+            with timer.stage("communication"):
+                comm = send_artifact_over_network(artifact_obj, rnd)
+            record["serialize_time_s"] = comm["serialize_time_s"]
+            record["communication_send_time_s"] = comm["send_time_s"]
+            record["payload_bytes"] = comm["payload_bytes"]
+            record["communication_ok"] = comm["communication_ok"]
 
             record["round_wall_time_s"] = round(time.time() - t_round0, 4)
             round_records.append(record)

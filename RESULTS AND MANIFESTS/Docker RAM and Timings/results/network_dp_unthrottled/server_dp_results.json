@@ -1,0 +1,40 @@
+{
+  "mode": "dp",
+  "config": {
+    "num_real_clients": 2,
+    "synthetic_n_clients": 10,
+    "rounds": 3,
+    "he_poly_degree": null
+  },
+  "krum_timing": {
+    "per_round": [
+      {
+        "round": 1,
+        "adaptive_krum_time_s": 0.06558,
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": 10,
+        "num_dropped": 0
+      },
+      {
+        "round": 2,
+        "adaptive_krum_time_s": 0.02132,
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": 10,
+        "num_dropped": 0
+      },
+      {
+        "round": 3,
+        "adaptive_krum_time_s": 0.01564,
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": 10,
+        "num_dropped": 0
+      }
+    ],
+    "ram_peak_mb": 76.7,
+    "ram_avg_mb": 57.6,
+    "note": "Timing at n=SYNTHETIC_N_CLIENTS via jittered synthetic copies of real per-client trained params -- see module docstring. NOT an accuracy/detection result."
+  }
+}

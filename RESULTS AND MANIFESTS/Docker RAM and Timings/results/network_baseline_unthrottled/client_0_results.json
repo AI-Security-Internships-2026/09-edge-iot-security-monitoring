@@ -1,0 +1,52 @@
+{
+  "config": {
+    "client_id": 0,
+    "mode": "baseline",
+    "model_type": "network",
+    "num_features": 37,
+    "num_classes": 8,
+    "total_params": 79688,
+    "train_rows": 31332,
+    "test_rows": 7834,
+    "epochs_per_round": 2,
+    "rounds": 3,
+    "batch_size": 256,
+    "he_poly_degree": null,
+    "dp_epsilon_target": null,
+    "dp_max_grad_norm": null,
+    "real_cgroup_mem_limit_mb": 2048.0,
+    "real_cgroup_cpu_limit_cores": 1.0
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "train_time_s": 126.9766,
+      "serialize_time_s": 0.12079,
+      "communication_send_time_s": 0.09108,
+      "payload_bytes": 1756605,
+      "communication_ok": true,
+      "round_wall_time_s": 128.0944
+    },
+    {
+      "round": 2,
+      "train_time_s": 135.4661,
+      "serialize_time_s": 0.12106,
+      "communication_send_time_s": 0.08145,
+      "payload_bytes": 1755544,
+      "communication_ok": true,
+      "round_wall_time_s": 136.6903
+    },
+    {
+      "round": 3,
+      "train_time_s": 141.4477,
+      "serialize_time_s": 0.12051,
+      "communication_send_time_s": 0.08139,
+      "payload_bytes": 1754576,
+      "communication_ok": true,
+      "round_wall_time_s": 142.6148
+    }
+  ],
+  "ram_peak_mb": 382.9,
+  "ram_avg_mb": 366.9,
+  "ram_n_samples": 1571
+}
