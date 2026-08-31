@@ -1,1 +1,0 @@
-round,client,loss,accuracy,Normal,SQL_injection,Uploading,Backdoor,Port_Scanning,XSS,Password,Fingerprinting,zkp_rejected,krum_selected,krum_detected_byzantine,dp_epsilon_spent,round_time_s,dp_epsilon_target,dp_noise_multiplier,krum_scores_byzantine_mean,krum_scores_honest_mean,krum_score_ratio,nan_this_round
