@@ -298,7 +298,7 @@ GAUSSIAN_STD  = _args.gaussian_std if _args.gaussian_std is not None else _GAUSS
 # a base and hand-edit the derived flags below -- or just set the flags
 # directly and remove/bypass this block.
 # ---------------------------------------------------------------------------
-ABLATION_MODE = "exp2_unmitigated"   # <-- set for the Gaussian-noise sweep
+ABLATION_MODE = "exp2_mitigated"   # <-- set for the Gaussian-noise sweep
                                    # (Sweep 2). Switch back to "pure_dp" /
                                    # "pure_he" / "pure_zkp" for other
                                    # single-mechanism ablation runs.
