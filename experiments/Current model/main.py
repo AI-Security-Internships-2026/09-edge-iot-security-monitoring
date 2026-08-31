@@ -352,7 +352,7 @@ elif ABLATION_MODE == "exp2_unmitigated":
     BYZANTINE_HEAD_ONLY = True
     USE_HEAD_NORM_GUARD = False
 
-elif ABLATION_MODE == "exp2_mitigated":
+elif ABLATION_MODE == "exp2_unmitigated":
     # Same attack, same hybrid pipeline, Layer-2 ciphertext-bound HMAC
     # head-norm guard turned ON (ZKP Part 2 -- verify_head_norm_proof +
     # mad_threshold_head_norms, the SAME mechanism pure_zkp uses, not a
