@@ -224,7 +224,7 @@ SANITY_CHECK = False
 # FL hyperparameters
 NUM_ROUNDS    = 2 if SANITY_CHECK else 25
 NUM_CLIENTS   = 10
-LOCAL_EPOCHS  = 10
+LOCAL_EPOCHS  = 5
 LEARNING_RATE = 0.001
 PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
 
@@ -414,7 +414,7 @@ HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
 DP_DELTA         = 1e-5
 DP_MAX_GRAD_NORM = 1.5
-DP_BATCH_SIZE    = 16
+DP_BATCH_SIZE    = 512
 
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
