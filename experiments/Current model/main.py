@@ -298,7 +298,7 @@ GAUSSIAN_STD  = _args.gaussian_std if _args.gaussian_std is not None else _GAUSS
 # a base and hand-edit the derived flags below -- or just set the flags
 # directly and remove/bypass this block.
 # ---------------------------------------------------------------------------
-ABLATION_MODE = "exp2_mitigated"   # <-- set for the Gaussian-noise sweep
+ABLATION_MODE = "exp2_unmitigated"   # <-- set for the Gaussian-noise sweep
                                    # (Sweep 2). Switch back to "pure_dp" /
                                    # "pure_he" / "pure_zkp" for other
                                    # single-mechanism ablation runs.
@@ -352,12 +352,12 @@ elif ABLATION_MODE == "exp2_unmitigated":
     BYZANTINE_HEAD_ONLY = True
     USE_HEAD_NORM_GUARD = False
 
-elif ABLATION_MODE == "exp2_unmitigated":
+elif ABLATION_MODE == "exp2_mitigated":
     # Same attack, same hybrid pipeline, Layer-2 ciphertext-bound HMAC
     # head-norm guard turned ON (ZKP Part 2 -- verify_head_norm_proof +
     # mad_threshold_head_norms, the SAME mechanism pure_zkp uses, not a
     # bare norm check). This is the mitigation-confirmation run, paired
-    # with exp2_unmitigated above -- run both with the SAME --byzantine
+    # with exp2_unmitigated above  run both with the SAME --byzantine
     # selection so they're a real before/after pair, not just two
     # differently-configured runs.
     USE_HE_KRUM_HYBRID = True
