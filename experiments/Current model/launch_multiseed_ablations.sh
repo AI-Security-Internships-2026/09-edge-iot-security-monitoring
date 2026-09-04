@@ -47,9 +47,9 @@
 set -euo pipefail
 
 # ---- EDIT THESE THREE LINES FOR YOUR SETUP ----
-REPO_DIR="/path/to/your/repo/src"          # dir containing main.py
-PYTHON="python3"                            # or an absolute venv path
-VENV_ACTIVATE=""                            # e.g. "source /path/to/venv/bin/activate" -- leave empty if not using a venv
+REPO_DIR="/workspace/experiments/Current model"
+PYTHON="/usr/bin/python3"
+VENV_ACTIVATE=""                           # e.g. "source /path/to/venv/bin/activate" -- leave empty if not using a venv
 # ------------------------------------------------
 
 LOG_DIR="${REPO_DIR}/logs"
