@@ -1,5 +1,7 @@
 import os
 import re
+import hashlib
+import pickle
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -14,6 +16,13 @@ DATASET_PATH = os.path.join(
 CACHE_PATH = os.path.join(
     BASE_DIR, "datasets", "dnn_preprocessed_cache.npz"
 )
+
+# ── DAT1: Train/Val/Test split artifacts + fitted-scaler pickles ─────
+# Per Issue DAT1 Task 1: experiments/Current model/splits/. This module
+# lives at experiments/Current model/data_loader.py, so "splits" next
+# to it resolves to the exact path the issue specifies.
+SPLITS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "splits")
+os.makedirs(SPLITS_DIR, exist_ok=True)
 
 # ── Columns dropped outright (no numeric or engineerable signal) ─────
 # NOTE: http.request.full_uri, http.request.uri.query, http.file_data,
@@ -280,10 +289,10 @@ NUM_APP_CLASSES = len(APP_ORIG_IDX)
 # per corrected class on every cache rebuild — use that output to
 # regenerate these tables if a static reference table is needed later.
 
-_cached_X_net = None
-_cached_y_net = None
-_cached_X_app = None
-_cached_y_app = None
+# DAT1: cache is now keyed by (model_type, seed), since the TVT split
+# (and therefore everything downstream of it) depends on seed. Each
+# entry holds X_train/y_train/X_val/y_val/X_test/y_test together.
+_cache = {}
 
 
 def _load_raw():
@@ -360,95 +369,253 @@ def _build_application_features(df: pd.DataFrame) -> np.ndarray:
     return combined.values.astype(float)
 
 
-def load_and_preprocess(model_type):
+def _tvt_split_paths(model_type, seed):
+    base = os.path.join(SPLITS_DIR, f"TVT_global_{model_type}_{seed}")
+    return {"npz": base + ".npz", "hash": base + ".sha256"}
+
+
+def _scaler_path(model_type, seed):
+    return os.path.join(SPLITS_DIR, f"scalers_{model_type}_{seed}.pkl")
+
+
+def _get_or_build_tvt_indices(model_type, y_filtered, seed):
     """
-    Loads, relabels, caps, and featurizes the dataset, caching network
-    and application data separately (they have different feature
-    counts/content, so a single shared cache no longer makes sense).
+    Stratified 80/10/10 TRAIN/VAL/TEST split over the model-specific,
+    already row-filtered (class-subset + Normal-capped) label array.
+    Returns (train_idx, val_idx, test_idx) -- indices INTO y_filtered.
 
-    Args:
-        model_type: one of 'network', 'application', 'both'.
-            Only the cache(s) needed for this model_type are loaded
-            or built -- the other model's cache/raw-data work is
-            skipped entirely.
+    Written to disk once per (model_type, seed) and reused on every
+    subsequent call -- this IS the "no random split drift between
+    runs" requirement (DAT1 Task 1.3): once
+    TVT_global_{model_type}_{seed}.npz exists, this function never
+    recomputes the split for that (model_type, seed) key again, it
+    just loads the saved indices. This is also what makes the
+    determinism test (DAT1 Task: two successive pipeline invocations
+    with the same seed produce byte-identical split artifacts) true
+    by construction rather than by coincidence.
 
-    Network model:     VarianceThreshold applied, text columns dropped
-    Application model: NO VarianceThreshold, text columns engineered
-                        into numeric features instead of dropped
+    Also computes and checks a SHA-256 hash of the TEST index list
+    (DAT1 Task 4 exception-handling guard): on first build, the hash
+    is written alongside the split as a sidecar file. On every
+    subsequent load, the freshly-loaded TEST indices are re-hashed and
+    compared against that stored hash -- if the .npz was ever
+    hand-edited, corrupted, or a future code change accidentally
+    regenerated a different split under the same (model_type, seed)
+    key, this raises loudly instead of silently shipping a different
+    TEST set under a name that claims to be reproducible.
     """
-    global _cached_X_net, _cached_y_net, _cached_X_app, _cached_y_app
+    paths = _tvt_split_paths(model_type, seed)
 
+    if os.path.exists(paths["npz"]):
+        data = np.load(paths["npz"])
+        train_idx, val_idx, test_idx = data["train_idx"], data["val_idx"], data["test_idx"]
+
+        test_hash = hashlib.sha256(test_idx.tobytes()).hexdigest()
+        with open(paths["hash"]) as f:
+            stored_hash = f.read().strip()
+        assert test_hash == stored_hash, (
+            f"TEST-holdout hash mismatch for {model_type}/seed={seed}: "
+            f"stored={stored_hash[:12]}... computed={test_hash[:12]}... "
+            f"The saved split file does not match its own hash sidecar -- "
+            f"DO NOT PROCEED, this indicates split-file corruption or an "
+            f"accidental split-generation regression. Delete both "
+            f"{os.path.basename(paths['npz'])} and "
+            f"{os.path.basename(paths['hash'])} and re-run ONLY if you "
+            f"intend to genuinely reset this split."
+        )
+        print(f"  TVT split loaded ({model_type}, seed={seed}): "
+              f"{len(train_idx):,} train / {len(val_idx):,} val / "
+              f"{len(test_idx):,} test  [hash OK: {test_hash[:12]}...]")
+        return train_idx, val_idx, test_idx
+
+    # First time for this (model_type, seed) -- build it.
+    all_idx = np.arange(len(y_filtered))
+
+    # 80/10/10: split off 80% train vs 20% temp, then split temp 50/50
+    # into val/test (10%/10% of the original total each).
+    train_idx, temp_idx, _, y_temp = train_test_split(
+        all_idx, y_filtered, test_size=0.20, random_state=seed,
+        stratify=y_filtered
+    )
+    val_idx, test_idx = train_test_split(
+        temp_idx, test_size=0.50, random_state=seed, stratify=y_temp
+    )
+
+    train_idx, val_idx, test_idx = np.sort(train_idx), np.sort(val_idx), np.sort(test_idx)
+
+    np.savez_compressed(paths["npz"], train_idx=train_idx, val_idx=val_idx, test_idx=test_idx)
+    test_hash = hashlib.sha256(test_idx.tobytes()).hexdigest()
+    with open(paths["hash"], "w") as f:
+        f.write(test_hash)
+
+    print(f"  TVT split BUILT ({model_type}, seed={seed}): "
+          f"{len(train_idx):,} train / {len(val_idx):,} val / "
+          f"{len(test_idx):,} test  [hash: {test_hash[:12]}...]")
+    return train_idx, val_idx, test_idx
+
+
+def _fit_or_load_scalers(model_type, seed, X_train_raw):
+    """
+    Fits VarianceThreshold (network model only) + StandardScaler on
+    TRAIN rows ONLY, exactly once per (model_type, seed), then pickles
+    both to disk and reuses them on every subsequent call -- "do NOT
+    refit between invocations" (DAT1 Task 1.6). This is also what
+    makes the no-leakage unit test meaningful: .mean_/.var_ (and
+    .support_ for the network model) are a pure function of TRAIN
+    rows, never touched by VAL or TEST rows, anywhere in this pipeline.
+    """
+    path = _scaler_path(model_type, seed)
+
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            fitted = pickle.load(f)
+        print(f"  Scalers loaded ({model_type}, seed={seed}) -- NOT refit.")
+        return fitted
+
+    fitted = {}
+    if model_type == "network":
+        vt = VarianceThreshold(threshold=1e-6)
+        X_vt = vt.fit_transform(X_train_raw)
+        fitted["vt"]     = vt
+        fitted["scaler"] = StandardScaler().fit(X_vt)
+    else:
+        fitted["vt"]     = None
+        fitted["scaler"] = StandardScaler().fit(X_train_raw)
+
+    with open(path, "wb") as f:
+        pickle.dump(fitted, f)
+    print(f"  Scalers FIT on TRAIN rows only ({model_type}, seed={seed}), "
+          f"pickled to {os.path.basename(path)}.")
+    return fitted
+
+
+def _apply_scalers(fitted, X_raw):
+    if fitted["vt"] is not None:
+        X_raw = fitted["vt"].transform(X_raw)
+    return fitted["scaler"].transform(X_raw)
+
+
+def load_and_preprocess(model_type, seed=42):
+    """
+    DAT1-corrected pipeline order (previously: fit VarianceThreshold +
+    StandardScaler on the ENTIRE dataset, THEN partition/split -- see
+    Issue DAT1 for why that was invalid data leakage):
+
+        raw data -> model-specific row filter (+ Normal-cap, from
+        _load_raw()) -> stratified TRAIN/VAL/TEST split -> fit
+        VarianceThreshold + StandardScaler on TRAIN ONLY -> transform
+        TRAIN, VAL, and TEST with those SAME fitted objects.
+
+    `seed` controls the TRAIN/VAL/TEST split (see
+    _get_or_build_tvt_indices) -- it is INDEPENDENT of _load_raw()'s
+    internal Normal-capping seed, which stays pinned at 42 regardless,
+    by design (see that function's docstring): every seed shares the
+    same underlying capped dataset, only the split/partition/training
+    randomness varies.
+
+    Caches TRAIN + VAL + TEST arrays together, keyed by (model_type,
+    seed), both in-memory and on disk (splits/preprocessed_<model>_
+    <seed>.npz) -- repeated calls for the same key never recompute.
+    """
     if model_type not in ('network', 'application', 'both'):
         raise ValueError(
             f"model_type must be 'network', 'application', or 'both', got {model_type!r}"
         )
 
-    want_net = model_type in ('network', 'both')
-    want_app = model_type in ('application', 'both')
+    for mt in (['network', 'application'] if model_type == 'both' else [model_type]):
+        key = (mt, seed)
+        if key in _cache:
+            continue
 
-    net_cache_path = CACHE_PATH.replace('.npz', '_network.npz')
-    app_cache_path = CACHE_PATH.replace('.npz', '_application.npz')
+        cache_path = os.path.join(SPLITS_DIR, f"preprocessed_{mt}_{seed}.npz")
+        if os.path.exists(cache_path):
+            data = np.load(cache_path)
+            _cache[key] = {k: data[k] for k in
+                          ("X_train", "y_train", "X_val", "y_val", "X_test", "y_test")}
+            print(f"  Preprocessed cache loaded ({mt}, seed={seed}): "
+                  f"{data['X_train'].shape[0]:,} train / "
+                  f"{data['X_val'].shape[0]:,} val / "
+                  f"{data['X_test'].shape[0]:,} test rows, "
+                  f"{data['X_train'].shape[1]} features")
+            continue
 
-    need_net = want_net and _cached_X_net is None
-    need_app = want_app and _cached_X_app is None
+        df, y = _load_raw()
+        orig_idx = NETWORK_ORIG_IDX if mt == 'network' else APP_ORIG_IDX
+        mask   = np.isin(y, orig_idx)
+        df_sub = df.loc[mask].reset_index(drop=True)
+        y_sub  = y[mask]
 
-    if need_net and os.path.exists(net_cache_path):
-        data = np.load(net_cache_path)
-        _cached_X_net, _cached_y_net = data['X'], data['y']
-        print(f"  Network cache loaded: {_cached_X_net.shape[0]:,} rows, {_cached_X_net.shape[1]} features")
-        need_net = False
+        label_map = {orig: new for new, orig in enumerate(orig_idx)}
+        y_sub = np.array([label_map[yi] for yi in y_sub])
 
-    if need_app and os.path.exists(app_cache_path):
-        data = np.load(app_cache_path)
-        _cached_X_app, _cached_y_app = data['X'], data['y']
-        print(f"  Application cache loaded: {_cached_X_app.shape[0]:,} rows, {_cached_X_app.shape[1]} features")
-        need_app = False
+        X_raw = (_build_network_features(df_sub) if mt == 'network'
+                 else _build_application_features(df_sub))
 
-    if not (need_net or need_app):
-        return
+        train_idx, val_idx, test_idx = _get_or_build_tvt_indices(mt, y_sub, seed)
 
-    # Only touch raw data if we actually still need to build something.
-    df, y = _load_raw()
+        X_train_raw, y_train = X_raw[train_idx], y_sub[train_idx]
+        X_val_raw,   y_val   = X_raw[val_idx],   y_sub[val_idx]
+        X_test_raw,  y_test  = X_raw[test_idx],  y_sub[test_idx]
 
-    if need_net:
-        mask = np.isin(y, NETWORK_ORIG_IDX)
-        X_net_raw = _build_network_features(df.loc[mask])
-        y_net = y[mask]
+        fitted = _fit_or_load_scalers(mt, seed, X_train_raw)
 
-        vt = VarianceThreshold(threshold=1e-6)
-        X_net = vt.fit_transform(X_net_raw)
-        X_net = StandardScaler().fit_transform(X_net)
+        X_train = _apply_scalers(fitted, X_train_raw)
+        X_val   = _apply_scalers(fitted, X_val_raw)
+        X_test  = _apply_scalers(fitted, X_test_raw)
 
-        label_map = {orig: new for new, orig in enumerate(NETWORK_ORIG_IDX)}
-        y_net = np.array([label_map[yi] for yi in y_net])
+        if mt == 'network':
+            print(f"  Network model: {X_train.shape[1]} features after "
+                  f"VarianceThreshold (fit on TRAIN only)")
+        else:
+            print(f"  Application model: {X_train.shape[1]} features "
+                  f"after text engineering")
 
-        print(f"  Network model: {X_net.shape[1]} features after VarianceThreshold")
-        np.savez_compressed(net_cache_path, X=X_net, y=y_net)
-        _cached_X_net, _cached_y_net = X_net, y_net
-
-    if need_app:
-        mask = np.isin(y, APP_ORIG_IDX)
-        X_app = _build_application_features(df.loc[mask])
-        X_app = StandardScaler().fit_transform(X_app)
-        y_app = y[mask]
-
-        label_map = {orig: new for new, orig in enumerate(APP_ORIG_IDX)}
-        y_app = np.array([label_map[yi] for yi in y_app])
-
-        print(f"  Application model: {X_app.shape[1]} features after text engineering")
-        np.savez_compressed(app_cache_path, X=X_app, y=y_app)
-        _cached_X_app, _cached_y_app = X_app, y_app
+        np.savez_compressed(
+            cache_path,
+            X_train=X_train, y_train=y_train,
+            X_val=X_val,     y_val=y_val,
+            X_test=X_test,   y_test=y_test,
+        )
+        _cache[key] = {
+            "X_train": X_train, "y_train": y_train,
+            "X_val":   X_val,   "y_val":   y_val,
+            "X_test":  X_test,  "y_test":  y_test,
+        }
 
 
-def _dirichlet_partition(X_sub, y_sub, num_classes,
-                         partition_id, num_partitions,
-                         test_size, alpha, seed):
+def get_global_test_holdout(model_type: str, seed: int = 42):
     """
-    Shared Dirichlet non-IID partitioning logic used by both models.
+    Returns (X_test, y_test) -- the untouched global TEST holdout for
+    this (model_type, seed). NEVER pass this into any client training
+    loop or any per-round decision. Evaluate against the FINAL global
+    model EXACTLY ONCE per experiment, after the last FL round -- this
+    is the paper's actual reported metric (DAT1 Task 1.10).
+    """
+    load_and_preprocess(model_type, seed=seed)
+    cached = _cache[(model_type, seed)]
+    return cached["X_test"], cached["y_test"]
+
+
+def _dirichlet_partition(X_train, y_train, num_classes,
+                         partition_id, num_partitions,
+                         local_val_size, alpha, seed):
+    """
+    Partitions the (already TRAIN-only, already-scaled-on-TRAIN) data
+    among clients via Dirichlet(alpha), then splits THIS CLIENT's
+    shard local_val_size (default 0.1, i.e. 90/10) into client-local
+    train vs client-local validation.
+
+    DAT1 IMPORTANT: the "val" half returned here is for local progress
+    logging / early-stopping ONLY -- it is NOT the paper's TEST metric.
+    The global TEST holdout is a separate set (get_global_test_holdout())
+    that no client ever sees during training, evaluated exactly once
+    per experiment, after the final FL round, against the final global
+    model. Do not report this function's val split as a paper number.
+
     alpha=0.7 -> moderate heterogeneity (realistic IoT scenario).
     """
     rng           = np.random.default_rng(seed)
-    class_indices = [np.where(y_sub == c)[0] for c in range(num_classes)]
+    class_indices = [np.where(y_train == c)[0] for c in range(num_classes)]
     client_idx    = [[] for _ in range(num_partitions)]
 
     for c_idx in class_indices:
@@ -464,8 +631,8 @@ def _dirichlet_partition(X_sub, y_sub, num_classes,
             start += count
 
     idx    = np.array(client_idx[partition_id])
-    X_part = X_sub[idx]
-    y_part = y_sub[idx]
+    X_part = X_train[idx]
+    y_part = y_train[idx]
 
     counts_part = np.bincount(y_part.astype(int), minlength=num_classes)
     valid       = np.isin(y_part, np.where(counts_part >= 2)[0])
@@ -474,59 +641,65 @@ def _dirichlet_partition(X_sub, y_sub, num_classes,
 
     use_stratify = np.bincount(y_part.astype(int)).min() >= 2
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    X_local_train, X_local_val, y_local_train, y_local_val = train_test_split(
         X_part, y_part,
-        test_size    = test_size,
+        test_size    = local_val_size,
         random_state = seed,
         stratify     = y_part if use_stratify else None
     )
-    return X_train, y_train, X_test, y_test
+    return X_local_train, y_local_train, X_local_val, y_local_val
 
 
 def load_partition_network(partition_id: int,
-                           num_partitions: int = 10,
-                           test_size: float    = 0.2,
-                           alpha: float        = 0.7,
-                           seed: int           = 42):
-    load_and_preprocess('network')
+                           num_partitions: int   = 10,
+                           local_val_size: float = 0.1,
+                           alpha: float          = 0.7,
+                           seed: int             = 42):
+    load_and_preprocess('network', seed=seed)
+    cached = _cache[('network', seed)]
     return _dirichlet_partition(
-        _cached_X_net, _cached_y_net, NUM_NETWORK_CLASSES,
-        partition_id, num_partitions, test_size, alpha, seed
+        cached["X_train"], cached["y_train"], NUM_NETWORK_CLASSES,
+        partition_id, num_partitions, local_val_size, alpha, seed
     )
 
 
 def load_partition_application(partition_id: int,
-                               num_partitions: int = 10,
-                               test_size: float    = 0.2,
-                               alpha: float        = 0.7,
-                               seed: int           = 42):
-    load_and_preprocess('application')
+                               num_partitions: int   = 10,
+                               local_val_size: float = 0.1,
+                               alpha: float          = 0.7,
+                               seed: int             = 42):
+    load_and_preprocess('application', seed=seed)
+    cached = _cache[('application', seed)]
     return _dirichlet_partition(
-        _cached_X_app, _cached_y_app, NUM_APP_CLASSES,
-        partition_id, num_partitions, test_size, alpha, seed
+        cached["X_train"], cached["y_train"], NUM_APP_CLASSES,
+        partition_id, num_partitions, local_val_size, alpha, seed
     )
 
 
-def get_class_counts_network():
+def get_class_counts_network(seed: int = 42):
     """
-    Live per-class counts for the network model's 8 remapped classes
-    (0=Normal ... 7=MITM), computed from the actual corrected cache —
-    not a hardcoded table. Used by task.py's FocalLoss weighting so
-    the weights always match whatever data was really trained on.
+    Live per-class counts for the network model's 8 remapped classes,
+    computed from the (model_type, seed)'s TRAIN split ONLY -- DAT1
+    requires all tuning-relevant statistics come from TRAIN/VAL, never
+    TEST. NOTE: main.py/task.py must pass the run's actual --seed here
+    (not rely on the default) so class-weight tuning matches the same
+    TRAIN split the model actually trains on for that seed.
     """
-    load_and_preprocess('network')
+    load_and_preprocess('network', seed=seed)
     return np.bincount(
-        _cached_y_net.astype(int), minlength=NUM_NETWORK_CLASSES
+        _cache[('network', seed)]["y_train"].astype(int),
+        minlength=NUM_NETWORK_CLASSES
     ).tolist()
 
 
-def get_class_counts_application():
+def get_class_counts_application(seed: int = 42):
     """
     Live per-class counts for the application model's 8 remapped
-    classes (0=Normal ... 7=Fingerprinting), computed from the actual
-    corrected cache — not a hardcoded table.
+    classes, computed from the (model_type, seed)'s TRAIN split ONLY.
+    Same seed-threading requirement as get_class_counts_network().
     """
-    load_and_preprocess('application')
+    load_and_preprocess('application', seed=seed)
     return np.bincount(
-        _cached_y_app.astype(int), minlength=NUM_APP_CLASSES
+        _cache[('application', seed)]["y_train"].astype(int),
+        minlength=NUM_APP_CLASSES
     ).tolist()

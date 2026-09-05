@@ -1,0 +1,34 @@
+{
+  "_comment": "DAT1 Task 2. Every scalar tunable below carries a validated_on_split field stating which split (if any) actually justifies its value -- see docs/SPLIT_PROTOCOL.md. Values marked UNVALIDATED are literals inherited unchanged from the pre-DAT1 pipeline and must be re-derived against VALIDATION before being cited in the paper as deliberately tuned, per SPLIT_PROTOCOL.md's per-parameter provenance table.",
+
+  "fedprox_mu": {
+    "value": 0.02,
+    "validated_on_split": "UNVALIDATED -- inherited from pre-DAT1 pipeline; pending the Issue 4/5 mu-sweep against VALIDATION (see fedprox_mu_sweep_default below)."
+  },
+
+  "dp_max_grad_norm": {
+    "value": 1.5,
+    "validated_on_split": "UNVALIDATED -- inherited from pre-DAT1 pipeline; no VALIDATION-split clipping-norm sweep has been run yet."
+  },
+
+  "adaptive_krum_k": {
+    "value": 2.5,
+    "validated_on_split": "UNVALIDATED -- inherited from pre-DAT1 pipeline; pending a VALIDATION-split MAD-k sweep (see mad_k_sweep_default below). Also used as the default for --krum-k / HEAD_NORM_GUARD_K when not overridden on the CLI."
+  },
+
+  "adaptive_krum_hybrid_assumed_f": {
+    "value": 1,
+    "validated_on_split": "UNVALIDATED as a tuned value -- this is the operator's ASSUMED attacker-count cap fed into min(assumed_f, NUM_BYZANTINE) for the HE+Krum hybrid (Experiment 2), not a value fit to any split. Experiment 2's own assumed-f-mismatch ablation is the closest thing to a validation of this parameter's sensitivity to date; see byzantine_f_sweep_default below for the sweep range."
+  },
+
+  "class_weight_multipliers_application": {
+    "Uploading": 1.3,
+    "XSS": 1.5,
+    "Fingerprinting": 1.3,
+    "validated_on_split": "UNVALIDATED -- see task.py:build_criterion_application() docstring history items 1-4. Originally chosen against what was, pre-DAT1, a test-adjacent metric (each client's own local held-out split, before a proper global TEST holdout existed). Must be re-derived against VALIDATION-split per-class F1 before being cited in the paper as deliberately tuned (DAT1 Task 2)."
+  },
+
+  "fedprox_mu_sweep_default": [0.0, 0.005, 0.02, 0.05, 0.1],
+  "mad_k_sweep_default": [2.0, 2.5, 3.0, 3.5, 4.0],
+  "byzantine_f_sweep_default": [1, 2, 3]
+}

@@ -168,6 +168,12 @@ import numpy as np
 import torch
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+# DAT1 Task 2 -- config-driven hyperparameters (replaces hardcoded
+# PROX_MU / DP_MAX_GRAD_NORM / ADAPTIVE_KRUM_K / ADAPTIVE_KRUM_HYBRID_
+# ASSUMED_F literals below). See config_loader.py and
+# experiments/configs/hyperparams.json.
+from config_loader import load_hyperparams_config, get_value
+
 # ---------------------------------------------------------------------------
 # Path setup -- allow running from project root OR from src/
 # ---------------------------------------------------------------------------
@@ -221,7 +227,7 @@ _parser.add_argument("--seed", type=int, default=42,
                           "42 preserves prior single-seed behavior for any "
                           "script/tag that doesn't pass this explicitly. "
                           "NOTE: data_loader.py's class-capping step "
-                          "(Normal -> 18%) stays pinned at its own "
+                          "(Normal -> 18%%) stays pinned at its own "
                           "hardcoded seed=42 regardless of this flag, by "
                           "design -- all seeds of a given model share one "
                           "underlying capped dataset, so multi-seed "
@@ -277,12 +283,18 @@ if torch.cuda.is_available():
 # -- Sanity-check toggle --------------------------------------------------
 SANITY_CHECK = False
 
+# DAT1 Task 2 -- load config-driven tunables once, here, before anything
+# below reads one of them. Fails loudly (AssertionError) if the config
+# file is missing a required key or a provenance field -- see
+# config_loader.py.
+_HP_CONFIG = load_hyperparams_config()
+
 # FL hyperparameters
 NUM_ROUNDS    = 2 if SANITY_CHECK else 25
 NUM_CLIENTS   = 10
 LOCAL_EPOCHS  = 5
 LEARNING_RATE = 0.001
-PROX_MU       = 0.02       # FedProx proximal coefficient (0 = plain FedAvg)
+PROX_MU       = get_value(_HP_CONFIG, "fedprox_mu")  # FedProx proximal coefficient (0 = plain FedAvg)
 
 # Byzantine client selection (WHICH clients are attackers, if any attack is
 # active this run -- whether the attack is actually active is decided below,
@@ -488,22 +500,29 @@ HE_POLY_DEGREE = 8192
 # any future mode that omits the assignment).
 if "USE_HEAD_NORM_GUARD" not in globals():
     USE_HEAD_NORM_GUARD = True
-HEAD_NORM_GUARD_K = _args.krum_k if _args.krum_k is not None else 2.5
+HEAD_NORM_GUARD_K = (_args.krum_k if _args.krum_k is not None
+                     else get_value(_HP_CONFIG, "adaptive_krum_k"))
 HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 
 DP_EPSILON       = _args.epsilon if _args.epsilon is not None else 15.0
 DP_DELTA         = 1e-5
-DP_MAX_GRAD_NORM = 1.5
+DP_MAX_GRAD_NORM = get_value(_HP_CONFIG, "dp_max_grad_norm")
 DP_BATCH_SIZE    = 512
 
 KRUM_M = NUM_CLIENTS - NUM_BYZANTINE - 1
 
-ADAPTIVE_KRUM_K                 = _args.krum_k if _args.krum_k is not None else 2.5
+ADAPTIVE_KRUM_K                 = (_args.krum_k if _args.krum_k is not None
+                                   else get_value(_HP_CONFIG, "adaptive_krum_k"))
 ADAPTIVE_KRUM_METHOD             = "mad"
 ADAPTIVE_KRUM_MIN_KEEP_FRACTION  = 0.5
 
 # Only meaningful for USE_HE_KRUM_HYBRID -- see that branch's comments.
-ADAPTIVE_KRUM_HYBRID_ASSUMED_F  = min(1, NUM_BYZANTINE)
+# The config value is the operator's ASSUMED attacker-count cap; this is
+# still min()'d against the run's actual NUM_BYZANTINE exactly as before
+# -- only the cap itself (previously the literal `1`) is now config-driven.
+ADAPTIVE_KRUM_HYBRID_ASSUMED_F  = min(
+    get_value(_HP_CONFIG, "adaptive_krum_hybrid_assumed_f"), NUM_BYZANTINE
+)
 
 # ---------------------------------------------------------------------------
 # Device / parallelization settings
@@ -531,6 +550,12 @@ CHECKPOINT_PROGRESS     = f"checkpoint_{_TAG}_progress.json"
 CHECKPOINT_BEST_PARAMS   = f"checkpoint_{_TAG}_best.npz"
 CHECKPOINT_BEST_PROGRESS = f"checkpoint_{_TAG}_best.json"
 LOG_CSV                 = f"results_{_TAG}.csv"
+# DAT1 Task 1.10 -- the ONE paper-citable result file, distinct from
+# LOG_CSV's per-round client-local-val progress rows (see
+# SPLIT_PROTOCOL.md). Written exactly once, after the round loop
+# completes, from the final global model against the untouched global
+# TEST holdout.
+FINAL_TEST_CSV = f"results_{_TAG}_FINAL_TEST.csv"
 
 # ---------------------------------------------------------------------------
 # Imports (deferred so errors are clear)
@@ -547,6 +572,12 @@ else:
                               NUM_APP_CLASSES as NUM_CLASSES)
     from task import (get_model, get_model_parameters, set_model_parameters,
                       train, test, build_criterion_application as build_criterion)
+
+# DAT1 Task 1.10 -- the untouched global TEST holdout, evaluated exactly
+# once below, after the round loop closes. Imported unconditionally
+# (model-type-agnostic: takes model_type as a string argument) rather
+# than aliased per-branch like load_partition above.
+from data_loader import get_global_test_holdout
 
 from defences.byzantine import (sign_flip_attack, sign_flip_attack_trained,
                                 classifier_head_flip_attack, gaussian_attack,
@@ -1115,7 +1146,7 @@ def main():
         print()
 
     print("Building criterion once (class weights, FocalLoss)...")
-    precomputed_criterion = build_criterion().to(_DEVICE)
+    precomputed_criterion = build_criterion(seed=_args.seed).to(_DEVICE)
     print("Criterion built -- workers will reuse this, no per-round reload.\n")
 
     client_cfg = {
@@ -1723,6 +1754,59 @@ def main():
             )
 
             save_checkpoint(global_params, round_num)
+
+    # -----------------------------------------------------------------
+    # DAT1 Task 1.10 -- FINAL TEST-HOLDOUT EVALUATION.
+    #
+    # Everything logged to LOG_CSV above (per round, per client, every
+    # round) is evaluated against each client's own local-val split
+    # (_dirichlet_partition's 90/10 held-out quarter of that client's
+    # TRAIN shard) -- see SPLIT_PROTOCOL.md and data_loader.py's own
+    # docstring: "Do not report this function's val split as a paper
+    # number." best_f1_macro tracking above is a checkpoint-selection
+    # convenience over that same local-val signal, not a paper metric.
+    #
+    # This block is the ONE place the actual global TEST holdout
+    # (get_global_test_holdout -- never opened by any client, at any
+    # point, during any round above) is touched at all, and it runs
+    # exactly once, here, after every round has completed, against the
+    # FINAL global model (`global_params` as left by the round loop).
+    # -----------------------------------------------------------------
+    X_test_holdout, y_test_holdout = get_global_test_holdout(
+        MODEL_TYPE, seed=_args.seed
+    )
+
+    _final_model = get_model(num_features=sample_features,
+                             num_classes=NUM_CLASSES, dp_safe=DP_SAFE)
+    set_model_parameters(_final_model, global_params)
+    _final_model = _final_model.to(_DEVICE)
+
+    final_test_loss, final_test_acc, final_test_f1_per_class = test(
+        _final_model, X_test_holdout, y_test_holdout, NUM_CLASSES,
+        device=_DEVICE
+    )
+    final_test_f1_macro = float(np.mean(final_test_f1_per_class))
+
+    with open(FINAL_TEST_CSV, "w", newline="") as _f:
+        _writer = csv.writer(_f)
+        _writer.writerow(
+            ["model_type", "seed", "ablation_mode", "num_rounds",
+             "test_loss", "test_accuracy", "test_f1_macro"]
+            + [f"test_f1_{name}" for name in ATTACK_NAMES]
+        )
+        _writer.writerow(
+            [MODEL_TYPE, _args.seed, ABLATION_MODE, NUM_ROUNDS,
+             final_test_loss, final_test_acc, final_test_f1_macro]
+            + [float(v) for v in final_test_f1_per_class]
+        )
+
+    print("\n" + "-"*65)
+    print(f"  [FINAL TEST-HOLDOUT] (the paper-citable result -- evaluated "
+          f"exactly once, here, after all {NUM_ROUNDS} rounds)")
+    print(f"    loss={final_test_loss:.4f}  acc={final_test_acc:.4f}  "
+          f"F1-Macro={final_test_f1_macro:.4f}")
+    print(f"    Written to: {FINAL_TEST_CSV}")
+    print("-"*65)
 
     print("\n" + "="*65)
     print(f"  Training complete -- {NUM_ROUNDS} rounds  [{MODEL_TYPE.upper()}]  "

@@ -18,6 +18,14 @@ from model_defs import (
     get_model_parameters, get_model_parameter_keys, set_model_parameters
 )
 
+# DAT1 Task 2 -- the application-model class-weight multipliers below
+# (Uploading/XSS/Fingerprinting) are now config-driven rather than
+# inline numeric literals. See config_loader.py and
+# experiments/configs/hyperparams.json.
+from config_loader import load_hyperparams_config
+
+_hp_cfg = load_hyperparams_config()
+
 
 # ── Loss ─────────────────────────────────────────────────────────────
 
@@ -68,7 +76,7 @@ def _inverse_sqrt_weights(counts):
     return w
 
 
-def build_criterion_network():
+def build_criterion_network(seed=42):
     """
     Loss for Model 1 (network-layer attacks).
     Inverse sqrt weights handle class imbalance.
@@ -81,20 +89,46 @@ def build_criterion_network():
     exists — computing live means this can never drift out of sync
     with whatever data was actually used to build the cache again.
 
+    DAT1: `seed` must be the run's actual --seed, not left at the
+    default — counts now come from that seed's TRAIN split ONLY
+    (never VAL or TEST, per DAT1's no-tuning-on-test requirement), and
+    different seeds have different TRAIN splits, so this must match
+    whatever seed load_partition_network() is using for this same run.
+
     No device kwarg here deliberately — main.py already calls
     .to(_DEVICE) on the returned criterion. With the register_buffer
     fix above, that .to() call now actually works.
     """
-    counts = get_class_counts_network()
+    counts = get_class_counts_network(seed=seed)
     return FocalLoss(
         gamma  = 2.0,
         weight = _inverse_sqrt_weights(counts)
     )
 
 
-def build_criterion_application():
+def build_criterion_application(seed=42):
     """
     Loss for Model 2 (application-layer attacks).
+
+    ⚠ DAT1 FLAG — READ BEFORE TRUSTING THESE MULTIPLIERS:
+    The 1.3–1.5x boosts below (history item 4) were originally chosen
+    by observing "round-25" per-class performance under the OLD
+    pipeline's _dirichlet_partition() X_test/y_test — which was, at
+    the time, each client's own local held-out split, NOT a proper
+    global TRAIN/VAL/TEST holdout (that didn't exist yet). Functionally,
+    this means the metric used to pick these multipliers was the
+    closest thing to a test-like signal available at the time, which
+    is exactly the tuning-on-test risk DAT1 flags. Now that a genuine
+    global TEST holdout exists (get_global_test_holdout()) that is
+    NEVER touched until final evaluation, these specific multiplier
+    values are UNVALIDATED against that holdout and should be treated
+    as provisional, carried over from before this pipeline fix — they
+    need to be re-derived by tuning against VALIDATION-split metrics
+    only (per-round local-val performance, or a proper held-out VAL
+    pass) before being cited in the paper as deliberately chosen, not
+    just inherited. This is DAT1 Task 2 (move to config + validation-
+    only provenance requirement) — not yet done; flagged here in the
+    interim so this isn't silently carried forward as if resolved.
 
     HISTORY (read before changing weights again):
       1. Original manual overrides (w[3]*=5.0 etc.) were tuned while
@@ -130,7 +164,7 @@ def build_criterion_application():
     Left at 2.0 here; revisit only after PROX_MU and these weights have
     each been tested in isolation.
     """
-    counts = get_class_counts_application()
+    counts = get_class_counts_application(seed=seed)
     w = _inverse_sqrt_weights(counts)
 
     MAX_WEIGHT_RATIO = 5.0
@@ -140,12 +174,16 @@ def build_criterion_application():
 
     # Targeted boosts for classes still underperforming on the REAL
     # corrected-data round-25 baseline. Small, bounded multipliers —
-    # re-tune these specific values against your NEXT run's actual
-    # numbers rather than trusting them as final; this is a starting
-    # point, not a converged answer.
-    w[name_to_idx['Uploading']]      *= 1.3
-    w[name_to_idx['XSS']]            *= 1.5
-    w[name_to_idx['Fingerprinting']] *= 1.3
+    # DAT1 Task 2: now read from config rather than hardcoded, and
+    # explicitly flagged UNVALIDATED there (see hyperparams.json) until
+    # re-derived against VALIDATION-split per-class F1, per the
+    # docstring history above -- re-tune the config values against
+    # your NEXT run's actual numbers rather than trusting them as
+    # final; this is a starting point, not a converged answer.
+    multipliers = _hp_cfg["class_weight_multipliers_application"]
+    w[name_to_idx['Uploading']]      *= multipliers['Uploading']
+    w[name_to_idx['XSS']]            *= multipliers['XSS']
+    w[name_to_idx['Fingerprinting']] *= multipliers['Fingerprinting']
 
     w = w / w.mean()
     return FocalLoss(gamma=2.0, weight=w)
