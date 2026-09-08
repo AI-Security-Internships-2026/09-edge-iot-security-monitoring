@@ -256,7 +256,7 @@ def test_final_test_csv_is_distinct_from_progress_log_csv():
     with open(MAIN_PY_PATH) as f:
         main_src = f.read()
 
-    assert 'FINAL_TEST_CSV = f"results_{_TAG}_FINAL_TEST.csv"' in main_src, (
+    assert re.search(r'FINAL_TEST_CSV\s*=\s*f"results_\{_TAG\}_FINAL_TEST\.csv"', main_src), (
         "main.py no longer writes a distinctly-named FINAL_TEST_CSV -- "
         "the paper-citable result must be written somewhere other "
         "than LOG_CSV's per-round progress rows."

@@ -28,6 +28,11 @@
     "validated_on_split": "UNVALIDATED -- see task.py:build_criterion_application() docstring history items 1-4. Originally chosen against what was, pre-DAT1, a test-adjacent metric (each client's own local held-out split, before a proper global TEST holdout existed). Must be re-derived against VALIDATION-split per-class F1 before being cited in the paper as deliberately tuned (DAT1 Task 2)."
   },
 
+  "trimmed_mean_beta": {
+    "value": 0.1,
+    "validated_on_split": "UNVALIDATED -- new BAS1 (Issue 3) baseline-comparison knob, not yet swept against any split."
+  },
+
   "fedprox_mu_sweep_default": [0.0, 0.005, 0.02, 0.05, 0.1],
   "mad_k_sweep_default": [2.0, 2.5, 3.0, 3.5, 4.0],
   "byzantine_f_sweep_default": [1, 2, 3]

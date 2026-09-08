@@ -596,6 +596,48 @@ def get_global_test_holdout(model_type: str, seed: int = 42):
     return cached["X_test"], cached["y_test"]
 
 
+def get_global_train_holdout(model_type: str, seed: int = 42):
+    """
+    Issue 4 Task 4 fix (centralized-baseline blocker): returns the
+    global, non-partitioned TRAIN split (X_train, y_train) already
+    computed and cached by load_and_preprocess() -- the SAME stratified
+    80% TRAIN split _dirichlet_partition() later carves into per-client
+    federated shards, exposed here directly for the centralized
+    baselines (CNN-LSTM/MLP/RF/XGBoost) that need to train on ALL of
+    TRAIN as one dataset rather than a federated per-client partition.
+
+    Mirrors get_global_test_holdout()'s exact contract -- same cache
+    key, same load_and_preprocess() call, no new preprocessing path.
+    Per SPLIT_PROTOCOL.md's provenance table, TRAIN is explicitly valid
+    for "each client's own local training" -- a centralized model
+    trained on the full TRAIN split is the same use at a different
+    granularity (one "client" instead of many), not a new use of this
+    split.
+    """
+    load_and_preprocess(model_type, seed=seed)
+    cached = _cache[(model_type, seed)]
+    return cached["X_train"], cached["y_train"]
+
+
+def get_global_validation_holdout(model_type: str, seed: int = 42):
+    """
+    Issue 4 Task 4 fix: returns the global VALIDATION split
+    (X_val, y_val) already computed and cached by load_and_preprocess()
+    -- per SPLIT_PROTOCOL.md's provenance table, this is the split any
+    hyperparameter/model-selection decision (early stopping, argmax over
+    FedProx mu, etc.) must use, never TEST. Mirrors get_global_test_
+    holdout()'s exact contract. NOT the same thing as
+    _dirichlet_partition()'s per-client "local validation" shard --
+    that is each client's own 90/10 split of ITS OWN TRAIN shard, used
+    only for that client's local progress logging, and is explicitly
+    a different split per SPLIT_PROTOCOL.md ("Client-local train/val is
+    a different thing").
+    """
+    load_and_preprocess(model_type, seed=seed)
+    cached = _cache[(model_type, seed)]
+    return cached["X_val"], cached["y_val"]
+
+
 def _dirichlet_partition(X_train, y_train, num_classes,
                          partition_id, num_partitions,
                          local_val_size, alpha, seed):

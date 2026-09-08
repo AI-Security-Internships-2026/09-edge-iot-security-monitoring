@@ -95,7 +95,7 @@ def encrypt_params_with_norm_guard(raw_params, keys, he_context, poly_degree,
     """
     Same as encrypt_params(), plus a ciphertext-bound norm proof over the
     classifier-head DELTA (this client's trained head minus the global
-    head it started the round with) — see defences/zkp.py Part 2 for the
+    head it started the round with) — see defences/hmac_norm_guard.py Part 2 for the
     full design rationale (Experiment 2's HE-Krum blind-spot mitigation).
 
     Parameters
@@ -113,9 +113,9 @@ def encrypt_params_with_norm_guard(raw_params, keys, he_context, poly_degree,
     Returns
     -------
     Same dict as encrypt_params(), plus a "head_norm_proof" key holding
-    the dict returned by zkp.generate_head_norm_proof().
+    the dict returned by norm_guard.generate_head_norm_proof().
     """
-    from defences import zkp
+    from defences import hmac_norm_guard as norm_guard
 
     result = encrypt_params(raw_params, keys, he_context, poly_degree)
 
@@ -126,7 +126,7 @@ def encrypt_params_with_norm_guard(raw_params, keys, he_context, poly_degree,
         (t - g).flatten() for t, g in zip(trained_sensitive, global_sensitive)
     ]).astype(np.float64)
 
-    result["head_norm_proof"] = zkp.generate_head_norm_proof(
+    result["head_norm_proof"] = norm_guard.generate_head_norm_proof(
         delta_flat, result["sensitive_enc"]["chunks"]
     )
     return result

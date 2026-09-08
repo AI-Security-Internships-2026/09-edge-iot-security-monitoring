@@ -1,0 +1,78 @@
+{
+  "_comment": "BAS1 (Issue 3) Task 4 -- E1 baseline run registry. Per the issue's literal text this is SEVEN named items: four centralized (non-FL) baselines + three FL runs. This file is a documentation/launch registry, not something main.py loads directly -- config_loader.py only loads experiments/configs/hyperparams.json (DAT1 Task 2). Each entry below states exactly how to launch it. Runs marked \"launcher\": \"main.py\" are executed via the commands in \"launch_command\"; the centralized runs use a separate (non-FL) training script that is NOT part of this handoff's files -- see the 'centralized_runs_note' field on each of those four entries.",
+
+  "runs": [
+    {
+      "name": "centralized_cnn_lstm",
+      "type": "centralized",
+      "model": "CNN-LSTM",
+      "launcher": "NOT main.py -- separate centralized training script",
+      "centralized_runs_note": "Not present in this handoff's file set (only src/main.py, src/defences/*, src/config_loader.py, tests/test_aggregators.py, experiments/configs/hyperparams.json were provided). This entry documents the run's identity/purpose for the E1 registry; the actual centralized training entrypoint must be located in the real repo before this row can be launched or verified.",
+      "status": "NOT VERIFIED -- launcher script unavailable in this session"
+    },
+    {
+      "name": "centralized_mlp",
+      "type": "centralized",
+      "model": "MLP",
+      "launcher": "NOT main.py -- separate centralized training script",
+      "centralized_runs_note": "Same caveat as centralized_cnn_lstm above.",
+      "status": "NOT VERIFIED -- launcher script unavailable in this session"
+    },
+    {
+      "name": "centralized_rf",
+      "type": "centralized",
+      "model": "Random Forest",
+      "launcher": "NOT main.py -- separate centralized training script (likely scikit-learn, not this FL pipeline)",
+      "centralized_runs_note": "Same caveat as centralized_cnn_lstm above.",
+      "status": "NOT VERIFIED -- launcher script unavailable in this session"
+    },
+    {
+      "name": "centralized_xgboost",
+      "type": "centralized",
+      "model": "XGBoost",
+      "launcher": "NOT main.py -- separate centralized training script",
+      "centralized_runs_note": "Same caveat as centralized_cnn_lstm above. Note xgboost is not currently in the requirements.txt runtime-import inventory gathered for Task 3 -- if this centralized script is confirmed to exist and to import xgboost, add it to requirements.txt at that time.",
+      "status": "NOT VERIFIED -- launcher script unavailable in this session"
+    },
+    {
+      "name": "fl_fedavg",
+      "type": "federated",
+      "ablation_mode": "baseline",
+      "aggregator": "fedavg",
+      "use_dp": false,
+      "fedprox_mu": 0.0,
+      "dp_safe": false,
+      "launcher": "main.py",
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator fedavg",
+      "note": "Explicit no-defence FedAvg baseline (BAS1 Task 1's fedavg() aggregator).",
+      "status": "NOT EXECUTED THIS SESSION -- data_loader.py/task.py/dp_persistent_client_state.py (imported by main.py) and torch/opacus/tenseal were not part of this handoff's file set, so main.py cannot actually be launched in this sandbox. Code path verified by static review and py_compile only."
+    },
+    {
+      "name": "fl_fedprox",
+      "type": "federated",
+      "ablation_mode": "baseline",
+      "aggregator": "fedavg",
+      "use_dp": false,
+      "fedprox_mu": 0.02,
+      "dp_safe": false,
+      "launcher": "main.py",
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator fedavg",
+      "note": "fedprox_mu=0.02 comes from experiments/configs/hyperparams.json (get_value(_HP_CONFIG, 'fedprox_mu')) -- this row IS 'plain FedProx', distinct from the architecture-only row below. PROX_MU is read from the hyperparams config regardless of --aggregator, so this row differs from fl_fedavg only in that PROX_MU=0.02 is applied during local training, not through any different --aggregator or --ablation-mode value.",
+      "status": "NOT EXECUTED THIS SESSION -- see fl_fedavg's status note; same blocker applies."
+    },
+    {
+      "name": "fl_fedprox_dpsafe_arch_no_dp",
+      "type": "federated",
+      "ablation_mode": "baseline",
+      "aggregator": "fedavg",
+      "use_dp": false,
+      "fedprox_mu": 0.02,
+      "dp_safe": true,
+      "force_dp_safe_arch_cli_flag": true,
+      "launcher": "main.py",
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator fedavg --force-dp-safe-arch",
+      "note": "Architecture-only ablation: GroupNorm+DPLSTM (dp_safe=True) with NO DP-SGD noise (use_dp=False), isolating the architecture swap's effect from the DP mechanism's effect. THIS IS THE ROW THE DRAFT CONFIG WAS MISSING (handoff correction #3) -- main.py's DP_SAFE was previously derived automatically as `DP_SAFE = USE_DP`, which could not express dp_safe=True with use_dp=False simultaneously. Real code change made this session: a new --force-dp-safe-arch CLI flag was added and DP_SAFE is now `USE_DP or _args.force_dp_safe_arch`. This is real code work, not just a config entry -- see main.py diff.",
+      "status": "CODE CHANGE MADE AND STATICALLY VERIFIED (py_compile passes; argparse namespace confirmed to set force_dp_safe_arch=True and thread through to DP_SAFE derivation). NOT ACTUALLY EXECUTED -- same missing-dependency blocker as the other two FL rows (data_loader.py/task.py/dp_persistent_client_state.py not in this handoff's files, torch/opacus/tenseal not installed in this sandbox)."
+    }
+  ]
+}

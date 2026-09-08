@@ -1,0 +1,62 @@
+{
+  "_comment": "BAS1 (Issue 3) Task 4 -- E2 aggregator comparison registry, covering the 7 --aggregator dispatch-table keys added in Task 1. Like E1_baselines.json this is a launch registry, not something main.py or config_loader.py loads automatically -- CLI flags route everything (Task 4's whole point), so each entry here is just the exact command to run it. 'calibrated_krum' is reserved for Issue 4 and is expected to raise NotImplementedError, not to actually train.",
+
+  "runs": [
+    {
+      "name": "agg_fedavg",
+      "aggregator": "fedavg",
+      "ablation_mode": "baseline",
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator fedavg",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below."
+    },
+    {
+      "name": "agg_krum",
+      "aggregator": "krum",
+      "ablation_mode": "baseline",
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator krum",
+      "note": "'krum' and 'multi_krum' are treated as aliases for the same fixed-M Multi-Krum path in main.py's dispatch derivation (USE_KRUM = AGGREGATOR in ('krum','multi_krum')).",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below."
+    },
+    {
+      "name": "agg_multi_krum",
+      "aggregator": "multi_krum",
+      "ablation_mode": "krum_baseline",
+      "launch_command": "python main.py network --ablation-mode krum_baseline --aggregator multi_krum",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below."
+    },
+    {
+      "name": "agg_median",
+      "aggregator": "median",
+      "ablation_mode": "krum_baseline",
+      "launch_command": "python main.py network --ablation-mode krum_baseline --aggregator median",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below."
+    },
+    {
+      "name": "agg_trimmed_mean",
+      "aggregator": "trimmed_mean",
+      "ablation_mode": "baseline",
+      "trimmed_mean_beta": 0.1,
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator trimmed_mean",
+      "note": "trimmed_mean_beta comes from experiments/configs/hyperparams.json (currently 0.1, marked UNVALIDATED).",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below."
+    },
+    {
+      "name": "agg_adaptive_krum",
+      "aggregator": "adaptive_krum",
+      "ablation_mode": "krum_baseline",
+      "launch_command": "python main.py network --ablation-mode krum_baseline --aggregator adaptive_krum",
+      "note": "adaptive_multi_krum() is byte-for-byte unchanged from before BAS1 -- preserved as the baseline for Issue 4's Calibrated Krum comparison.",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below."
+    },
+    {
+      "name": "agg_calibrated_krum",
+      "aggregator": "calibrated_krum",
+      "ablation_mode": "baseline",
+      "launch_command": "python main.py network --ablation-mode baseline --aggregator calibrated_krum",
+      "expected_behavior": "Reserved for Issue 4 -- must raise NotImplementedError cleanly at the dispatch-table resolution step (before any client training starts), not crash somewhere else first.",
+      "status": "NOT EXECUTED THIS SESSION -- see requirements note below. Static code review confirms the NotImplementedError is raised at dispatch-table resolution time (immediately after ABLATION_MODE branch, before any imports of training-time modules that depend on AGGREGATOR), i.e. before Round 1 would start -- but this has not been confirmed by an actual run."
+    }
+  ],
+
+  "requirements_note": "None of the 7 commands above were actually executed this session. main.py imports data_loader.py, task.py, and dp_persistent_client_state.py, none of which were included in this handoff's file set, and torch/opacus/tenseal are not installed in this sandbox. All 7 commands were verified only by static review (py_compile on main.py + defences/*, and a standalone argparse re-derivation of the CLI namespace) -- not by an actual Round-1 start. Task 4's 'must actually run, not just read' requirement is therefore NOT satisfied for any of these 7 rows in this session; running them for real requires the actual repo checkout with all modules present, plus the real Python environment with torch/opacus/tenseal/scikit-learn installed."
+}

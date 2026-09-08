@@ -18,7 +18,7 @@
 - Identified and understood 3 related papers /  articles
 
 ### Personal Introduction
-Hi, I'm Muhammad Zarawar Khan. I’m an incoming AI Security Intern with a strong interest in IOT and AI, so having been assigned to do research in edge AI is perfect for me. I have a solid foundation in Python and have worked with machine learning libraries like PyTorch, alongside a good understanding of core network security principles. Throughout my time here at CNIT/PNTLab Pisa, I'm looking forward to learn about FL and expand my expertise in this field. I'm very grateful for this opportunity and hope that I can provide value.
+Hi, I'm Muhammad Zarawar Khan. I'm an incoming AI Security Intern with a strong interest in IOT and AI, so having been assigned to do research in edge AI is perfect for me. I have a solid foundation in Python and have worked with machine learning libraries like PyTorch, alongside a good understanding of core network security principles. Throughout my time here at CNIT/PNTLab Pisa, I'm looking forward to learn about FL and expand my expertise in this field. I'm very grateful for this opportunity and hope that I can provide value.
 
 ### Problems / Blockers
 None faced.
@@ -137,9 +137,9 @@ None faced.
 **Privacy stack architecture — design and critique**
 - Architected a three-layer quantum-safe privacy stack for the multi-user shared IoT gateway scenario, addressing both intra-client privacy (protecting concurrent edge users on the same gateway from each other) and inter-client privacy (server blindness to raw parameters)
 - Identified and corrected three flaws in an earlier architecture draft:
-  - Trimmed Mean under homomorphic encryption is computationally infeasible (requires 15-30 multiplicative depth levels per comparison across a 50,000-parameter model — days of CPU time). Replaced with homomorphic FedAvg (ciphertext addition + scalar multiplication only), moving outlier protection to the ZKP/commitment layer
-  - The ZKP wasn't bound to the ciphertext — a Byzantine client could prove a clean gradient while transmitting a poisoned encrypted payload. Fixed with an HMAC-SHA256 Pedersen-style commitment scheme binding the proof to the actual encrypted data
-  - Proving DP noise was correctly sampled is infeasible in a standard ZKP (gigabyte-sized proofs for a 50k-parameter network). Removed from ZKP scope; DP guarantee now rests on correct implementation rather than cryptographic proof
+  - Trimmed Mean under homomorphic encryption is computationally infeasible (requires 15-30 multiplicative depth levels per comparison across a 50,000-parameter model — days of CPU time). Replaced with homomorphic FedAvg (ciphertext addition + scalar multiplication only), moving outlier protection to the norm-guard/commitment layer
+  - The norm guard wasn't bound to the ciphertext — a Byzantine client could prove a clean gradient while transmitting a poisoned encrypted payload. Fixed with an HMAC-SHA256 Pedersen-style commitment scheme binding the proof to the actual encrypted data
+  - Proving DP noise was correctly sampled is infeasible in a standard ZKP (gigabyte-sized proofs for a 50k-parameter network). Removed from norm-guard scope; DP guarantee now rests on correct implementation rather than cryptographic proof
 
 **Layer 1 — Local Differential Privacy (`src/privacy/dp_training.py`)**
 - Implemented Opacus-backed DP-SGD wrapper (`PrivacyEngine.make_private_with_epsilon()`), clipping per-sample gradients to `max_grad_norm=1.0` before adding calibrated Gaussian noise
@@ -164,10 +164,9 @@ None faced.
   - I/O storage calibration — removed redundant per-round dataset re-serialization; clients now write their training partition to disk once instead of every round
 - Established the edge RAM floor: CKKS at n=4096 on this model requires roughly 210-245MB for cryptographic steps alone; combined with the PyTorch runtime, the effective container floor sits around 340-350MB
 
-**Production run validation and debugging**)
-**Production run validation and debugging**)
-- Found and fixed a stray `×0.01` scaling bug in `zkp.py`'s norm-threshold formula that made validation ~100x too strict, causing the server to reject every legitimate update; corrected with a proper `NOISE_NORM_SAFETY_FACTOR = 1.15` applied to the theoretically correct `σ × √n_params` formula
-- Achieved a clean end-to-end 3-round production run: 100% update retention (2/2 clients per round, HTTP 200), server-side ZKP re-verification passing independently
+**Production run validation and debugging**
+- Found and fixed a stray `×0.01` scaling bug in `hmac_norm_guard.py`'s norm-threshold formula that made validation ~100x too strict, causing the server to reject every legitimate update; corrected with a proper `NOISE_NORM_SAFETY_FACTOR = 1.15` applied to the theoretically correct `σ × √n_params` formula
+- Achieved a clean end-to-end 3-round production run: 100% update retention (2/2 clients per round, HTTP 200), server-side norm-guard re-verification passing independently
 - Measured privacy-utility tradeoff directly: moving DP epsilon from 3.0 to 15.0 brought the noise-to-signal ratio down from ~450:1 to ~91:1, but this still manifests as non-monotonic loss between rounds (Client 0: round 1 ends at loss 1.4365, round 2 begins at loss 1.6583 before recovering to 1.4666) — confirms a real limitation of high-dimensional local DP at this model size
 - Profiled execution time: local training dominates at 40-60s/round (~60s round-1 CPU warmup, ~40s steady state); combined DP + commitment + partial CKKS encryption overhead is under 0.1s/round; server-side homomorphic decrypt+merge runs at 0.02s/round — cryptographic latency is not a deployment bottleneck
 -uploaded all results of tests which were previously done.
@@ -195,9 +194,9 @@ None faced.
 - Established the HE-vs-DP framing for the write-up: complementary, not competing (HE protects the pipe, DP protects the output); recommended a combined deployment (whole-model DP-SGD + classifier-head-only partial HE) as a future third experiment
 
 
-- **Defence-folder consolidation completed:** confirmed `docker_fl/` is a full parallel project (own datasets, own results), not a duplicate. Diffed `zkp.py`/`local_dp.py` between `src/` and `docker_fl/` — found real divergences. Merged into one canonical `src/defences/zkp.py`/`local_dp.py`; confirmed `docker-compose.yml` mounts `../src/defences` read-only into all four containers, verified live via `inspect.getsourcefile()`. `krum.py`/`byzantine.py` had no conflict. `defences/homomorphic.py` confirmed dead code — real pure-HE implementation lives in `docker_fl/he_aggregation.py`, porting deferred
-- **`main.py` unification completed:** merged the two previously separate `main.py` files (DP/ZKP/HE version and Krum/Byzantine version) into one file with three aggregation branches — HE, Multi-Krum, or plain FedAvg.
-- Flagged a terminology note for the write-up: the DP/ZKP/HE `main.py`'s "ZKP" is a plain norm-threshold check, structurally different from the HMAC-commitment `defences/zkp.py`
+- **Defence-folder consolidation completed:** confirmed `docker_fl/` is a full parallel project (own datasets, own results), not a duplicate. Diffed `zkp.py` (later renamed `hmac_norm_guard.py`)/`local_dp.py` between `src/` and `docker_fl/` — found real divergences. Merged into one canonical `src/defences/hmac_norm_guard.py`/`local_dp.py`; confirmed `docker-compose.yml` mounts `../src/defences` read-only into all four containers, verified live via `inspect.getsourcefile()`. `krum.py`/`byzantine.py` had no conflict. `defences/homomorphic.py` confirmed dead code — real pure-HE implementation lives in `docker_fl/he_aggregation.py`, porting deferred
+- **`main.py` unification completed:** merged the two previously separate `main.py` files (DP/norm-guard/HE version and Krum/Byzantine version) into one file with three aggregation branches — HE, Multi-Krum, or plain FedAvg.
+- Flagged a terminology note for the write-up: the DP/norm-guard/HE `main.py`'s "norm guard" flag is a plain norm-threshold check, structurally different from the HMAC-commitment `defences/hmac_norm_guard.py`
 - **Issue resolution:** deleted the unused scaffold `src/server_app.py` (training has been driven by `app/main.py`/`main.py` on real Edge-IIoTset data since Week 4); closed Issue 7 as a consequence. Clarified metrics separation — `docker_fl/results` (now `RESULTS AND MANIFESTS/Docker test for RAM and Latency/`) intentionally logs hardware metrics on placeholder data (purpose is resource-constraint emulation, not accuracy), while root `results/` holds full real-data benchmarks. Closed Issue 9 (defence-folder duplication); Issue 10 (Krum non-IID exclusion) marked as actively being worked on
 
 
@@ -205,7 +204,7 @@ None faced.
 
 
 - Parameterized `model_defs.py` with an opt-in `dp_safe` flag (BatchNorm1d→GroupNorm, LSTM→DPLSTM) instead of an unconditional swap, so non-DP runs stay byte-identical to existing baselines/checkpoints
-- Added a `BYZANTINE_HEAD_ONLY` flag — under `USE_HE=True`, uses `classifier_head_flip_attack()` instead of `sign_flip_attack()` since a full sign-flip at scale=5.0 would trip ZKP's norm gate under HE
+- Added a `BYZANTINE_HEAD_ONLY` flag — under `USE_HE=True`, uses `classifier_head_flip_attack()` instead of `sign_flip_attack()` since a full sign-flip at scale=5.0 would trip the norm guard's norm gate under HE
 - Wrote `scripts/build_manifest.py` (rewritten once after an initial wrong-schema assumption): discovers all runs via `experiment_config_*.json` + `results_*.csv` pairs, computes per-experiment summary stats, sanitizes stray "Flower" references, outputs `manifest.json` + `manifest_summary.csv`
 - Confirmed 38 features is the real, reproducible count (not the documented 35) via `check_features.py` and a full column audit — adopted as ground truth for the main experiment
 
@@ -218,7 +217,7 @@ None faced.
 
 ### Problems / Blockers
 
--Caught and fixed a critical bug during the 'main.py' merge: ZKP-rejected clients get `continue`d out before aggregation, compacting `accepted_params`, so Krum's `selected_indices` were being compared directly against `BYZANTINE_CLIENTS` (original IDs) — fixed by tracking `accepted_client_indices` in parallel
+-Caught and fixed a critical bug during the 'main.py' merge: norm-guard-rejected clients get `continue`d out before aggregation, compacting `accepted_params`, so Krum's `selected_indices` were being compared directly against `BYZANTINE_CLIENTS` (original IDs) — fixed by tracking `accepted_client_indices` in parallel
 - Found and fixed three more bugs in the same pass: `get_model()` missing `dp_safe` (fixed via a unified `DP_SAFE = USE_DP` flag across all call sites); the Opacus wrapper never unwrapped before param extraction (fixed via `real_model = model._module if hasattr(model, "_module") else model`); achieved epsilon computed then immediately discarded before logging, leaving `dp_epsilon_spent` always `N/A` (fixed by removing the overwrite). Also fixed an output file-naming collision (results/checkpoints not tagged by DP epsilon condition, risking silent overwrites) via a rename-after-each-run workflow
 
 - Worked through Docker/Windows issues: wrong dataset path, cmd.exe vs. PowerShell mismatches, and a genuine `Errno 12` OOM traced to WSL2's VM having only 3.5GB total memory — fixed via a `.wslconfig` bump
@@ -298,7 +297,7 @@ None faced.
 - Headline result, replicated on both models: 0% Byzantine detection, every round, with the corrected attack. krum_score_ratio stayed flat at ≈0.38 (application) / ≈0.237 (network) across all 25 rounds — the attackers didn't just blend in, they scored as more trustworthy than the average honest client. Best F1-Macro collapsed from a 0.73/0.83 clean baseline to 0.13 (application) and 0.72 (network); Normal-class F1 (application) and Vulnerability_scanner F1 (network) both sat at 0.0000 every single round while aggregate accuracy still climbed past 90% on the network model — a clean demonstration that aggregate accuracy can hide a fully destroyed class.
 - Surfaced a persistent honest-client exclusion anomaly on the network model (clients 4/5/10 dropped every round regardless of attack), connecting to a previously-documented, unresolved Condition-5 anomaly that had grown from 1 excluded client to 3. Round-25 instability also recurred (5th documented occurrence in this project) — recommended round 24 as the headline number instead of the final round.
 
-- Designed and built the Layer 2 mitigation: extended defences/zkp.py with a ciphertext-bound head-norm guard. Each client computes the L2 norm of its classifier-head delta (trained head minus the round's starting global head) before encrypting, signs it bound to a hash of the actual ciphertext bytes being submitted (so a client can't swap in a different ciphertext after the fact), and the server runs a MAD-threshold outlier check over all verified clients' committed norms — a magnitude-only analogue of Krum, applied to the one number the encrypted slice reveals, run as a pre-filter before Krum. Explicitly documented limitation: catches magnitude attacks, not a bounded-magnitude directional attack under threshold — same split the project already draws between ZKP and Krum for the full-model case. Reviewed and rejected a weaker alternative implementation with no ciphertext binding, confirmed via a standalone proof-of-concept that it would have been trivially bypassable.
+- Designed and built the Layer 2 mitigation: extended defences/hmac_norm_guard.py with a ciphertext-bound head-norm guard. Each client computes the L2 norm of its classifier-head delta (trained head minus the round's starting global head) before encrypting, signs it bound to a hash of the actual ciphertext bytes being submitted (so a client can't swap in a different ciphertext after the fact), and the server runs a MAD-threshold outlier check over all verified clients' committed norms — a magnitude-only analogue of Krum, applied to the one number the encrypted slice reveals, run as a pre-filter before Krum. Explicitly documented limitation: catches magnitude attacks, not a bounded-magnitude directional attack under threshold — same split the project already draws between the norm guard and Krum for the full-model case. Reviewed and rejected a weaker alternative implementation with no ciphertext binding, confirmed via a standalone proof-of-concept that it would have been trivially bypassable.
 
 - Confirmed the mitigation works — five runs, 100% detection in every one, across both models and three different attacked-client configurations (default clients 1,2; extreme-data clients 4,10; ordinary-data clients 2,7). Vulnerability_scanner F1 recovered from 0.0000 to 0.7864 (matching/exceeding baseline); application per-class F1 recovered broadly across previously-dead classes. Best F1-Macro landed within ~0.001 of the clean baseline for the default-client runs on both models.
 - Cross-attack-configuration finding: Krum's extra (non-attacker) exclusions are consistently the same clients (network: 4, 10; application: 6, 7) across every attack configuration tested, including ones that don't target them at all — strong evidence the exclusion is driven by partition size/composition, not the attack. Confirmed directly via a new print_data_split() diagnostic added to main.py: clients 4/10 (network) hold 3–6x the fleet-median sample count and ~73% of the entire Vulnerability_scanner class between them.
@@ -346,23 +345,23 @@ None faced.
 **Bugs found in the original (pre-refactor) single `main.py`'s ablation flags**, all now resolved by the `ABLATION_MODE` refactor:
 
 2. `USE_HE=True` (standalone) was fundamentally broken — its local `he_aggregate()` never decrypted, returning still-encrypted CKKS vectors that would crash the next `set_model_parameters()` call; also used an unweighted average. **Fixed** — `pure_he` now routes through the same validated `he_local.encrypt_params()`/`aggregate_encrypted()`/`decrypt_params()` pipeline Experiment 2 already used.
-3. `BYZANTINE_HEAD_ONLY=True` was hardcoded globally, contaminating a "just HE" ablation with the wrong attack type. **Fixed** — now set explicitly per ablation mode (`False` for pure_dp/pure_he, `True` for pure_zkp).
-4. `USE_ZKP=True` never called `defences/zkp.py` at all — used a bare `||params||≤10.0` check on the **full trained weight vector** (not a clipped gradient), almost certainly rejecting every client every round. **Fixed** — `pure_zkp` now genuinely runs `zkp.py` Part 2's ciphertext-bound HMAC head-norm guard, in isolation, with the correct MAD-based threshold.
+3. `BYZANTINE_HEAD_ONLY=True` was hardcoded globally, contaminating a "just HE" ablation with the wrong attack type. **Fixed** — now set explicitly per ablation mode (`False` for pure_dp/pure_he, `True` for pure_norm_guard).
+4. `USE_NORM_GUARD=True` never called `defences/hmac_norm_guard.py` at all — used a bare `||params||≤10.0` check on the **full trained weight vector** (not a clipped gradient), almost certainly rejecting every client every round. **Fixed** — `pure_norm_guard` now genuinely runs `hmac_norm_guard.py` Part 2's ciphertext-bound HMAC head-norm guard, in isolation, with the correct MAD-based threshold.
 - Fixed `pure_he` to route through the already-validated `he_local.py` pipeline (encrypt → aggregate → decrypt), all clients, no Krum.
-- Rebuilt `pure_zkp` as the ciphertext-bound HMAC head-norm guard running **standalone, no Krum**, with the classifier-head-only Byzantine attack active — deleted the old broken norm check entirely.
+- Rebuilt `pure_norm_guard` as the ciphertext-bound HMAC head-norm guard running **standalone, no Krum**, with the classifier-head-only Byzantine attack active — deleted the old broken norm check entirely.
 
 
-**Deeper ZKP review (separate thread, using the real `zkp.py`):**
+**Deeper norm-guard review (separate thread, using the real `hmac_norm_guard.py`):**
 - Clarified HMAC ≠ encryption — CKKS provides confidentiality of the classifier head; HMAC only provides authenticity/binding of the norm claim to that specific ciphertext.
-- Confirmed the real `zkp.py`'s exact mechanism and its own honest caveat: it doesn't prove the claimed norm matches what's actually inside the ciphertext (a client holding the shared key could sign a false norm for a real ciphertext with nothing to catch it).
+- Confirmed the real `hmac_norm_guard.py`'s exact mechanism and its own honest caveat: it doesn't prove the claimed norm matches what's actually inside the ciphertext (a client holding the shared key could sign a false norm for a real ciphertext with nothing to catch it).
 - Gave cost estimates for a genuine ZKP (Bulletproofs range proof): low seconds to ~10s/client/round, hundreds of MB–low GB RAM, mostly Rust tooling — recommended keeping the current commitment+MAC scheme as the main pipeline rather than converting everything.
-- Began reviewing the real `he_local.py`: confirmed all function signatures match `main.py`'s calls, confirmed the norm proof is computed on the **delta** (trained head − round-starting global head, not the absolute head) and that `main.py` passes the correct pre-training `global_params`. **Left unfinished:** a full end-to-end test using the real `he_local.py` + real `zkp.py` together (was mid-way through writing a stub `he_aggregation.py` to complete this) — the earlier successful executions used stand-in fake modules, not the real encryption math.
+- Began reviewing the real `he_local.py`: confirmed all function signatures match `main.py`'s calls, confirmed the norm proof is computed on the **delta** (trained head − round-starting global head, not the absolute head) and that `main.py` passes the correct pre-training `global_params`. **Left unfinished:** a full end-to-end test using the real `he_local.py` + real `hmac_norm_guard.py` together (was mid-way through writing a stub `he_aggregation.py` to complete this) — the earlier successful executions used stand-in fake modules, not the real encryption math.
 
 
 
 - Retrieved all 6 result CSVs plus a separate 16-point epsilon-sweep summary table.
 - Produced two markdown reports:
-  - **`FL-IDS_Ablation_Analysis.md`** — headline finding: the standalone ZKP guard hits 100% detection, 0% false positives, on both models, all 25 rounds, with no Krum involved at all; it also fully absorbs the attack's utility cost (network `pure_zkp` beat the clean baseline) and runs faster than `pure_he` since it aggregates fewer clients.
+  - **`FL-IDS_Ablation_Analysis.md`** — headline finding: the standalone norm guard hits 100% detection, 0% false positives, on both models, all 25 rounds, with no Krum involved at all; it also fully absorbs the attack's utility cost (network `pure_norm_guard` beat the clean baseline) and runs faster than `pure_he` since it aggregates fewer clients.
   - **`FL-IDS_Epsilon_Sweep_Analysis.md`** — extended Krum-robustness-under-DP down to ε=0.5, but pushed back on the earlier "ε=9 sweet spot" claim (the real best point across 16 values is ε=14 on both models), and flagged that DP calibration error grows to ~1.16% at the lowest epsilon rather than staying within the previously claimed 0.25%.
 
 Both reports end with explicit caveats (single-seed noise, recipe differences, what the guard-alone result does and doesn't imply about Krum's role) so you know what's solid enough to cite as-is versus what needs a repeat run first.
@@ -370,4 +369,4 @@ Both reports end with explicit caveats (single-seed noise, recipe differences, w
 
 
 BLOCKERS:::
-2. **Full real-encryption end-to-end ZKP+HE test unfinished** — the `he_aggregation.py` stub needed to run real `he_local.py`+`zkp.py` together (vs. stand-in modules) was never completed.
+2. **Full real-encryption end-to-end norm-guard+HE test unfinished** — the `he_aggregation.py` stub needed to run real `he_local.py`+`hmac_norm_guard.py` together (vs. stand-in modules) was never completed.

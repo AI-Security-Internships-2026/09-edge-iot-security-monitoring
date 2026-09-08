@@ -1,31 +1,44 @@
 """
-Lightweight Zero-Knowledge Proof module.
+hmac_norm_guard.py
+
+Historically misnamed "ZKP" throughout this codebase -- it is NOT a
+zero-knowledge proof. It is a magnitude-only, HMAC-signed norm
+assertion under a hardcoded, pre-shared symmetric key (SHARED_KEY
+below). It proves two things only: (1) the claimed norm was signed by
+someone holding the shared key (authenticity), and (2) the signed norm
+corresponds to the specific ciphertext bytes actually submitted this
+round (anti-swap binding). It does NOT prove the claimed norm matches
+what is actually inside the ciphertext -- a client holding the shared
+key could sign a false norm for a real ciphertext with nothing here to
+catch it -- and it cannot detect a bounded-magnitude directional
+(sign-flip-within-bounds) attack; see Limitations in the project
+context doc.
 
 Runs fine in both the local (main.py) and Docker (client.py) orchestrator
-processes — it only depends on numpy/hashlib/hmac, never forces a torch
+processes -- it only depends on numpy/hashlib/hmac, never forces a torch
 import, and is safe to call from a lightweight client process either way.
 
 What this implements
 --------------------
-A commitment scheme with a signed norm assertion — honest to call
-it this in the paper rather than a full ZKP.
+A commitment scheme with a signed norm assertion -- honest to call
+it this in the paper rather than a full zero-knowledge proof.
 
-A full SNARK/STARK ZKP over 50,000 float32 parameters requires:
+A full SNARK/STARK zero-knowledge proof over 50,000 float32 parameters requires:
   - Encoding floats as finite-field elements (expensive)
   - Building arithmetic circuits for norm computation (100k+ gates)
   - Proof generation: minutes per client per round on CPU
 
 For a research prototype demonstrating the architecture, we use:
   - Commitment: HMAC-SHA256(shared_key, params || salt)
-      → binding (client cannot change params after committing)
-      → hiding   (server cannot recover params from commitment)
+      -> binding (client cannot change params after committing)
+      -> hiding   (server cannot recover params from commitment)
   - Norm assertion: client sends actual_norm signed with HMAC
-      → server verifies signature (HMAC forgery requires shared key)
-      → server checks actual_norm ≤ threshold
-      → Byzantine gradient bomb is blocked
+      -> server verifies signature (HMAC forgery requires shared key)
+      -> server checks actual_norm <= threshold
+      -> Byzantine gradient bomb is blocked
 
 Quantum safety:
-  HMAC-SHA256 is hash-based → quantum-safe.
+  HMAC-SHA256 is hash-based -> quantum-safe.
   Grover's algorithm halves the effective key space, so 256-bit
   HMAC-SHA256 gives 128-bit post-quantum security.
   This is above NIST's minimum threshold for post-quantum security.
@@ -33,7 +46,8 @@ Quantum safety:
 Limitation acknowledged (honest):
   This does not prove DP noise was applied correctly.
   DP correctness comes from correct implementation, not from this proof.
-  The ZKP proves structural integrity (norm bound), not procedural honesty.
+  This norm assertion proves structural integrity (norm bound), not
+  procedural honesty.
 """
 
 import hashlib
@@ -44,7 +58,7 @@ import numpy as np
 
 # In production: distribute via PKI (e.g. CRYSTALS-Dilithium signatures)
 # In research prototype: pre-shared symmetric key
-SHARED_KEY = b"fl_ids_zkp_shared_key_2025_v2"
+SHARED_KEY = b"fl_ids_norm_guard_shared_key_2025_v2"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -110,7 +124,7 @@ def generate_norm_proof(params_flat, clip_norm=1.0, noise_sigma=0.0):
     small multiplicative safety factor is enough tail coverage; no
     large additive fudge term is needed. With the old buggy formula,
     every honestly DP-noised update would have been rejected as
-    "exceeding the norm bound" — the ZKP gate was effectively blocking
+    "exceeding the norm bound" — the norm-guard gate was effectively blocking
     all real clients, not just Byzantine ones.
 
     A Byzantine client CANNOT:
@@ -120,9 +134,9 @@ def generate_norm_proof(params_flat, clip_norm=1.0, noise_sigma=0.0):
     A Byzantine client CAN:
       - Apply sign-flip within the norm bound
       → This is why Multi-Krum is still useful for direction-based attacks
-      → ZKP handles structural/magnitude attacks; Krum handles directional
+      -> This norm guard handles structural/magnitude attacks; Krum handles directional
 
-    In a full ZKP this would be a range proof (Bulletproofs or STARK).
+    In a full zero-knowledge proof this would be a range proof (Bulletproofs or STARK).
     Here: signed norm value. The binding between this norm and the
     actual gradient is provided by the commitment scheme.
 
@@ -188,7 +202,7 @@ def generate_proof(params, clip_norm=1.0, noise_sigma=0.0, salt=None):
     Generate a complete proof bundle for one client's update.
 
     Call AFTER Local DP, BEFORE CKKS encryption.
-    (Cannot generate a ZKP about plaintext data after encrypting it.)
+    (Cannot generate this norm assertion about plaintext data after encrypting it.)
 
     Returns
     -------
@@ -243,7 +257,7 @@ def verify_proof(proof, params=None, clip_norm=1.0,
 def print_verification(client_id, proof, is_valid, reason):
     pi     = proof["norm_proof"]
     status = "✓ PASS" if is_valid else "✗ FAIL"
-    print(f"    Client {client_id:>2}  ZKP {status}  "
+    print(f"    Client {client_id:>2}  norm-guard {status}  "
           f"norm={pi['norm']:.4f}  "
           f"threshold={pi['threshold']:.4f}  "
           f"| {reason}")
@@ -274,7 +288,7 @@ for one (small-norm) plaintext and then submit a different
 immediately detectable without decrypting anything.
 
 WHAT THIS DOES NOT DO — read this before treating it as a solved
-problem, exactly the way Part 1 is upfront about not being a full ZKP:
+problem, exactly the way Part 1 is upfront about not being a full zero-knowledge proof:
   - It does NOT prove the claimed norm actually equals the norm of the
     plaintext inside the ciphertext. A client can still lie about the
     norm of the exact ciphertext it commits to — nothing here performs

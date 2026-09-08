@@ -1,0 +1,17 @@
+{
+  "_comment": "PRV1 Task 2. Every value below is a FULL-RUN, composed target epsilon -- the cumulative privacy loss a client's PrivacyEngine should compose to across all NUM_ROUNDS x LOCAL_EPOCHS optimizer-step epochs of its lifespan (25 x 5 = 125 for the default FL config), NOT a per-round value. Pass one value at a time via `python src/main.py <model_type> --epsilon <value> --ablation-mode pure_dp` (or krum_dp_sweep, for the DP+Adaptive-Krum recipe). Old pre-PRV1-fix manifests/CSVs using the deprecated per-round-reset semantics are NOT retroactively relabeled -- every point in this grid must be re-run from scratch under the fixed accounting.",
+  "sweep_id": "E4_dense_epsilon_sweep",
+  "epsilon_field_semantics": "full_run_target_epsilon: composed over the ENTIRE experiment (all rounds x all local epochs), per client, via a single never-reset opacus PrivacyEngine/RDPAccountant. See dp_persistent_client_state.py and main.py's PRV1 module docstring.",
+  "dp_delta": 1e-5,
+  "full_run_target_epsilon": [
+    0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+    2, 3, 4, 5, 6, 7, 8, 9, 10, 15
+  ],
+  "num_points": 19,
+  "per_round_target_epsilon_deprecated": {
+    "_comment": "Read-only, logging-only. This is what the OLD (buggy, per-round-reset) accountant would have reported as 'the epsilon' after a single round at the corresponding full-run target above -- computed and written by main.py's _old_per_round_reset_epsilon_for_logging() purely so old vs. new CSVs can be diffed. NEVER treat any value here as a real privacy figure or use it to select a sweep point.",
+    "note": "Left unpopulated here (depends on each client's real per-round step count and sample_rate, which vary per Dirichlet partition/seed) -- populated per-run in each run's results_*.csv under the dp_per_round_target_epsilon_deprecated column instead."
+  },
+  "ablation_modes_using_this_grid": ["pure_dp", "krum_dp_sweep"],
+  "usage_example": "python src/main.py network --ablation-mode pure_dp --epsilon 3 --seed 42"
+}

@@ -32,6 +32,7 @@ REQUIRED_KEYS = (
     "fedprox_mu_sweep_default",
     "mad_k_sweep_default",
     "byzantine_f_sweep_default",
+    "trimmed_mean_beta",
 )
 
 # The scalar tunables that must additionally carry a 'validated_on_split'

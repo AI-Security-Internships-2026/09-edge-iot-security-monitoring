@@ -1,0 +1,54 @@
+# BAS1 (Issue 3) Task 3 -- pinned dependencies for the core FL-IDS pipeline
+# (experiments/Current model/). Generated from a real `pip freeze` run in
+# the actual research venv (.venv311, Python 3.11) on 2026-09-07.
+#
+# Scope: this file pins ONLY the packages the core pipeline
+# (experiments/Current model/main.py and everything it imports) actually
+# needs. flwr and paho-mqtt are deliberately excluded -- see note at the
+# bottom.
+#
+# Confirmed direct runtime imports in the files available for review this
+# session (src/main.py, src/defences/*.py): torch, tenseal, numpy.
+# opacus, pandas, and scikit-learn are included below because they are
+# near-certain requirements of data_loader.py / task.py /
+# dp_persistent_client_state.py (imported by main.py, not directly
+# reviewed this session) -- consistent with the master context doc's
+# description of this codebase (Opacus DP-SGD, pandas-based data
+# loading, scikit-learn metrics/preprocessing per the dataset's own
+# published preprocessing recipe, which uses sklearn.utils.shuffle,
+# sklearn.model_selection.train_test_split, sklearn.preprocessing).
+#
+# scipy and matplotlib are present in the real venv but were NOT
+# confirmed via direct `grep -rn "^import \|^from "` against the full
+# real repo (only a partial file set was available for that grep this
+# session). Included here because pip freeze shows them actually
+# installed in the environment that produced the paper's numbers --
+# omitting a genuinely-imported package silently breaks reproducibility,
+# which is a worse failure mode than pinning one extra unused package.
+# CONFIRM by running the grep below against the real repo and drop
+# either package from this file if it turns out to be unused:
+#   grep -rn "^import scipy\|^from scipy\|^import matplotlib\|^from matplotlib" .
+
+torch==2.13.0
+opacus==1.6.0
+tenseal==0.3.16
+pandas==3.0.3
+scikit-learn==1.9.0
+numpy==2.4.6
+scipy==1.17.1
+matplotlib==3.11.1
+
+# --------------------------------------------------------------------
+# Intentionally EXCLUDED, per the issue text: flwr and paho-mqtt belong
+# to the separate docker_ram_latency_v2 test suite (Flower 2.x), not
+# this core Krum/DP-SGD/HE-hybrid pipeline (Contradiction #20 in the
+# master context doc: "No Flower" applies only to
+# experiments/Current model/main.py, not to that separate suite).
+#
+# NOTE: both flwr==1.32.1 and paho-mqtt==2.1.0 ARE present in this same
+# .venv311 (confirmed via the real pip freeze this file was generated
+# from) -- this venv is shared between core-pipeline work and Docker-
+# suite dev work. That's fine, but worth stating explicitly here so a
+# future contributor doesn't wonder why two installed packages aren't
+# pinned: they're real, they're just out of this file's scope.
+# --------------------------------------------------------------------
