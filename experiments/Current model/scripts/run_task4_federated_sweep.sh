@@ -78,7 +78,10 @@ fi
 if [[ "$STAGE" == "fedavg_and_prox_sweep" ]]; then
     echo "Launching FedAvg + FedProx mu-sweep as a background tmux session: $SESSION"
     tmux new-session -d -s "$SESSION" -n runner
-    tmux send-keys -t "$SESSION:runner" "bash '$0' _run_fedavg_and_prox_sweep_inner" C-m
+    # See arch_swap's comment above: embed MODEL directly rather than
+    # relying on tmux env inheritance, which breaks once a tmux server is
+    # already running from an earlier session.
+    tmux send-keys -t "$SESSION:runner" "MODEL='${MODEL:-}' bash '$0' _run_fedavg_and_prox_sweep_inner" C-m
     echo "Attach with: tmux attach -t $SESSION"
     exit 0
 fi
@@ -125,8 +128,15 @@ if [[ "$STAGE" == "arch_swap" ]]; then
     fi
     echo "Launching arch-swap variant (PROX_MU=$BEST_MU, MODELS=${MODELS[*]}) as background tmux session: ${ARCHSWAP_SESSION}"
     tmux new-session -d -s "${ARCHSWAP_SESSION}" -n runner
+    # Embed BEST_MU/MODEL directly into the command string rather than
+    # relying on tmux to inherit them -- if the tmux SERVER was already
+    # running before this call (e.g. another session like a Stage 5 sweep
+    # was already active), `tmux new-session` does NOT automatically pick
+    # up this shell's current env vars; it only inherits whatever the
+    # server captured when it first started. Embedding them in the
+    # command string sidesteps that entirely, regardless of server state.
     tmux send-keys -t "${ARCHSWAP_SESSION}:runner" \
-        "bash '$0' _run_arch_swap_inner" C-m
+        "BEST_MU='${BEST_MU}' MODEL='${MODEL:-}' bash '$0' _run_arch_swap_inner" C-m
     echo "Attach with: tmux attach -t ${ARCHSWAP_SESSION}"
     exit 0
 fi
