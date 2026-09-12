@@ -647,12 +647,12 @@ def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
     NO ESTABLISHED CLOSED FORM (stated honestly, per the handoff doc --
     the ticket itself offers a lookup-table alternative to a callable,
     which is a signal one may not exist). Implemented here as an
-    EMPIRICAL linear regression of (honest-only) raw Krum score against
-    |n_samples_i - n_samples_j| and |class_entropy_i - class_entropy_j|,
-    fit externally against Task 1's real per_client_krum_scores.csv via
-    fit_hetero_variance_regression() below, and passed in here as
-    `fit_coeffs = {"intercept": b0, "coef_n_samples_diff": b1,
-    "coef_entropy_diff": b2, "r_squared": r2}`.
+    EMPIRICAL linear regression of |per-pair single-neighbour-distance
+    difference| against |n_samples_i - n_samples_j| and
+    |class_entropy_i - class_entropy_j|, fit externally against Task 1's
+    real per_client_krum_scores.csv via fit_hetero_variance_regression()
+    below, and passed in here as `fit_coeffs = {"coef_n_samples_diff":
+    b1, "coef_entropy_diff": b2, "r_squared": r2, ...}`.
 
     fit_coeffs=None (the honest default until Task 1's real sanity run
     has actually produced data to fit against): returns 0.0 and prints a
@@ -664,6 +664,35 @@ def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
     equivalent to hetero calibration not actually being available yet,
     not as hetero calibration having been validated to contribute
     nothing.
+
+    BUG FIX (post-Issue-4-Task-5 f-sweep failure -- f=1 Byzantine-TPR
+    dropped 18pp below plain, f=3 dropped 24pp AND honest-FPR dominance
+    reversed): the original version of this function applied
+    fit_coeffs to |n_samples_i - n_samples_j| / |entropy_i - entropy_j|
+    (pairwise DIFFERENCES), but fit_hetero_variance_regression() below
+    used to fit those same coefficient names against each client's
+    ABSOLUTE n_samples/entropy value as a regressor for that client's
+    raw_krum_score (an (n-f-2)-neighbour SUM, not a single pairwise
+    distance) -- a double mismatch: (a) fit-vs-applied functional form
+    (absolute value vs. difference) and (b) fit-vs-applied SCALE
+    (aggregate neighbour-sum, order 1e6-1e9 in this codebase's real
+    runs, vs. the single-pairwise-distance scale that var_dp and
+    baseline_honest_std_from_prior_round are both deliberately kept on
+    -- see _pairwise_std_within()'s docstring in
+    calibrated_adaptive_multi_krum() for the same scale trap already
+    caught and fixed for THAT term but not, until now, for this one).
+    Empirically this made expected_var_ij dominated by a huge, nearly
+    metadata-independent intercept, collapsing calibrated distances
+    for Byzantine and honest clients alike toward the same tiny range
+    -- confirmed directly against the real f=3 sweep CSVs, where all 3
+    Byzantine clients ended up with SMALLER calibrated scores than a
+    legitimately-noisy honest client. fit_hetero_variance_regression()
+    now fits on genuine same-round pairwise differences at the correct
+    single-pairwise-distance scale, so the coefficients applied here
+    match what was actually fit. No intercept term any more (see that
+    function's docstring for why) -- fit_coeffs["intercept"] is still
+    accepted/read for backward compatibility with any already-written
+    coefficients JSON, but treated as 0.0 if absent.
 
     alpha_dirichlet is accepted for signature completeness /
     forward-compatibility (a future refit could stratify by alpha) but
@@ -691,7 +720,7 @@ def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
 
     n_diff = abs(meta_i["n_samples"] - meta_j["n_samples"])
     e_diff = abs(meta_i["class_entropy"] - meta_j["class_entropy"])
-    predicted = (fit_coeffs["intercept"]
+    predicted = (fit_coeffs.get("intercept", 0.0)
                  + fit_coeffs["coef_n_samples_diff"] * n_diff
                  + fit_coeffs["coef_entropy_diff"] * e_diff)
     # A regression can predict a negative "variance" for some input
@@ -719,18 +748,51 @@ def fit_hetero_variance_regression(per_client_krum_scores_csv):
     silently guessed here, since "was DP active for this row" is not a
     column in Task 1's schema as specified).
 
-    Regresses raw_krum_score (the client's OWN score, not a pairwise
-    difference -- per-client n_samples/class_entropy against the
-    ROUND's other honest clients is the available granularity from
-    Task 1's schema; a true pairwise regression would need a second,
-    pairwise-structured log this schema does not produce) against
-    client_n_samples and client_class_entropy directly, using
-    numpy's least-squares solver (no external ML dependency needed for
-    a 2-feature linear fit).
+    BUG FIX (see hetero_variance()'s docstring for the full failure
+    analysis -- Task 5 f-sweep TPR/FPR regressions at f=1 and f=3,
+    traced to this function): the original version regressed each
+    client's own ABSOLUTE raw_krum_score (an (n-f-2)-neighbour SUM)
+    against that client's ABSOLUTE n_samples/class_entropy, then
+    hetero_variance() applied the resulting coefficients to PAIRWISE
+    DIFFERENCES at the single-pairwise-distance scale -- neither the
+    functional form nor the scale matched what was actually fit. This
+    version fits genuine pairwise examples instead:
 
-    Returns {"intercept", "coef_n_samples_diff", "coef_entropy_diff",
-    "r_squared", "n_rows_fit"} -- reports fit quality HONESTLY; a poor
-    R^2 must be reported as such by the caller, not hidden.
+    For each round, for every pair (i, j) of HONEST clients present in
+    THAT round:
+        theoretical_neighbours_this_round = n_this_round - f_this_round - 2
+            (n_this_round = count of distinct client_ids logged that
+             round; f_this_round = count of rows that round with
+             ground_truth_client_label == "byzantine" -- both directly
+             recoverable from the CSV without a schema change)
+        per_neighbour_dist_i = raw_krum_score_i / theoretical_neighbours_this_round
+            (converts the (n-f-2)-neighbour SUM back to an approximate
+             single-pairwise-distance scale -- raw_krum_score is a SUM,
+             not a spread, so this divides by the neighbour COUNT, not
+             by its square root; contrast with the sqrt(theoretical_
+             neighbours) conversion used elsewhere in this file for
+             converting a SPREAD/std of a sum back to a single term's
+             std -- different quantity, different conversion)
+        target       = |per_neighbour_dist_i - per_neighbour_dist_j|
+        regressor_1  = |n_samples_i - n_samples_j|
+        regressor_2  = |class_entropy_i - class_entropy_j|
+
+    Fit through the ORIGIN (no intercept): at zero metadata difference
+    this formulation should predict zero EXTRA variance from
+    heterogeneity specifically -- generic honest round-to-round noise
+    unrelated to heterogeneity is already captured separately by
+    baseline_honest_std_from_prior_round, and an intercept here would
+    double-count that same noise into both terms. "intercept" is kept
+    in the returned dict, fixed at 0.0, only so any code/JSON expecting
+    that key doesn't break.
+
+    Returns {"intercept" (always 0.0, see above), "coef_n_samples_diff",
+    "coef_entropy_diff", "r_squared", "n_rows_fit", "n_pairs_fit"} --
+    reports fit quality HONESTLY; a poor R^2 must be reported as such
+    by the caller, not hidden. n_rows_fit is kept (now: honest ROWS
+    used to build pairs) alongside the new n_pairs_fit (actual number
+    of pairwise training examples) since the two can differ a lot and
+    both are useful diagnostics.
 
     NOT EXECUTED IN THIS ENVIRONMENT: this function is provided as the
     real, callable fitting procedure Task 2 requires, but running it
@@ -740,36 +802,66 @@ def fit_hetero_variance_regression(per_client_krum_scores_csv):
     coefficients as if this had already been run.
     """
     import csv as _csv
+    from collections import defaultdict
 
-    n_samples_col, entropy_col, score_col = [], [], []
+    rounds = defaultdict(list)  # round_id -> list of honest-row dicts
+    n_honest_rows = 0
     with open(per_client_krum_scores_csv, newline="") as f:
         for row in _csv.DictReader(f):
-            if row["ground_truth_client_label"] != "honest":
+            if row["ground_truth_client_label"] not in ("honest", "byzantine"):
                 continue
             try:
                 score = float(row["raw_krum_score"])
             except (ValueError, TypeError):
                 continue
+            if row["ground_truth_client_label"] == "byzantine":
+                # Only needed to count f_this_round below; not used as
+                # a training example itself.
+                rounds[row["round_id"]].append({"byzantine_only": True})
+                continue
             if not np.isfinite(score):
                 continue
-            n_samples_col.append(float(row["client_n_samples"]))
-            entropy_col.append(float(row["client_class_entropy"]))
-            score_col.append(score)
+            rounds[row["round_id"]].append({
+                "byzantine_only": False,
+                "score": score,
+                "n_samples": float(row["client_n_samples"]),
+                "entropy": float(row["client_class_entropy"]),
+            })
+            n_honest_rows += 1
 
-    if len(score_col) < 10:
+    n_diff_col, e_diff_col, target_col = [], [], []
+    for round_id, entries in rounds.items():
+        n_this_round = len(entries)
+        f_this_round = sum(1 for e in entries if e["byzantine_only"])
+        theoretical_neighbours = n_this_round - f_this_round - 2
+        if theoretical_neighbours <= 0:
+            continue  # can't convert this round's scores to a per-neighbour scale
+        honest_entries = [e for e in entries if not e["byzantine_only"]]
+        for a in range(len(honest_entries)):
+            for b in range(a + 1, len(honest_entries)):
+                ei, ej = honest_entries[a], honest_entries[b]
+                per_nb_i = ei["score"] / theoretical_neighbours
+                per_nb_j = ej["score"] / theoretical_neighbours
+                target_col.append(abs(per_nb_i - per_nb_j))
+                n_diff_col.append(abs(ei["n_samples"] - ej["n_samples"]))
+                e_diff_col.append(abs(ei["entropy"] - ej["entropy"]))
+
+    if len(target_col) < 10:
         raise ValueError(
-            f"Only {len(score_col)} usable honest rows found in "
-            f"{per_client_krum_scores_csv!r} -- too few to fit a "
-            f"defensible regression. Re-run Task 1's sanity sweep "
-            f"(more rounds/seeds) before fitting."
+            f"Only {len(target_col)} usable honest PAIRS found in "
+            f"{per_client_krum_scores_csv!r} ({n_honest_rows} honest rows "
+            f"across {len(rounds)} rounds) -- too few to fit a defensible "
+            f"regression. Re-run Task 1's sanity sweep (more rounds/seeds, "
+            f"or check that most rounds have theoretical_neighbours > 0) "
+            f"before fitting."
         )
 
     X = np.column_stack([
-        np.ones(len(score_col)),
-        np.array(n_samples_col),
-        np.array(entropy_col),
+        np.array(n_diff_col),
+        np.array(e_diff_col),
     ])
-    y = np.array(score_col)
+    y = np.array(target_col)
+    # No intercept column -- fit through the origin, see docstring.
     coeffs, residuals, rank, sv = np.linalg.lstsq(X, y, rcond=None)
     y_pred = X @ coeffs
     ss_res = float(np.sum((y - y_pred) ** 2))
@@ -777,11 +869,12 @@ def fit_hetero_variance_regression(per_client_krum_scores_csv):
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
     return {
-        "intercept": float(coeffs[0]),
-        "coef_n_samples_diff": float(coeffs[1]),
-        "coef_entropy_diff": float(coeffs[2]),
+        "intercept": 0.0,
+        "coef_n_samples_diff": float(coeffs[0]),
+        "coef_entropy_diff": float(coeffs[1]),
         "r_squared": r_squared,
-        "n_rows_fit": len(score_col),
+        "n_rows_fit": n_honest_rows,
+        "n_pairs_fit": len(target_col),
     }
 
 

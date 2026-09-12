@@ -1,0 +1,8 @@
+{
+  "intercept": 0.0,
+  "coef_n_samples_diff": 6.603649526301721,
+  "coef_entropy_diff": -178113.80288090886,
+  "r_squared": 0.8052081466849761,
+  "n_rows_fit": 3000,
+  "n_pairs_fit": 178500
+}

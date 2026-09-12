@@ -1,0 +1,755 @@
+
+=================================================================
+  FL-IDS Unified Loop -- MODEL: NETWORK
+  Ablation mode: baseline
+  Rounds=25  Clients=10  Epochs=5
+  Device=cuda  (CUDA available: True)
+  Byzantine=2 (clients [1, 2])  Attack=OFF
+  Attack function: sign_flip_attack_trained
+  USE_KRUM=False  USE_ADAPTIVE_KRUM=False  USE_HE=False  USE_HE_KRUM_HYBRID=False  USE_DP=False  USE_NORM_GUARD=False
+=================================================================
+
+Loading data partitions...
+  Partition 1/10...  Preprocessed cache loaded (network, seed=456): 426,171 train / 53,271 val / 53,272 test rows, 39 features
+  Partition 2/10...  Partition 3/10...  Partition 4/10...  Partition 5/10...  Partition 6/10...  Partition 7/10...  Partition 8/10...  Partition 9/10...  Partition 10/10...
+Feature count (measured, not assumed): 39
+All 10 clients loaded.
+
+Building criterion once (class weights, FocalLoss)...
+Criterion built.
+
+Starting fresh run.
+
+[ROUND 1/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 466.2s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.8s
+  [Best checkpoint] New best F1-Macro: 0.3881 (round 1) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 1.4253  Acc: 0.6562  F1-Macro: 0.3881  [467.1s]
+  Per-class F1:
+    Normal                       0.5691  ###########
+    DDoS_UDP                     0.8041  ################
+    DDoS_ICMP                    0.9068  ##################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.2505  #####
+    DDoS_TCP                     0.0000  
+    Vulnerability_scanner        0.5743  ###########
+    MITM                         0.0000  
+
+[ROUND 2/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 454.6s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.6877 (round 2) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.5156  Acc: 0.8777  F1-Macro: 0.6877  [455.2s]
+  Per-class F1:
+    Normal                       0.8812  #################
+    DDoS_UDP                     0.9910  ###################
+    DDoS_ICMP                    0.9934  ###################
+    Ransomware                   0.1389  ##
+    DDoS_HTTP                    0.4938  #########
+    DDoS_TCP                     0.9127  ##################
+    Vulnerability_scanner        0.7223  ##############
+    MITM                         0.3683  #######
+
+[ROUND 3/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 530.2s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.9s
+  [Best checkpoint] New best F1-Macro: 0.8324 (round 3) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.2936  Acc: 0.9437  F1-Macro: 0.8324  [531.1s]
+  Per-class F1:
+    Normal                       0.9153  ##################
+    DDoS_UDP                     0.9953  ###################
+    DDoS_ICMP                    0.9973  ###################
+    Ransomware                   0.8221  ################
+    DDoS_HTTP                    0.7075  ##############
+    DDoS_TCP                     0.9503  ###################
+    Vulnerability_scanner        0.8514  #################
+    MITM                         0.4202  ########
+
+[ROUND 4/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 489.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  [Best checkpoint] New best F1-Macro: 0.8630 (round 4) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.2270  Acc: 0.9600  F1-Macro: 0.8630  [490.6s]
+  Per-class F1:
+    Normal                       0.9569  ###################
+    DDoS_UDP                     0.9973  ###################
+    DDoS_ICMP                    0.9966  ###################
+    Ransomware                   0.8500  #################
+    DDoS_HTTP                    0.7582  ###############
+    DDoS_TCP                     0.9985  ###################
+    Vulnerability_scanner        0.8915  #################
+    MITM                         0.4546  #########
+
+[ROUND 5/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 445.0s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  [Best checkpoint] New best F1-Macro: 0.8713 (round 5) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.1931  Acc: 0.9626  F1-Macro: 0.8713  [445.7s]
+  Per-class F1:
+    Normal                       0.9583  ###################
+    DDoS_UDP                     0.9980  ###################
+    DDoS_ICMP                    0.9981  ###################
+    Ransomware                   0.8553  #################
+    DDoS_HTTP                    0.7657  ###############
+    DDoS_TCP                     0.9983  ###################
+    Vulnerability_scanner        0.9153  ##################
+    MITM                         0.4811  #########
+
+[ROUND 6/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 501.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.9s
+  [Best checkpoint] New best F1-Macro: 0.8829 (round 6) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.1690  Acc: 0.9716  F1-Macro: 0.8829  [502.7s]
+  Per-class F1:
+    Normal                       0.9675  ###################
+    DDoS_UDP                     0.9986  ###################
+    DDoS_ICMP                    0.9989  ###################
+    Ransomware                   0.8704  #################
+    DDoS_HTTP                    0.8079  ################
+    DDoS_TCP                     0.9980  ###################
+    Vulnerability_scanner        0.9383  ##################
+    MITM                         0.4838  #########
+
+[ROUND 7/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 524.6s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  [Best checkpoint] New best F1-Macro: 0.8937 (round 7) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.1442  Acc: 0.9810  F1-Macro: 0.8937  [525.2s]
+  Per-class F1:
+    Normal                       0.9855  ###################
+    DDoS_UDP                     0.9988  ###################
+    DDoS_ICMP                    0.9975  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.8762  #################
+    DDoS_TCP                     0.9986  ###################
+    Vulnerability_scanner        0.9383  ##################
+    MITM                         0.4808  #########
+
+[ROUND 8/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 453.0s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  [Best checkpoint] New best F1-Macro: 0.8977 (round 8) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.1347  Acc: 0.9856  F1-Macro: 0.8977  [453.7s]
+  Per-class F1:
+    Normal                       0.9938  ###################
+    DDoS_UDP                     0.9983  ###################
+    DDoS_ICMP                    0.9975  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9155  ##################
+    DDoS_TCP                     0.9992  ###################
+    Vulnerability_scanner        0.9368  ##################
+    MITM                         0.4673  #########
+
+[ROUND 9/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 466.7s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.8s
+  [Best checkpoint] New best F1-Macro: 0.9044 (round 9) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.1314  Acc: 0.9881  F1-Macro: 0.9044  [467.5s]
+  Per-class F1:
+    Normal                       0.9966  ###################
+    DDoS_UDP                     0.9988  ###################
+    DDoS_ICMP                    0.9988  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9353  ##################
+    DDoS_TCP                     0.9998  ###################
+    Vulnerability_scanner        0.9382  ##################
+    MITM                         0.4942  #########
+
+[ROUND 10/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 485.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  [Best checkpoint] New best F1-Macro: 0.9097 (round 10) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.1109  Acc: 0.9901  F1-Macro: 0.9097  [486.1s]
+  Per-class F1:
+    Normal                       0.9966  ###################
+    DDoS_UDP                     0.9991  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9420  ##################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9569  ###################
+    MITM                         0.5098  ##########
+
+[ROUND 11/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 502.6s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  Loss: 0.1046  Acc: 0.9897  F1-Macro: 0.9084  [503.4s]
+  Per-class F1:
+    Normal                       0.9966  ###################
+    DDoS_UDP                     0.9989  ###################
+    DDoS_ICMP                    0.9992  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9446  ##################
+    DDoS_TCP                     0.9997  ###################
+    Vulnerability_scanner        0.9512  ###################
+    MITM                         0.5030  ##########
+
+[ROUND 12/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 483.7s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.7s
+  Loss: 0.0964  Acc: 0.9890  F1-Macro: 0.9079  [484.4s]
+  Per-class F1:
+    Normal                       0.9964  ###################
+    DDoS_UDP                     0.9989  ###################
+    DDoS_ICMP                    0.9995  ###################
+    Ransomware                   0.8735  #################
+    DDoS_HTTP                    0.9400  ##################
+    DDoS_TCP                     0.9997  ###################
+    Vulnerability_scanner        0.9470  ##################
+    MITM                         0.5086  ##########
+
+[ROUND 13/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 281.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  Loss: 0.1077  Acc: 0.9896  F1-Macro: 0.9091  [281.7s]
+  Per-class F1:
+    Normal                       0.9966  ###################
+    DDoS_UDP                     0.9990  ###################
+    DDoS_ICMP                    0.9996  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9439  ##################
+    DDoS_TCP                     0.9997  ###################
+    Vulnerability_scanner        0.9486  ##################
+    MITM                         0.5115  ##########
+
+[ROUND 14/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 251.5s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9117 (round 14) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0992  Acc: 0.9908  F1-Macro: 0.9117  [251.9s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9991  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9504  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9563  ###################
+    MITM                         0.5173  ##########
+
+[ROUND 15/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 248.3s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  Loss: 0.0986  Acc: 0.9906  F1-Macro: 0.9115  [248.6s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9990  ###################
+    DDoS_ICMP                    0.9995  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9481  ##################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9616  ###################
+    MITM                         0.5135  ##########
+
+[ROUND 16/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 265.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9122 (round 16) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0901  Acc: 0.9908  F1-Macro: 0.9122  [266.3s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9993  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9589  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9506  ###################
+    MITM                         0.5187  ##########
+
+[ROUND 17/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 253.5s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9133 (round 17) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0854  Acc: 0.9908  F1-Macro: 0.9133  [253.9s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9994  ###################
+    DDoS_ICMP                    0.9995  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9525  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9601  ###################
+    MITM                         0.5243  ##########
+
+[ROUND 18/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 255.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  Loss: 0.0907  Acc: 0.9904  F1-Macro: 0.9110  [256.2s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9989  ###################
+    DDoS_ICMP                    0.9995  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9468  ##################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9623  ###################
+    MITM                         0.5100  ##########
+
+[ROUND 19/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 238.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9133 (round 19) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0825  Acc: 0.9915  F1-Macro: 0.9133  [238.8s]
+  Per-class F1:
+    Normal                       0.9967  ###################
+    DDoS_UDP                     0.9993  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9573  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9620  ###################
+    MITM                         0.5176  ##########
+
+[ROUND 20/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 250.7s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9133 (round 20) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0884  Acc: 0.9913  F1-Macro: 0.9133  [251.1s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9991  ###################
+    DDoS_ICMP                    0.9997  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9518  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9649  ###################
+    MITM                         0.5206  ##########
+
+[ROUND 21/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 256.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9147 (round 21) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0816  Acc: 0.9917  F1-Macro: 0.9147  [257.2s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9994  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9580  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9619  ###################
+    MITM                         0.5279  ##########
+
+[ROUND 22/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 259.1s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  Loss: 0.0813  Acc: 0.9912  F1-Macro: 0.9128  [259.5s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9991  ###################
+    DDoS_ICMP                    0.9997  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9534  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9630  ###################
+    MITM                         0.5172  ##########
+
+[ROUND 23/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 255.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  Loss: 0.0775  Acc: 0.9914  F1-Macro: 0.9132  [255.8s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9991  ###################
+    DDoS_ICMP                    0.9996  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9546  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9637  ###################
+    MITM                         0.5184  ##########
+
+[ROUND 24/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 244.3s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  Loss: 0.0812  Acc: 0.9906  F1-Macro: 0.9124  [244.7s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9994  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9511  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9493  ##################
+    MITM                         0.5288  ##########
+
+[ROUND 25/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      30064      8201     11426      5203         9      1366      2752      1005       102 [BYZANTINE]
+     2      39700      1137     23741      4762      1705       928      5610      1786        31 [BYZANTINE]
+     3      20972      4101      1667       432       191       323      5328      8791       139
+     4      20876      6260      2707      2146      1506      2162      4128      1956        11
+     5      52458     11357     12190     14900       476      2487      3389      7627        32
+     6      50221      4399     15006      9155       292     11283      5813      4256        17
+     7      64198     10956      9587     29872        55     11701        65      1814       148
+     8      48498     29232      4093      6172       222      2220      6082       200       277
+     9      11341      1881        14      2653      2544      2466        23      1679        81
+    10      45220     17866      7095      8537       867      1000      2855      6964        36
+
+  [Timing] Training wave (all 10 clients): 256.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.9148 (round 25) -> checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456_best.npz
+  Loss: 0.0746  Acc: 0.9920  F1-Macro: 0.9148  [256.8s]
+  Per-class F1:
+    Normal                       0.9968  ###################
+    DDoS_UDP                     0.9993  ###################
+    DDoS_ICMP                    0.9998  ###################
+    Ransomware                   0.8737  #################
+    DDoS_HTTP                    0.9571  ###################
+    DDoS_TCP                     0.9999  ###################
+    Vulnerability_scanner        0.9668  ###################
+    MITM                         0.5246  ##########
+
+
+-----------------------------------------------------------------
+  [FINAL TEST-HOLDOUT] loss=0.0667  acc=0.9935  F1-Macro=0.9425
+    Written to: results_network_task4_fedprox_dpsafe_arch_no_dp_seed456_FINAL_TEST.csv
+-----------------------------------------------------------------
+  [FINAL VALIDATION-HOLDOUT] loss=0.0666  acc=0.9934  F1-Macro=0.9414
+    Written to: results_network_task4_fedprox_dpsafe_arch_no_dp_seed456_FINAL_VALIDATION.csv
+-----------------------------------------------------------------
+  [Issue 4 Task 1] Per-client Krum-score log written to: per_client_krum_scores_network_task4_fedprox_dpsafe_arch_no_dp_seed456.csv (250 rows)
+
+=================================================================
+  Training complete -- 25 rounds  [NETWORK]  [ABLATION_MODE=baseline]
+  Results logged to:     results_network_task4_fedprox_dpsafe_arch_no_dp_seed456.csv
+  Checkpoint:            checkpoint_network_task4_fedprox_dpsafe_arch_no_dp_seed456.npz (round 25)
+=================================================================
+

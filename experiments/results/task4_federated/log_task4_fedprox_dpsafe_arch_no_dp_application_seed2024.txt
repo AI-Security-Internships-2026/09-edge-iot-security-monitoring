@@ -1,0 +1,751 @@
+
+=================================================================
+  FL-IDS Unified Loop -- MODEL: APPLICATION
+  Ablation mode: baseline
+  Rounds=25  Clients=10  Epochs=5
+  Device=cuda  (CUDA available: True)
+  Byzantine=2 (clients [1, 2])  Attack=OFF
+  Attack function: sign_flip_attack_trained
+  USE_KRUM=False  USE_ADAPTIVE_KRUM=False  USE_HE=False  USE_HE_KRUM_HYBRID=False  USE_DP=False  USE_NORM_GUARD=False
+=================================================================
+
+Loading data partitions...
+  Partition 1/10...  Preprocessed cache loaded (application, seed=2024): 268,656 train / 33,582 val / 33,582 test rows, 90 features
+  Partition 2/10...  Partition 3/10...  Partition 4/10...  Partition 5/10...  Partition 6/10...  Partition 7/10...  Partition 8/10...  Partition 9/10...  Partition 10/10...
+Feature count (measured, not assumed): 90
+All 10 clients loaded.
+
+Building criterion once (class weights, FocalLoss)...
+Criterion built.
+
+Starting fresh run.
+
+[ROUND 1/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 186.5s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.1693 (round 1) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 2.1132  Acc: 0.2718  F1-Macro: 0.1693  [187.1s]
+  Per-class F1:
+    Normal                       0.3053  ######
+    SQL_injection                0.1381  ##
+    Uploading                    0.0706  #
+    Backdoor                     0.0000  
+    Port_Scanning                0.0000  
+    XSS                          0.2079  ####
+    Password                     0.3070  ######
+    Fingerprinting               0.3255  ######
+
+[ROUND 2/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 182.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.5321 (round 2) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.8081  Acc: 0.7042  F1-Macro: 0.5321  [182.9s]
+  Per-class F1:
+    Normal                       0.5790  ###########
+    SQL_injection                0.7951  ###############
+    Uploading                    0.5797  ###########
+    Backdoor                     0.4755  #########
+    Port_Scanning                0.7282  ##############
+    XSS                          0.2580  #####
+    Password                     0.3744  #######
+    Fingerprinting               0.4667  #########
+
+[ROUND 3/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 184.8s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.6824 (round 3) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.5126  Acc: 0.8250  F1-Macro: 0.6824  [185.3s]
+  Per-class F1:
+    Normal                       0.8220  ################
+    SQL_injection                0.7994  ###############
+    Uploading                    0.6036  ############
+    Backdoor                     0.8057  ################
+    Port_Scanning                0.7951  ###############
+    XSS                          0.4440  ########
+    Password                     0.5818  ###########
+    Fingerprinting               0.6080  ############
+
+[ROUND 4/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 177.3s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.7231 (round 4) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.4560  Acc: 0.8391  F1-Macro: 0.7231  [177.8s]
+  Per-class F1:
+    Normal                       0.8374  ################
+    SQL_injection                0.8016  ################
+    Uploading                    0.6502  #############
+    Backdoor                     0.8560  #################
+    Port_Scanning                0.7951  ###############
+    XSS                          0.4451  ########
+    Password                     0.5779  ###########
+    Fingerprinting               0.8215  ################
+
+[ROUND 5/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 181.5s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  Loss: 0.4402  Acc: 0.8290  F1-Macro: 0.7227  [182.0s]
+  Per-class F1:
+    Normal                       0.8451  ################
+    SQL_injection                0.7899  ###############
+    Uploading                    0.6225  ############
+    Backdoor                     0.8915  #################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4450  ########
+    Password                     0.5563  ###########
+    Fingerprinting               0.8358  ################
+
+[ROUND 6/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 181.7s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  [Best checkpoint] New best F1-Macro: 0.7520 (round 6) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3844  Acc: 0.8582  F1-Macro: 0.7520  [182.0s]
+  Per-class F1:
+    Normal                       0.8900  #################
+    SQL_injection                0.8126  ################
+    Uploading                    0.6925  #############
+    Backdoor                     0.9014  ##################
+    Port_Scanning                0.7951  ###############
+    XSS                          0.4687  #########
+    Password                     0.6201  ############
+    Fingerprinting               0.8358  ################
+
+[ROUND 7/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 196.1s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  Loss: 0.3502  Acc: 0.8672  F1-Macro: 0.7517  [196.6s]
+  Per-class F1:
+    Normal                       0.8910  #################
+    SQL_injection                0.8199  ################
+    Uploading                    0.7353  ##############
+    Backdoor                     0.9167  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4896  #########
+    Password                     0.6520  #############
+    Fingerprinting               0.7135  ##############
+
+[ROUND 8/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 189.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.7572 (round 8) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3523  Acc: 0.8682  F1-Macro: 0.7572  [190.4s]
+  Per-class F1:
+    Normal                       0.8971  #################
+    SQL_injection                0.8209  ################
+    Uploading                    0.7423  ##############
+    Backdoor                     0.9210  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4883  #########
+    Password                     0.6454  ############
+    Fingerprinting               0.7474  ##############
+
+[ROUND 9/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 183.8s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.7633 (round 9) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3566  Acc: 0.8645  F1-Macro: 0.7633  [184.3s]
+  Per-class F1:
+    Normal                       0.8963  #################
+    SQL_injection                0.8123  ################
+    Uploading                    0.7068  ##############
+    Backdoor                     0.9164  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4988  #########
+    Password                     0.6407  ############
+    Fingerprinting               0.8395  ################
+
+[ROUND 10/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 185.5s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.7730 (round 10) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3382  Acc: 0.8727  F1-Macro: 0.7730  [185.9s]
+  Per-class F1:
+    Normal                       0.8973  #################
+    SQL_injection                0.8163  ################
+    Uploading                    0.7461  ##############
+    Backdoor                     0.9340  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4981  #########
+    Password                     0.6572  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 11/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 184.7s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.7761 (round 11) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3337  Acc: 0.8745  F1-Macro: 0.7761  [185.3s]
+  Per-class F1:
+    Normal                       0.8974  #################
+    SQL_injection                0.8218  ################
+    Uploading                    0.7507  ###############
+    Backdoor                     0.9370  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4906  #########
+    Password                     0.6762  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 12/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 130.1s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3312  Acc: 0.8738  F1-Macro: 0.7745  [130.3s]
+  Per-class F1:
+    Normal                       0.8962  #################
+    SQL_injection                0.8222  ################
+    Uploading                    0.7442  ##############
+    Backdoor                     0.9344  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4908  #########
+    Password                     0.6731  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 13/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 78.1s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3315  Acc: 0.8714  F1-Macro: 0.7737  [78.4s]
+  Per-class F1:
+    Normal                       0.8975  #################
+    SQL_injection                0.8186  ################
+    Uploading                    0.7441  ##############
+    Backdoor                     0.9373  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4895  #########
+    Password                     0.6677  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 14/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 79.6s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3268  Acc: 0.8722  F1-Macro: 0.7744  [79.8s]
+  Per-class F1:
+    Normal                       0.8976  #################
+    SQL_injection                0.8233  ################
+    Uploading                    0.7414  ##############
+    Backdoor                     0.9439  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4881  #########
+    Password                     0.6662  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 15/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 76.3s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  [Best checkpoint] New best F1-Macro: 0.7761 (round 15) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3228  Acc: 0.8741  F1-Macro: 0.7761  [76.6s]
+  Per-class F1:
+    Normal                       0.8975  #################
+    SQL_injection                0.8206  ################
+    Uploading                    0.7417  ##############
+    Backdoor                     0.9387  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.5005  ##########
+    Password                     0.6748  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 16/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 78.2s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3257  Acc: 0.8746  F1-Macro: 0.7753  [78.4s]
+  Per-class F1:
+    Normal                       0.8969  #################
+    SQL_injection                0.8206  ################
+    Uploading                    0.7556  ###############
+    Backdoor                     0.9367  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4997  #########
+    Password                     0.6577  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 17/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 74.1s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  [Best checkpoint] New best F1-Macro: 0.7768 (round 17) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3206  Acc: 0.8767  F1-Macro: 0.7768  [74.4s]
+  Per-class F1:
+    Normal                       0.8975  #################
+    SQL_injection                0.8232  ################
+    Uploading                    0.7499  ##############
+    Backdoor                     0.9326  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4997  #########
+    Password                     0.6807  #############
+    Fingerprinting               0.8358  ################
+
+[ROUND 18/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 78.7s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  [Best checkpoint] New best F1-Macro: 0.7797 (round 18) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3151  Acc: 0.8774  F1-Macro: 0.7797  [79.0s]
+  Per-class F1:
+    Normal                       0.8976  #################
+    SQL_injection                0.8214  ################
+    Uploading                    0.7607  ###############
+    Backdoor                     0.9409  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.5007  ##########
+    Password                     0.6812  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 19/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 80.2s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  Loss: 0.3202  Acc: 0.8746  F1-Macro: 0.7774  [80.4s]
+  Per-class F1:
+    Normal                       0.8977  #################
+    SQL_injection                0.8114  ################
+    Uploading                    0.7643  ###############
+    Backdoor                     0.9440  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.5029  ##########
+    Password                     0.6640  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 20/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 77.2s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  Loss: 0.3181  Acc: 0.8738  F1-Macro: 0.7749  [77.4s]
+  Per-class F1:
+    Normal                       0.8977  #################
+    SQL_injection                0.8181  ################
+    Uploading                    0.7494  ##############
+    Backdoor                     0.9370  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4933  #########
+    Password                     0.6691  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 21/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 78.4s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3177  Acc: 0.8673  F1-Macro: 0.7690  [78.6s]
+  Per-class F1:
+    Normal                       0.8976  #################
+    SQL_injection                0.8237  ################
+    Uploading                    0.7169  ##############
+    Backdoor                     0.9384  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4761  #########
+    Password                     0.6641  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 22/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 76.3s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3128  Acc: 0.8757  F1-Macro: 0.7755  [76.6s]
+  Per-class F1:
+    Normal                       0.8977  #################
+    SQL_injection                0.8206  ################
+    Uploading                    0.7558  ###############
+    Backdoor                     0.9410  ##################
+    Port_Scanning                0.7951  ###############
+    XSS                          0.4961  #########
+    Password                     0.6620  #############
+    Fingerprinting               0.8358  ################
+
+[ROUND 23/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 76.9s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  [Best checkpoint] New best F1-Macro: 0.7800 (round 23) -> checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_best.npz
+  Loss: 0.3139  Acc: 0.8791  F1-Macro: 0.7800  [77.2s]
+  Per-class F1:
+    Normal                       0.8976  #################
+    SQL_injection                0.8272  ################
+    Uploading                    0.7603  ###############
+    Backdoor                     0.9385  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.5025  ##########
+    Password                     0.6792  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 24/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 82.1s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3127  Acc: 0.8776  F1-Macro: 0.7793  [82.4s]
+  Per-class F1:
+    Normal                       0.8976  #################
+    SQL_injection                0.8248  ################
+    Uploading                    0.7572  ###############
+    Backdoor                     0.9439  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4981  #########
+    Password                     0.6780  #############
+    Fingerprinting               0.8395  ################
+
+[ROUND 25/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  SQL_inje  Uploadin  Backdoor  Port_Sca       XSS  Password  Fingerpr
+     1      19638     11465      2844       328       851       343      3521       226        60 [BYZANTINE]
+     2      15984      2759      1613       601      9032       927       109       811       132 [BYZANTINE]
+     3      12357       390      2325       722      1223        29      2714      4924        30
+     4      20547      8357       258      8038      1509       361       494      1491        39
+     5       6884       591       349       773      1603      2081       293      1109        85
+     6       4825         7      3197       468        61       716        26       141       209
+     7      95202     59301     17688      2826       143      5034      2735      7442        33
+     8      41102      8604      3798     10759       725       415      1006     15783        12
+     9       7359      1545      1125       527      2744         2       157      1237        22
+    10      17889      2372      3668      2054         8      6339       403      2947        98
+
+  [Timing] Training wave (all 10 clients): 77.3s
+  Aggregation: FedAvg (explicit, no defence)
+  [Timing] Eval wave (all 10 clients): 0.3s
+  Loss: 0.3104  Acc: 0.8750  F1-Macro: 0.7755  [77.5s]
+  Per-class F1:
+    Normal                       0.8977  #################
+    SQL_injection                0.8182  ################
+    Uploading                    0.7571  ###############
+    Backdoor                     0.9350  ##################
+    Port_Scanning                0.7955  ###############
+    XSS                          0.4976  #########
+    Password                     0.6637  #############
+    Fingerprinting               0.8395  ################
+
+
+-----------------------------------------------------------------
+  [FINAL TEST-HOLDOUT] loss=0.2646  acc=0.8826  F1-Macro=0.8473
+    Written to: results_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_FINAL_TEST.csv
+-----------------------------------------------------------------
+  [FINAL VALIDATION-HOLDOUT] loss=0.2646  acc=0.8826  F1-Macro=0.8474
+    Written to: results_application_task4_fedprox_dpsafe_arch_no_dp_seed2024_FINAL_VALIDATION.csv
+-----------------------------------------------------------------
+  [Issue 4 Task 1] Per-client Krum-score log written to: per_client_krum_scores_application_task4_fedprox_dpsafe_arch_no_dp_seed2024.csv (250 rows)
+
+=================================================================
+  Training complete -- 25 rounds  [APPLICATION]  [ABLATION_MODE=baseline]
+  Results logged to:     results_application_task4_fedprox_dpsafe_arch_no_dp_seed2024.csv
+  Checkpoint:            checkpoint_application_task4_fedprox_dpsafe_arch_no_dp_seed2024.npz (round 25)
+=================================================================
+
