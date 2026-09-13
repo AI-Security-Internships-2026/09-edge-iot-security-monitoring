@@ -1,0 +1,9 @@
+{
+  "intercept": 8.26069128591572,
+  "coef_n_samples_diff": 3.380308885345216e-05,
+  "coef_entropy_diff": 0.06588032430238867,
+  "r_squared": 0.5112410262810302,
+  "n_pairs_fit": 204600,
+  "fit_target": "log1p(abs(pairwise per-neighbour raw_krum_score diff))",
+  "schema_version": 2
+}

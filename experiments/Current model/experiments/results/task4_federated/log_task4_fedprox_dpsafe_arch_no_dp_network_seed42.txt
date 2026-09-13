@@ -1,1 +1,0 @@
-scripts/run_task4_federated_sweep.sh: line 124: python: command not found

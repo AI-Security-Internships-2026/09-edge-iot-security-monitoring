@@ -293,8 +293,15 @@ def test_ablation_toggles_produce_different_output():
     # numerically active for this toggle test -- NOT claimed to be a
     # real, data-validated fit (see krum.py's fit_hetero_variance_
     # regression() docstring for the real fitting procedure).
+    # schema_version=2: current (post-fix) fit_hetero_variance_regression()
+    # fits log1p(pairwise per-neighbour score diff) ~ n_samples_diff +
+    # entropy_diff -- hetero_variance() now refuses schema_version=1 (or
+    # absent) coeffs outright (see its docstring), so this fake dict must
+    # be tagged to match, even though its actual numbers are still just
+    # "non-trivial enough to be numerically active", not a real fit.
     fake_hetero_coeffs = {"intercept": 10.0, "coef_n_samples_diff": 0.01,
-                           "coef_entropy_diff": 5.0, "r_squared": float("nan")}
+                           "coef_entropy_diff": 5.0, "r_squared": float("nan"),
+                           "schema_version": 2}
 
     results = {}
     for use_dp in (False, True):

@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 
@@ -644,18 +646,48 @@ def dp_variance(sigma_i, sigma_j, dp_max_grad_norm, dp_batch_size_i,
 
 def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
     """
-    NO ESTABLISHED CLOSED FORM (stated honestly, per the handoff doc --
-    the ticket itself offers a lookup-table alternative to a callable,
-    which is a signal one may not exist). Implemented here as an
-    EMPIRICAL linear regression of |per-pair single-neighbour-distance
-    difference| against |n_samples_i - n_samples_j| and
-    |class_entropy_i - class_entropy_j|, fit externally against Task 1's
-    real per_client_krum_scores.csv via fit_hetero_variance_regression()
-    below, and passed in here as `fit_coeffs = {"coef_n_samples_diff":
-    b1, "coef_entropy_diff": b2, "r_squared": r2, ...}`.
+    REVISED (post-hoc fix, see fit_hetero_variance_regression() below for
+    the full rationale): the ORIGINAL version of this function applied
+    coefficients fit against each client's own ABSOLUTE raw_krum_score
+    (a summed-over-neighbours quantity, whose neighbour count depends on
+    f_byzantine) to a PAIRWISE DIFFERENCE input at inference time -- two
+    stacked mismatches (absolute-vs-diff, and aggregate-sum-scale-vs-
+    single-pair-scale) that made this term behave inconsistently across
+    different f_byzantine settings (confirmed: clean at f=2, the setting
+    the original fit happened to be built from, broken at f=1 and f=3).
 
-    fit_coeffs=None (the honest default until Task 1's real sanity run
-    has actually produced data to fit against): returns 0.0 and prints a
+    THIS version's fit_coeffs are produced by a genuinely pairwise,
+    per-neighbour-normalized, LOG-SCALE regression (see
+    fit_hetero_variance_regression()) -- i.e. `fit_coeffs` now means:
+
+        log1p(|per_neighbour_score_i - per_neighbour_score_j|) ~=
+            intercept + coef_n_samples_diff * |n_samples_i - n_samples_j|
+                      + coef_entropy_diff   * |entropy_i - entropy_j|
+
+    which is back-transformed here to a variance-scale prediction (see
+    below). A log-scale fit was necessary, not just a style choice: the
+    same real data fit on the RAW (non-log) pairwise scale produces a
+    LARGE, WRONG-SIGNED entropy coefficient with an implausibly high R^2
+    (an outlier-dominated OLS artifact -- raw Krum-distance pairs are
+    extremely heavy-tailed: mean pairwise diff ~10-15x the median in the
+    real data this was checked against), while the log-scale fit on the
+    identical data gives small, correctly-signed (positive) coefficients
+    for BOTH terms and a moderate, non-suspicious R^2. Do not refit this
+    on the raw (non-log) scale without re-confirming that heavy-tail
+    problem is gone.
+
+    `fit_coeffs` schema (produced by fit_hetero_variance_regression()):
+        {"intercept": b0, "coef_n_samples_diff": b1,
+         "coef_entropy_diff": b2, "r_squared": r2, "n_pairs_fit": n,
+         "fit_target": "log1p(abs(pairwise per-neighbour raw_krum_score diff))",
+         "schema_version": 2}
+    `schema_version` is checked explicitly below -- an old (schema_version
+    1 / absent) coeffs file must not be silently applied here, since it
+    was fit for a different quantity entirely (see above) and would
+    silently reproduce the exact bug this rewrite fixes.
+
+    fit_coeffs=None (the honest default until a real sanity run has
+    actually produced data to fit against): returns 0.0 and prints a
     ONE-TIME warning (module-level flag, not per-call-spam) rather than
     fabricating a plausible-looking constant. This means
     use_hetero_calibration=True with fit_coeffs=None is silently a
@@ -664,35 +696,6 @@ def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
     equivalent to hetero calibration not actually being available yet,
     not as hetero calibration having been validated to contribute
     nothing.
-
-    BUG FIX (post-Issue-4-Task-5 f-sweep failure -- f=1 Byzantine-TPR
-    dropped 18pp below plain, f=3 dropped 24pp AND honest-FPR dominance
-    reversed): the original version of this function applied
-    fit_coeffs to |n_samples_i - n_samples_j| / |entropy_i - entropy_j|
-    (pairwise DIFFERENCES), but fit_hetero_variance_regression() below
-    used to fit those same coefficient names against each client's
-    ABSOLUTE n_samples/entropy value as a regressor for that client's
-    raw_krum_score (an (n-f-2)-neighbour SUM, not a single pairwise
-    distance) -- a double mismatch: (a) fit-vs-applied functional form
-    (absolute value vs. difference) and (b) fit-vs-applied SCALE
-    (aggregate neighbour-sum, order 1e6-1e9 in this codebase's real
-    runs, vs. the single-pairwise-distance scale that var_dp and
-    baseline_honest_std_from_prior_round are both deliberately kept on
-    -- see _pairwise_std_within()'s docstring in
-    calibrated_adaptive_multi_krum() for the same scale trap already
-    caught and fixed for THAT term but not, until now, for this one).
-    Empirically this made expected_var_ij dominated by a huge, nearly
-    metadata-independent intercept, collapsing calibrated distances
-    for Byzantine and honest clients alike toward the same tiny range
-    -- confirmed directly against the real f=3 sweep CSVs, where all 3
-    Byzantine clients ended up with SMALLER calibrated scores than a
-    legitimately-noisy honest client. fit_hetero_variance_regression()
-    now fits on genuine same-round pairwise differences at the correct
-    single-pairwise-distance scale, so the coefficients applied here
-    match what was actually fit. No intercept term any more (see that
-    function's docstring for why) -- fit_coeffs["intercept"] is still
-    accepted/read for backward compatibility with any already-written
-    coefficients JSON, but treated as 0.0 if absent.
 
     alpha_dirichlet is accepted for signature completeness /
     forward-compatibility (a future refit could stratify by alpha) but
@@ -708,8 +711,8 @@ def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
     if fit_coeffs is None:
         if not hetero_variance._warned:
             print("  ⚠️  hetero_variance(): fit_coeffs is None -- no "
-                  "empirical regression has been fit against Task 1's "
-                  "real logged data yet. Returning 0.0 for every pair "
+                  "empirical regression has been fit against real "
+                  "logged data yet. Returning 0.0 for every pair "
                   "(hetero calibration term is currently a no-op, not "
                   "validated-to-be-zero). Run "
                   "fit_hetero_variance_regression() against a real "
@@ -718,16 +721,35 @@ def hetero_variance(meta_i, meta_j, alpha_dirichlet, fit_coeffs=None):
             hetero_variance._warned = True
         return 0.0
 
+    schema_version = fit_coeffs.get("schema_version", 1)
+    assert schema_version == 2, (
+        f"hetero_variance() received fit_coeffs with schema_version="
+        f"{schema_version!r} (expected 2). schema_version 1 (or absent, "
+        f"the original format) was fit against each client's ABSOLUTE "
+        f"raw_krum_score on the raw (non-log) scale -- applying those "
+        f"coefficients to this function's pairwise-diff/log-scale "
+        f"formula would silently reproduce the exact f-dependent bug "
+        f"this rewrite fixes. Re-fit with the current "
+        f"fit_hetero_variance_regression() to get a schema_version=2 "
+        f"coeffs file."
+    )
+
     n_diff = abs(meta_i["n_samples"] - meta_j["n_samples"])
     e_diff = abs(meta_i["class_entropy"] - meta_j["class_entropy"])
-    predicted = (fit_coeffs.get("intercept", 0.0)
-                 + fit_coeffs["coef_n_samples_diff"] * n_diff
-                 + fit_coeffs["coef_entropy_diff"] * e_diff)
-    # A regression can predict a negative "variance" for some input
-    # combinations even with a reasonable fit -- variance cannot be
-    # negative by construction, so clip at 0 rather than letting a
-    # negative value corrupt the sqrt() in the caller.
-    return max(0.0, predicted)
+    predicted_log = (fit_coeffs["intercept"]
+                      + fit_coeffs["coef_n_samples_diff"] * n_diff
+                      + fit_coeffs["coef_entropy_diff"] * e_diff)
+    # Back-transform: the fit predicts log1p(expected |pairwise diff|),
+    # i.e. an expected-STD-scale quantity (mean absolute pairwise
+    # difference is a standard robust proxy for spread). Squaring it
+    # converts that std-scale quantity into the VARIANCE this function's
+    # contract requires (it feeds into sqrt(var_dp + var_hetero + ...)
+    # downstream, which expects a variance, not a std). Clip at 0 before
+    # squaring (expm1 of a very negative prediction could in principle
+    # dip fractionally below 0 from floating-point error at the low end;
+    # squaring first would hide that instead of clamping it).
+    predicted_absdiff = max(0.0, math.expm1(predicted_log))
+    return predicted_absdiff ** 2
 
 
 hetero_variance._warned = False
@@ -735,7 +757,7 @@ hetero_variance._warned = False
 
 def fit_hetero_variance_regression(per_client_krum_scores_csv):
     """
-    Fits hetero_variance()'s linear regression against a REAL Task 1
+    Fits hetero_variance()'s regression against a REAL Task 1
     per_client_krum_scores.csv (produced by main.py's Issue 4 Task 1
     logger). Uses ONLY rows where ground_truth_client_label == "honest"
     (per the ticket: this is meant to model legitimate heterogeneity-
@@ -748,133 +770,132 @@ def fit_hetero_variance_regression(per_client_krum_scores_csv):
     silently guessed here, since "was DP active for this row" is not a
     column in Task 1's schema as specified).
 
-    BUG FIX (see hetero_variance()'s docstring for the full failure
-    analysis -- Task 5 f-sweep TPR/FPR regressions at f=1 and f=3,
-    traced to this function): the original version regressed each
-    client's own ABSOLUTE raw_krum_score (an (n-f-2)-neighbour SUM)
-    against that client's ABSOLUTE n_samples/class_entropy, then
-    hetero_variance() applied the resulting coefficients to PAIRWISE
-    DIFFERENCES at the single-pairwise-distance scale -- neither the
-    functional form nor the scale matched what was actually fit. This
-    version fits genuine pairwise examples instead:
+    REWRITTEN (schema_version 2) to fix two stacked problems found in
+    the original (schema_version 1, absolute-value, raw-scale) version:
 
-    For each round, for every pair (i, j) of HONEST clients present in
-    THAT round:
-        theoretical_neighbours_this_round = n_this_round - f_this_round - 2
-            (n_this_round = count of distinct client_ids logged that
-             round; f_this_round = count of rows that round with
-             ground_truth_client_label == "byzantine" -- both directly
-             recoverable from the CSV without a schema change)
-        per_neighbour_dist_i = raw_krum_score_i / theoretical_neighbours_this_round
-            (converts the (n-f-2)-neighbour SUM back to an approximate
-             single-pairwise-distance scale -- raw_krum_score is a SUM,
-             not a spread, so this divides by the neighbour COUNT, not
-             by its square root; contrast with the sqrt(theoretical_
-             neighbours) conversion used elsewhere in this file for
-             converting a SPREAD/std of a sum back to a single term's
-             std -- different quantity, different conversion)
-        target       = |per_neighbour_dist_i - per_neighbour_dist_j|
-        regressor_1  = |n_samples_i - n_samples_j|
-        regressor_2  = |class_entropy_i - class_entropy_j|
+    Problem 1 -- wrong quantity fit vs. wrong quantity applied. The
+    original version regressed each client's own ABSOLUTE raw_krum_score
+    (a value SUMMED over that client's n-f-2 nearest neighbours, so its
+    raw magnitude depends on f_byzantine) against that client's own
+    ABSOLUTE n_samples/class_entropy -- then hetero_variance() applied
+    those coefficients to a PAIRWISE DIFFERENCE of two different
+    clients' n_samples/entropy. Confirmed against real 5-seed f-sweep
+    data: this made the hetero term behave correctly at f=2 (the
+    setting the original fit happened to come from) but break at f=1
+    and f=3 -- an f-dependent scale mismatch, not a random bug.
 
-    Fit through the ORIGIN (no intercept): at zero metadata difference
-    this formulation should predict zero EXTRA variance from
-    heterogeneity specifically -- generic honest round-to-round noise
-    unrelated to heterogeneity is already captured separately by
-    baseline_honest_std_from_prior_round, and an intercept here would
-    double-count that same noise into both terms. "intercept" is kept
-    in the returned dict, fixed at 0.0, only so any code/JSON expecting
-    that key doesn't break.
+    Fix: this version (a) groups honest rows by (round_id,
+    alpha_dirichlet_config, active_epsilon_config) -- i.e. by "the same
+    real cohort of honest clients that round", (b) derives each round's
+    neighbour count directly from that round's own honest headcount
+    (honest_count - 2 -- exactly Krum's n-f-2, since every OTHER client
+    that round is by construction either honest or the f byzantine
+    clients being assumed-excluded; no external f_byzantine metadata
+    needed), (c) divides each client's raw_krum_score by that count to
+    approximate a single-pair distance rather than an f-dependent sum,
+    and (d) regresses the PAIRWISE DIFFERENCE of that per-neighbour
+    score between every pair of honest clients in the same cohort
+    against |n_samples_i - n_samples_j| and |entropy_i - entropy_j| --
+    i.e. fits and is applied on the exact same quantity.
 
-    Returns {"intercept" (always 0.0, see above), "coef_n_samples_diff",
-    "coef_entropy_diff", "r_squared", "n_rows_fit", "n_pairs_fit"} --
-    reports fit quality HONESTLY; a poor R^2 must be reported as such
-    by the caller, not hidden. n_rows_fit is kept (now: honest ROWS
-    used to build pairs) alongside the new n_pairs_fit (actual number
-    of pairwise training examples) since the two can differ a lot and
-    both are useful diagnostics.
+    Problem 2 -- raw-scale OLS is outlier-dominated on this data. Fit on
+    the raw (non-log) pairwise-diff scale, the same real data produces a
+    large, WRONG-SIGNED coef_entropy_diff with an implausibly high R^2 --
+    checked directly: mean pairwise diff was ~15x the median in the real
+    data this was fit against, i.e. a strongly right-skewed target, which
+    plain least-squares fits by chasing the few extreme pairs at the
+    expense of getting the sign wrong for the typical case. Fix: fit
+    log1p(pairwise diff) instead. On the identical real data this flips
+    both coefficients to the correct (positive) sign and gives a modest,
+    non-suspicious R^2 instead of an inflated one. hetero_variance()
+    back-transforms (expm1, then squares to convert the std-scale
+    prediction into the variance this function's contract requires) --
+    see that function's docstring.
 
-    NOT EXECUTED IN THIS ENVIRONMENT: this function is provided as the
-    real, callable fitting procedure Task 2 requires, but running it
-    for real requires Task 1's sanity-run CSV to actually exist against
-    the real Edge-IIoTset pipeline (GPU + real dataset), neither of
-    which is available in this sandbox. Do not treat any placeholder
-    coefficients as if this had already been run.
+    Returns {"intercept", "coef_n_samples_diff", "coef_entropy_diff",
+    "r_squared", "n_pairs_fit", "fit_target", "schema_version": 2} --
+    reports fit quality HONESTLY; a poor R^2 must be reported as such by
+    the caller, not hidden. `schema_version` lets hetero_variance() refuse
+    to silently apply an old-format coeffs file (see its docstring).
     """
     import csv as _csv
     from collections import defaultdict
 
-    rounds = defaultdict(list)  # round_id -> list of honest-row dicts
-    n_honest_rows = 0
+    rounds = defaultdict(list)
     with open(per_client_krum_scores_csv, newline="") as f:
         for row in _csv.DictReader(f):
-            if row["ground_truth_client_label"] not in ("honest", "byzantine"):
+            if row["ground_truth_client_label"] != "honest":
                 continue
             try:
                 score = float(row["raw_krum_score"])
             except (ValueError, TypeError):
                 continue
-            if row["ground_truth_client_label"] == "byzantine":
-                # Only needed to count f_this_round below; not used as
-                # a training example itself.
-                rounds[row["round_id"]].append({"byzantine_only": True})
+            if not np.isfinite(score) or score <= 0:
                 continue
-            if not np.isfinite(score):
-                continue
-            rounds[row["round_id"]].append({
-                "byzantine_only": False,
+            key = (row["round_id"], row["alpha_dirichlet_config"],
+                   row["active_epsilon_config"])
+            rounds[key].append({
                 "score": score,
                 "n_samples": float(row["client_n_samples"]),
                 "entropy": float(row["client_class_entropy"]),
             })
-            n_honest_rows += 1
 
-    n_diff_col, e_diff_col, target_col = [], [], []
-    for round_id, entries in rounds.items():
-        n_this_round = len(entries)
-        f_this_round = sum(1 for e in entries if e["byzantine_only"])
-        theoretical_neighbours = n_this_round - f_this_round - 2
-        if theoretical_neighbours <= 0:
-            continue  # can't convert this round's scores to a per-neighbour scale
-        honest_entries = [e for e in entries if not e["byzantine_only"]]
-        for a in range(len(honest_entries)):
-            for b in range(a + 1, len(honest_entries)):
-                ei, ej = honest_entries[a], honest_entries[b]
-                per_nb_i = ei["score"] / theoretical_neighbours
-                per_nb_j = ej["score"] / theoretical_neighbours
-                target_col.append(abs(per_nb_i - per_nb_j))
-                n_diff_col.append(abs(ei["n_samples"] - ej["n_samples"]))
-                e_diff_col.append(abs(ei["entropy"] - ej["entropy"]))
+    diff_targets, ns_diffs, ent_diffs = [], [], []
+    for key, clients in rounds.items():
+        neighbours = len(clients) - 2   # Krum's n-f-2, derived directly
+                                          # from this round's real honest
+                                          # headcount -- no external
+                                          # f_byzantine metadata needed.
+        if neighbours < 1:
+            continue   # too few honest clients logged this round to
+                        # form a meaningful neighbour-normalized score
+        for c in clients:
+            c["score_per_neighbour"] = c["score"] / neighbours
+        for i in range(len(clients)):
+            for j in range(i + 1, len(clients)):
+                a, b = clients[i], clients[j]
+                diff_targets.append(
+                    abs(a["score_per_neighbour"] - b["score_per_neighbour"])
+                )
+                ns_diffs.append(abs(a["n_samples"] - b["n_samples"]))
+                ent_diffs.append(abs(a["entropy"] - b["entropy"]))
 
-    if len(target_col) < 10:
+    if len(diff_targets) < 10:
         raise ValueError(
-            f"Only {len(target_col)} usable honest PAIRS found in "
-            f"{per_client_krum_scores_csv!r} ({n_honest_rows} honest rows "
-            f"across {len(rounds)} rounds) -- too few to fit a defensible "
-            f"regression. Re-run Task 1's sanity sweep (more rounds/seeds, "
-            f"or check that most rounds have theoretical_neighbours > 0) "
-            f"before fitting."
+            f"Only {len(diff_targets)} usable honest-honest pairs found "
+            f"in {per_client_krum_scores_csv!r} -- too few to fit a "
+            f"defensible regression. Re-run the sanity sweep (more "
+            f"rounds/seeds) before fitting."
         )
 
+    y_log = np.log1p(np.array(diff_targets))
     X = np.column_stack([
-        np.array(n_diff_col),
-        np.array(e_diff_col),
+        np.ones(len(y_log)),
+        np.array(ns_diffs),
+        np.array(ent_diffs),
     ])
-    y = np.array(target_col)
-    # No intercept column -- fit through the origin, see docstring.
-    coeffs, residuals, rank, sv = np.linalg.lstsq(X, y, rcond=None)
+    coeffs, residuals, rank, sv = np.linalg.lstsq(X, y_log, rcond=None)
     y_pred = X @ coeffs
-    ss_res = float(np.sum((y - y_pred) ** 2))
-    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    ss_res = float(np.sum((y_log - y_pred) ** 2))
+    ss_tot = float(np.sum((y_log - y_log.mean()) ** 2))
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
+    if r_squared > 0.95:
+        print(f"  ⚠️  fit_hetero_variance_regression(): r_squared="
+              f"{r_squared:.4f} is suspiciously high for this kind of "
+              f"noisy, real-world data -- worth double-checking this "
+              f"isn't the same outlier-domination artifact this rewrite "
+              f"was meant to fix (e.g. too few distinct rounds/cohorts "
+              f"pooled) before trusting it.")
+
     return {
-        "intercept": 0.0,
-        "coef_n_samples_diff": float(coeffs[0]),
-        "coef_entropy_diff": float(coeffs[1]),
+        "intercept": float(coeffs[0]),
+        "coef_n_samples_diff": float(coeffs[1]),
+        "coef_entropy_diff": float(coeffs[2]),
         "r_squared": r_squared,
-        "n_rows_fit": n_honest_rows,
-        "n_pairs_fit": len(target_col),
+        "n_pairs_fit": len(diff_targets),
+        "fit_target": "log1p(abs(pairwise per-neighbour raw_krum_score diff))",
+        "schema_version": 2,
     }
 
 
