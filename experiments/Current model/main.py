@@ -82,6 +82,35 @@ _parser = argparse.ArgumentParser(
 )
 _parser.add_argument("model_type", choices=["network", "application"],
                       nargs="?", default="network")
+_parser.add_argument("--dataset", type=str, default="edge_iiotset",
+                      choices=["edge_iiotset", "ciciot2023"],
+                      help="Issue 5 Task 3/6 (E7): which dataset to load. "
+                           "'edge_iiotset' (default) is this codebase's "
+                           "original DNN-EdgeIIoT-dataset.csv, unaffected "
+                           "by this flag entirely. 'ciciot2023' swaps in "
+                           "ciciot2023_loader.py as a drop-in replacement "
+                           "for data_loader.py's network-model surface "
+                           "(see that module's docstring for exactly how) "
+                           "-- ONLY valid with model_type='network' "
+                           "(positional arg above); ciciot2023_loader has "
+                           "no application-model equivalent and will "
+                           "raise NotImplementedError if you combine "
+                           "--dataset ciciot2023 with the 'application' "
+                           "positional arg. Set CICIOT2023_DATASET_DIR "
+                           "env var to point at the real dataset "
+                           "directory before using this.")
+_parser.add_argument("--ciciot-subset-fraction", type=float, default=0.10,
+                      help="Issue 5 Task 3 (E7): stratified subset "
+                           "fraction of the full ~46M-row CICIoT2023 "
+                           "dataset to load. Only meaningful with "
+                           "--dataset ciciot2023.")
+_parser.add_argument("--ciciot-five-feature-slice", action="store_true",
+                      help="Issue 5 Task 3 (E7): use the 5-feature "
+                           "Edge-IIoTset-semantic-overlap slice instead "
+                           "of CICIoT2023's full 46-feature schema (issue "
+                           "spec's compute-lightweight fallback, "
+                           "'if full subset is too heavy'). Only "
+                           "meaningful with --dataset ciciot2023.")
 _parser.add_argument("--epsilon", type=float, default=None,
                       help="PRV1: Override DP_EPSILON -- this is the "
                            "FULL-RUN target epsilon (composed over all "
@@ -115,10 +144,110 @@ _parser.add_argument("--aggregator", type=str, default=None,
                            "and will raise NotImplementedError if "
                            "actually selected.")
 _parser.add_argument("--attack-type", type=str, default="sign_flip",
-                      choices=["sign_flip", "gaussian", "zero_gradient"],
-                      help="Which Byzantine attack the malicious clients use.")
+                      choices=["sign_flip", "gaussian", "zero_gradient",
+                               "minmax", "minsum", "bounded_directional"],
+                      help="Which Byzantine attack the malicious clients use. "
+                           "Issue 5 Task 1 adds minmax/minsum (Fang et al. "
+                           "USENIX'20 stealthy, distance-aware, AGR-agnostic "
+                           "poisoners -- coalition-broadcast, see "
+                           "defences/byzantine.py) and bounded_directional "
+                           "(targeted direction, magnitude capped just under "
+                           "the norm-guard threshold -- defeats the HMAC "
+                           "norm guard by design; documented limitation).")
 _parser.add_argument("--gaussian-std", type=float, default=None,
                       help="Std dev for --attack-type gaussian.")
+_parser.add_argument("--minmax-dev-type", type=str, default="std",
+                      choices=["std", "sign", "unit_vec"],
+                      help="Issue 5 Task 1: perturbation-direction estimator "
+                           "for --attack-type minmax/minsum. 'std' = per-"
+                           "coordinate std of the Byzantine coalition's own "
+                           "honestly-trained updates (paper default).")
+_parser.add_argument("--minmax-search-iters", type=int, default=15,
+                      help="Issue 5 Task 1: binary-search iterations for the "
+                           "Min-Max/Min-Sum perturbation scale gamma.")
+_parser.add_argument("--minmax-gamma-init", type=float, default=None,
+                      help="Issue 5 Task 1: upper-bound search scale gamma "
+                           "for Min-Max/Min-Sum. Default: 5x the coalition's "
+                           "own pairwise-distance spread. Task 2 requires "
+                           "tuning this so plain Adaptive Krum TPR on this "
+                           "attack lands strictly in 50-85%% -- raise it if "
+                           "TPR is stuck at 100%% (not evasive enough), "
+                           "lower it if TPR collapses to 0%% (too aggressive).")
+_parser.add_argument("--bounded-tau", type=float, default=None,
+                      help="Issue 5 Task 1: assumed norm-guard threshold tau "
+                           "for --attack-type bounded_directional. If "
+                           "omitted, estimated each round from the PRIOR "
+                           "round's verified honest head-norms via "
+                           "defences/byzantine.py:estimate_norm_guard_tau() "
+                           "(same MAD-k rule as the guard itself). On round "
+                           "1 (no prior data), the attack is skipped and the "
+                           "client trains honestly that round -- logged, not "
+                           "silent. Prefer passing this explicitly (matched "
+                           "to the guard's own computed threshold) for "
+                           "Task 2's exact 'TPR=0%% by design' check.")
+_parser.add_argument("--bounded-margin", type=float, default=0.05,
+                      help="Issue 5 Task 1: safety margin subtracted from "
+                           "tau for --attack-type bounded_directional -- "
+                           "crafted update norm = tau - bounded-margin.")
+_parser.add_argument("--bounded-direction", type=str, default="negate",
+                      choices=["negate", "classifier_head_negate"],
+                      help="Issue 5 Task 1: adversarial direction for "
+                           "--attack-type bounded_directional. 'negate' "
+                           "flips the client's whole trained update; "
+                           "'classifier_head_negate' flips only the "
+                           "classifier-head slice (targeted rare-class "
+                           "attack) before the whole vector is rescaled to "
+                           "the shared norm budget.")
+_parser.add_argument("--no-dp-calibration", action="store_true",
+                      help="Issue 5 Task 3 (E6 ablation): force "
+                           "use_dp_calibration=False in "
+                           "calibrated_adaptive_multi_krum(), regardless of "
+                           "AGGREGATOR. Previously use_dp_calibration=True "
+                           "was hardcoded at the call site with no CLI path "
+                           "to turn it off -- E6's 4-variant ablation "
+                           "('Full proposed' / '-DP calibration only' / "
+                           "'-Heterogeneity calibration only' / 'Calibration "
+                           "off == plain Adaptive Krum') needs exactly this "
+                           "toggle, independently of --no-hetero-calibration "
+                           "below. Only meaningful when AGGREGATOR== "
+                           "'calibrated_krum'; ignored otherwise.")
+_parser.add_argument("--no-hetero-calibration", action="store_true",
+                      help="Issue 5 Task 3 (E6 ablation): force "
+                           "use_hetero_calibration=False -- same rationale "
+                           "as --no-dp-calibration above, independent toggle "
+                           "for the heterogeneity-variance term. Passing "
+                           "BOTH --no-dp-calibration and "
+                           "--no-hetero-calibration reproduces plain "
+                           "Adaptive Krum's client selection exactly (E6 "
+                           "variant 4), since with every calibration term "
+                           "off, calibrated_adaptive_multi_krum's distance "
+                           "scoring reduces to plain Adaptive Krum's -- see "
+                           "the 'calibrated_krum_dp_sweep' ablation-mode "
+                           "help text above for the same equivalence "
+                           "argument applied to noise_multiplier=None.")
+_parser.add_argument("--rounds", type=int, default=None,
+                      help="Issue 5 Task 2: override NUM_ROUNDS (default 25, "
+                           "or 2 under SANITY_CHECK). Exists so "
+                           "scripts/check_attack_difficulty.py can run a "
+                           "short (e.g. 5-round) calibration pass to tune "
+                           "--minmax-gamma-init without paying for a full "
+                           "25-round run on every tuning iteration. NOT "
+                           "used by the full E1-E8 campaign runners, which "
+                           "rely on the real default.")
+_parser.add_argument("--byzantine-full-model", action="store_true",
+                      help="Issue 5 (bug fix): force BYZANTINE_HEAD_ONLY="
+                           "False regardless of --ablation-mode. "
+                           "pure_norm_guard and exp2_unmitigated/"
+                           "exp2_mitigated all hardcode BYZANTINE_HEAD_ONLY"
+                           "=True, and the attack dispatch checks that flag "
+                           "BEFORE --attack-type -- meaning --attack-type "
+                           "was silently ignored (replaced with "
+                           "classifier_head_flip_attack) under those modes "
+                           "with no way to actually test e.g. "
+                           "bounded_directional's real purpose (evading a "
+                           "LIVE norm guard) until this flag existed. "
+                           "Required by scripts/check_attack_difficulty.py's "
+                           "Check 2.")
 _parser.add_argument("--seed", type=int, default=42,
                       help="Random seed for torch/numpy/python-random and "
                            "the client Dirichlet partition.")
@@ -225,6 +354,14 @@ if _args.hetero_fit_coeffs_json is not None:
 else:
     HETERO_FIT_COEFFS = None
 
+# Issue 5 Task 3 (E6 ablation): derive the two calibration-term toggles
+# from the new --no-dp-calibration / --no-hetero-calibration flags.
+# Defaults (neither flag passed) => both True, IDENTICAL to the prior
+# hardcoded calibrated_adaptive_multi_krum(use_dp_calibration=True,
+# use_hetero_calibration=True) call -- purely additive.
+USE_DP_CALIBRATION = not _args.no_dp_calibration
+USE_HETERO_CALIBRATION = not _args.no_hetero_calibration
+
 import random
 random.seed(_args.seed)
 np.random.seed(_args.seed)
@@ -237,7 +374,7 @@ SANITY_CHECK = False
 _HP_CONFIG = load_hyperparams_config()
 
 # FL hyperparameters
-NUM_ROUNDS    = 2 if SANITY_CHECK else 25
+NUM_ROUNDS    = _args.rounds if _args.rounds is not None else (2 if SANITY_CHECK else 25)
 NUM_CLIENTS   = 10
 LOCAL_EPOCHS  = 5
 LEARNING_RATE = 0.001
@@ -273,6 +410,14 @@ ATTACK_TYPE = _args.attack_type
 _GAUSSIAN_STD_DEFAULT = 50.0 if MODEL_TYPE == "network" else 30.0
 GAUSSIAN_STD = _args.gaussian_std if _args.gaussian_std is not None else _GAUSSIAN_STD_DEFAULT
 
+# Issue 5 Task 1 -- stealthy attack hyperparameters.
+MINMAX_DEV_TYPE      = _args.minmax_dev_type
+MINMAX_SEARCH_ITERS  = _args.minmax_search_iters
+MINMAX_GAMMA_INIT    = _args.minmax_gamma_init      # None => auto (5x coalition spread)
+BOUNDED_TAU_OVERRIDE = _args.bounded_tau            # None => estimate from prior round
+BOUNDED_MARGIN       = _args.bounded_margin
+BOUNDED_DIRECTION    = _args.bounded_direction
+
 # ---------------------------------------------------------------------------
 # ABLATION MODE SELECTOR
 # ---------------------------------------------------------------------------
@@ -298,11 +443,28 @@ elif ABLATION_MODE == "pure_norm_guard":
     BYZANTINE_HEAD_ONLY = True
 
 elif ABLATION_MODE == "krum_dp_sweep":
-    USE_ADAPTIVE_KRUM = True
+    # Issue 5 Task 3 fix: previously hardcoded USE_ADAPTIVE_KRUM=True
+    # with no --aggregator override, matching only "baseline" and
+    # "krum_baseline"'s ORIGINAL (pre-dispatch-table) hardcoded shape.
+    # That left every DP+Byzantine-attack run stuck on a single
+    # aggregator (plain Adaptive Krum) -- there was no CLI-reachable
+    # way to run e.g. 'median + DP + Byzantine attack' or 'fedavg + DP
+    # + Byzantine attack', which Issue 5's E4 (dense epsilon sweep,
+    # "3 aggregators x alpha x epsilon") needs for its third,
+    # non-calibrated reference aggregator alongside adaptive_krum and
+    # calibrated_krum (the latter already reachable via the separate
+    # calibrated_krum_dp_sweep mode below). Mirrors krum_baseline's
+    # exact override pattern (see that block + the "AGGREGATOR not in
+    # globals()" dispatch-derivation block right after this whole
+    # if/elif chain, which re-derives USE_KRUM/USE_ADAPTIVE_KRUM/
+    # USE_CALIBRATED_KRUM from whatever AGGREGATOR ends up being here)
+    # -- purely additive, existing scripts that omit --aggregator get
+    # IDENTICAL behavior to before (falls back to "adaptive_krum").
     USE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_NORM_GUARD = False
     USE_DP = True
     USE_BYZANTINE_ATTACK = True
     BYZANTINE_HEAD_ONLY = False
+    AGGREGATOR = _args.aggregator if _args.aggregator is not None else "adaptive_krum"
 
 elif ABLATION_MODE == "exp2_unmitigated":
     USE_HE_KRUM_HYBRID = True
@@ -352,6 +514,20 @@ elif ABLATION_MODE == "calibrated_krum_dp_sweep":
 
 else:
     raise ValueError(f"Unknown ABLATION_MODE={ABLATION_MODE!r}")
+
+# Issue 5 (found via check_attack_difficulty.py review): pure_norm_guard
+# and exp2_unmitigated/exp2_mitigated all hardcode BYZANTINE_HEAD_ONLY=
+# True, and the attack-dispatch precedence (see _train_one_client():
+# "if (USE_HE or USE_HE_KRUM_HYBRID or USE_NORM_GUARD) and
+# BYZANTINE_HEAD_ONLY:") checks that flag BEFORE checking ATTACK_TYPE --
+# meaning --attack-type was being SILENTLY IGNORED (replaced with
+# classifier_head_flip_attack) for any of those three modes, with no
+# CLI-reachable way to test e.g. bounded_directional's actual intended
+# purpose (evading a LIVE norm guard) under pure_norm_guard. This flag
+# closes that gap without touching any mode's hardcoded default --
+# purely opt-in, existing scripts unaffected.
+if _args.byzantine_full_model:
+    BYZANTINE_HEAD_ONLY = False
 
 # BAS1 (Issue 3) Task 1 -- dispatch table. Additive: ABLATION_MODE still
 # governs everything it always has (this was an explicit constraint --
@@ -442,6 +618,44 @@ HEAD_NORM_GUARD_K = (_args.krum_k if _args.krum_k is not None
                       else get_value(_HP_CONFIG, "adaptive_krum_k"))
 HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 
+
+def _resolve_aggregator_canonical():
+    """
+    Issue 5 Task 4: a single canonical aggregator slug for this run,
+    used by scripts/analysis_paper.py to group results (Table 2's
+    7-aggregator comparison, E3/E4/E5/E6's 3-aggregator comparisons,
+    etc.). Previously there was NO field in the run manifest recording
+    which aggregator actually ran -- only the boolean flags below,
+    which the round loop's aggregation elif chain reads directly.
+
+    Mirrors that elif chain's EXACT branch-selection precedence (see
+    main()'s round loop: 'if USE_HE ... elif USE_HE_KRUM_HYBRID ...
+    elif USE_NORM_GUARD ... elif USE_KRUM ... elif USE_ADAPTIVE_KRUM
+    ... elif USE_CALIBRATED_KRUM ... elif AGGREGATOR == ...') so this
+    always matches what actually ran, without duplicating any branch
+    BODY -- only the branch SELECTION order, which is static per-run
+    config (these flags are never reassigned inside the round loop).
+    """
+    if USE_HE:
+        return "he_only"
+    if USE_HE_KRUM_HYBRID:
+        return ("he_krum_hybrid_head_norm_guard" if USE_HEAD_NORM_GUARD
+                 else "he_krum_hybrid")
+    if USE_NORM_GUARD:
+        return "norm_guard_only"
+    if USE_KRUM:
+        return "multi_krum"
+    if USE_ADAPTIVE_KRUM:
+        return "adaptive_krum"
+    if USE_CALIBRATED_KRUM:
+        return AGGREGATOR  # "calibrated_krum"
+    if AGGREGATOR in ("median", "trimmed_mean", "fedavg"):
+        return AGGREGATOR
+    return "fedavg_implicit_default"
+
+
+AGGREGATOR_CANONICAL = _resolve_aggregator_canonical()
+
 # PRV1 Task 2 -- DP_EPSILON is now unambiguously the FULL-RUN composed
 # target epsilon (see E4_dense_epsilon_sweep.json's full_run_target_epsilon
 # grid), never a per-round value.
@@ -498,6 +712,46 @@ DP_FINAL_EPSILON_CSV  = f"dp_final_epsilon_{_TAG}.csv"
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
+# Issue 5 Task 3/6 (E7): --dataset ciciot2023 swap. MUST happen here,
+# before the `from data_loader import ...` / `from task import ...`
+# lines immediately below -- task.py does its OWN
+# `from data_loader import (NETWORK_NAMES, ...)` at ITS module-import
+# time (see task.py's top-level imports), so this sys.modules
+# substitution has to be in place before task.py is first imported
+# anywhere in the process, not just before main.py's own data_loader
+# import. See ciciot2023_loader.py's module docstring ("HOW THE SWAP
+# WORKS") for the full rationale and why this narrow substitution was
+# chosen over threading a --dataset parameter through every call site.
+if _args.dataset == "ciciot2023":
+    if MODEL_TYPE != "network":
+        raise ValueError(
+            "--dataset ciciot2023 is only valid with model_type="
+            "'network' (positional arg) -- ciciot2023_loader has no "
+            "application-model equivalent. See ciciot2023_loader.py's "
+            "module docstring."
+        )
+    import ciciot2023_loader
+    sys.modules["data_loader"] = ciciot2023_loader
+    print(f"  [Issue 5 E7] --dataset ciciot2023 active: data_loader has "
+          f"been swapped for ciciot2023_loader (subset_fraction="
+          f"{_args.ciciot_subset_fraction}, five_feature_slice="
+          f"{_args.ciciot_five_feature_slice}). CICIOT2023_DATASET_DIR="
+          f"{os.environ.get('CICIOT2023_DATASET_DIR', '(not set, using default path)')}")
+    # Pre-warm the cache with this run's actual subset_fraction /
+    # five_feature_slice choice -- load_and_preprocess_ciciot2023() is
+    # a no-op on every subsequent call for this seed (see its own
+    # early-return-if-cached logic), so calling it once here with the
+    # REAL CLI values, before any code path calls the swapped
+    # get_global_test_holdout()/load_partition_network() with only
+    # (model_type, seed) and no way to pass subset_fraction through,
+    # guarantees those downstream calls hit an already-correctly-
+    # configured cache rather than silently falling back to
+    # ciciot2023_loader's DEFAULT_SUBSET_FRACTION.
+    ciciot2023_loader.load_and_preprocess_ciciot2023(
+        seed=_args.seed, subset_fraction=_args.ciciot_subset_fraction,
+        use_five_feature_slice=_args.ciciot_five_feature_slice,
+    )
+
 if MODEL_TYPE == "network":
     from data_loader import (load_partition_network as load_partition,
                               NETWORK_NAMES as ATTACK_NAMES,
@@ -515,7 +769,10 @@ from data_loader import get_global_test_holdout, get_global_validation_holdout
 
 from defences.byzantine import (sign_flip_attack, sign_flip_attack_trained,
                                  classifier_head_flip_attack, gaussian_attack,
-                                 gaussian_attack_trained, zero_gradient_attack)
+                                 gaussian_attack_trained, zero_gradient_attack,
+                                 minmax_attack_trained, minsum_attack_trained,
+                                 bounded_directional_attack_trained,
+                                 estimate_norm_guard_tau)
 
 if USE_KRUM:
     from defences.krum import multi_krum
@@ -709,6 +966,38 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
                 if attack_type == "gaussian":
                     params = gaussian_attack_trained(trained_params,
                                                       std=client_cfg["gaussian_std"])
+                elif attack_type in ("minmax", "minsum"):
+                    # Issue 5 Task 1: coalition-aware -- crafting needs
+                    # every Byzantine coalition member's trained params,
+                    # which don't all exist yet at this point in the
+                    # (possibly parallel) per-client training wave.
+                    # Return the client's own HONEST trained params here
+                    # unmodified; main()'s round loop replaces every
+                    # Byzantine client's entry with the coalition-crafted
+                    # vector in a post-training-wave pass -- see the
+                    # "Issue 5 Task 1: Min-Max/Min-Sum coalition crafting"
+                    # block right after the training wave completes.
+                    params = trained_params
+                elif attack_type == "bounded_directional":
+                    tau = client_cfg["bounded_tau"]
+                    if tau is None:
+                        # No usable tau this round (typically round 1,
+                        # before any prior-round honest norms exist) --
+                        # train honestly rather than crash or guess.
+                        # Logged at the call site, not silently.
+                        params = trained_params
+                    else:
+                        model_state_keys = (
+                            list(model.state_dict().keys())
+                            if client_cfg["bounded_direction"] == "classifier_head_negate"
+                            else None
+                        )
+                        params = bounded_directional_attack_trained(
+                            trained_params, global_params, tau=tau,
+                            margin=client_cfg["bounded_margin"],
+                            direction=client_cfg["bounded_direction"],
+                            model_state_keys=model_state_keys,
+                        )
                 else:
                     params = sign_flip_attack_trained(trained_params,
                                                        scale=client_cfg["attack_scale"])
@@ -924,9 +1213,12 @@ def main():
         _attack_function_label = "classifier_head_flip_attack"
     else:
         _attack_function_label = {
-            "sign_flip":     "sign_flip_attack_trained",
-            "gaussian":      "gaussian_attack_trained",
-            "zero_gradient": "zero_gradient_attack",
+            "sign_flip":           "sign_flip_attack_trained",
+            "gaussian":            "gaussian_attack_trained",
+            "zero_gradient":       "zero_gradient_attack",
+            "minmax":              "minmax_attack_trained",
+            "minsum":              "minsum_attack_trained",
+            "bounded_directional": "bounded_directional_attack_trained",
         }[ATTACK_TYPE]
 
     print(f"\n{'='*65}")
@@ -1005,6 +1297,17 @@ def main():
         "attack_scale":         ATTACK_SCALE,
         "attack_type":          ATTACK_TYPE,
         "gaussian_std":         GAUSSIAN_STD,
+        # Issue 5 Task 1: bounded_directional applies inside
+        # _train_one_client (needs only a scalar tau, known before the
+        # round starts); minmax/minsum are crafted AFTER the training
+        # wave (need every coalition member's trained params -- see the
+        # post-wave crafting block in main()'s round loop). bounded_tau
+        # is mutated in-place each round (estimated from the prior
+        # round's verified honest head-norms) since it can only be
+        # known causally, round by round.
+        "bounded_tau":          BOUNDED_TAU_OVERRIDE,
+        "bounded_margin":       BOUNDED_MARGIN,
+        "bounded_direction":    BOUNDED_DIRECTION,
         "use_he":               USE_HE,
         "use_he_hybrid":        USE_HE_KRUM_HYBRID,
         "use_norm_guard":              USE_NORM_GUARD,
@@ -1113,7 +1416,19 @@ def main():
     with open(meta_path, "w") as f:
         json.dump({
             "ablation_mode": ABLATION_MODE,
+            # Issue 5 Task 4: single canonical aggregator slug -- see
+            # _resolve_aggregator_canonical()'s docstring above for why
+            # this was missing before and what precedence it mirrors.
+            # This is the field scripts/analysis_paper.py groups on.
+            "aggregator": AGGREGATOR_CANONICAL,
+            "aggregator_cli_arg": AGGREGATOR,
             "model_type": MODEL_TYPE,
+            # Issue 5 Task 3/6 (E7): which dataset this run actually
+            # used -- analysis_paper.py's Table 6 builder should filter
+            # on this rather than assume every run is Edge-IIoTset.
+            "dataset": _args.dataset,
+            "ciciot_subset_fraction": _args.ciciot_subset_fraction if _args.dataset == "ciciot2023" else None,
+            "ciciot_five_feature_slice": _args.ciciot_five_feature_slice if _args.dataset == "ciciot2023" else None,
             "sanity_check": SANITY_CHECK,
             "num_rounds": NUM_ROUNDS,
             "num_clients": NUM_CLIENTS,
@@ -1129,6 +1444,16 @@ def main():
             "attack_scale": ATTACK_SCALE,
             "attack_type": ATTACK_TYPE,
             "gaussian_std": GAUSSIAN_STD if ATTACK_TYPE == "gaussian" else None,
+            # Issue 5 Task 1 -- stealthy attack hyperparameters, logged
+            # regardless of whether the currently-selected ATTACK_TYPE
+            # uses them, so a run's manifest fully documents what CLI
+            # knobs were available/overridable for reproduction.
+            "minmax_dev_type": MINMAX_DEV_TYPE if ATTACK_TYPE in ("minmax", "minsum") else None,
+            "minmax_search_iters": MINMAX_SEARCH_ITERS if ATTACK_TYPE in ("minmax", "minsum") else None,
+            "minmax_gamma_init": MINMAX_GAMMA_INIT if ATTACK_TYPE in ("minmax", "minsum") else None,
+            "bounded_tau_override": BOUNDED_TAU_OVERRIDE if ATTACK_TYPE == "bounded_directional" else None,
+            "bounded_margin": BOUNDED_MARGIN if ATTACK_TYPE == "bounded_directional" else None,
+            "bounded_direction": BOUNDED_DIRECTION if ATTACK_TYPE == "bounded_directional" else None,
             "attack_function": _attack_function_label,
             "use_krum": USE_KRUM,
             "krum_m": KRUM_M,
@@ -1139,6 +1464,13 @@ def main():
             "byzantine_clients_cli_override": _args.byzantine,
             "adaptive_krum_method": ADAPTIVE_KRUM_METHOD,
             "adaptive_krum_min_keep_fraction": ADAPTIVE_KRUM_MIN_KEEP_FRACTION,
+            "use_calibrated_krum": USE_CALIBRATED_KRUM,
+            # Issue 5 Task 3 (E6 ablation) -- logged unconditionally
+            # (not just when USE_CALIBRATED_KRUM) so a manifest always
+            # documents what these flags WERE for this run, matching
+            # this file's existing convention for attack hyperparams.
+            "use_dp_calibration": USE_DP_CALIBRATION if USE_CALIBRATED_KRUM else None,
+            "use_hetero_calibration": USE_HETERO_CALIBRATION if USE_CALIBRATED_KRUM else None,
             "use_he": USE_HE,
             "use_he_krum_hybrid": USE_HE_KRUM_HYBRID,
             "use_norm_guard": USE_NORM_GUARD,
@@ -1166,6 +1498,7 @@ def main():
                 "from a checkpoint (see main.py's module docstring)."
             ) if USE_DP else None,
             "byzantine_head_only": BYZANTINE_HEAD_ONLY,
+            "byzantine_full_model_cli_override": _args.byzantine_full_model,
             "dp_safe": DP_SAFE,
             "force_dp_safe_arch_cli_flag": _args.force_dp_safe_arch,
             "prox_mu_cli_override": _args.prox_mu,
@@ -1197,6 +1530,14 @@ def main():
     # not per-round-recomputed).
     _calibrated_krum_baseline_std = None
 
+    # Issue 5 Task 1: causal, round-to-round estimate of the norm-guard
+    # threshold for --attack-type bounded_directional, updated at the
+    # end of each round's norm-guard verification block below (honest
+    # clients' verified head-norms only). None until a round with
+    # USE_NORM_GUARD/USE_HEAD_NORM_GUARD actually populates it -- see
+    # client_cfg["bounded_tau"] update at the top of the round loop.
+    _prior_round_honest_head_norms = None
+
     pool_cm = (
         contextlib.nullcontext()
         if _CUDA_AVAILABLE
@@ -1217,6 +1558,21 @@ def main():
             norm_guard_rejected_this_round      = []
             dp_cumulative_eps_this_round = []
             dp_noise_mult_this_round     = []
+
+            # Issue 5 Task 1: resolve this round's bounded_directional
+            # tau -- explicit CLI override wins outright; otherwise
+            # estimate from the prior round's verified honest head-norms
+            # (None on round 1 / any run where the guard hasn't produced
+            # data yet -- client_cfg["bounded_tau"] stays None and
+            # _train_one_client trains that client honestly that round,
+            # logged there, not silently skipped here).
+            if ATTACK_TYPE == "bounded_directional" and BOUNDED_TAU_OVERRIDE is None:
+                if _prior_round_honest_head_norms:
+                    client_cfg["bounded_tau"] = estimate_norm_guard_tau(
+                        _prior_round_honest_head_norms, k=HEAD_NORM_GUARD_K
+                    )
+                else:
+                    client_cfg["bounded_tau"] = None
 
             _train_wave_start = time.time()
 
@@ -1260,19 +1616,70 @@ def main():
             print(f"  [Timing] Training wave (all {NUM_CLIENTS} clients): "
                   f"{_train_wave_elapsed:.1f}s")
 
+            # ----------------------------------------------------------
+            # Issue 5 Task 1: Min-Max/Min-Sum coalition crafting.
+            # _train_one_client() returned each Byzantine coalition
+            # member's OWN honestly-trained params unmodified (see that
+            # function's minmax/minsum branch) because crafting these
+            # attacks needs every coalition member's trained update at
+            # once -- only available now that the full training wave has
+            # completed (true whether this round went through the DP
+            # branch or the plain _run_training_wave() branch above --
+            # both populate the same trained_params_by_client dict).
+            # Every Byzantine client is overwritten with the SAME
+            # crafted vector (coalition-optimal broadcast, per Fang et
+            # al. -- see defences/byzantine.py's module docstring).
+            # ----------------------------------------------------------
+            if USE_BYZANTINE_ATTACK and ATTACK_TYPE in ("minmax", "minsum"):
+                _coalition_honest_params = [
+                    trained_params_by_client[i] for i in BYZANTINE_CLIENTS
+                    if i in trained_params_by_client
+                ]
+                if len(_coalition_honest_params) > 0:
+                    _craft_fn = (minmax_attack_trained if ATTACK_TYPE == "minmax"
+                                 else minsum_attack_trained)
+                    _crafted_params, _minmax_diag = _craft_fn(
+                        _coalition_honest_params,
+                        dev_type=MINMAX_DEV_TYPE,
+                        gamma_init=MINMAX_GAMMA_INIT,
+                        search_iters=MINMAX_SEARCH_ITERS,
+                        return_diagnostics=True,
+                    )
+                    for i in BYZANTINE_CLIENTS:
+                        if i in trained_params_by_client:
+                            trained_params_by_client[i] = _crafted_params
+                    print(f"  [{ATTACK_TYPE.upper()} attack] "
+                          f"gamma={_minmax_diag['gamma']:.4f}  "
+                          f"dev_type={_minmax_diag['dev_type_used']}  "
+                          f"coalition_size={_minmax_diag['coalition_size']}")
+
             for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
                 params = trained_params_by_client[i]
 
                 if USE_BYZANTINE_ATTACK and i in BYZANTINE_CLIENTS:
                     if (USE_HE or USE_HE_KRUM_HYBRID or USE_NORM_GUARD) and BYZANTINE_HEAD_ONLY:
                         tag = "head-only"
+                    elif ATTACK_TYPE == "minmax":
+                        tag = "minmax"
+                    elif ATTACK_TYPE == "minsum":
+                        tag = "minsum"
+                    elif ATTACK_TYPE == "bounded_directional":
+                        tag = ("bounded-directional"
+                               if client_cfg["bounded_tau"] is not None
+                               else "bounded-directional [SKIPPED, no tau yet -- trained honestly]")
                     elif ATTACK_TYPE == "gaussian":
                         tag = "gaussian (trained)"
                     elif ATTACK_TYPE == "zero_gradient":
                         tag = "zero-gradient"
                     else:
                         tag = "sign-flip (trained)"
-                    print(f"  Client {i+1:2d}  [BYZANTINE -- {tag} x{ATTACK_SCALE}]")
+                    if ATTACK_TYPE in ("minmax", "minsum", "bounded_directional"):
+                        # These attacks don't use the fixed ATTACK_SCALE
+                        # multiplier -- their magnitude is set by the
+                        # gamma search / tau-margin rescale instead.
+                        print(f"  Client {i+1:2d}  [BYZANTINE -- {tag}]")
+                    else:
+                        print(f"  Client {i+1:2d}  [BYZANTINE -- {tag} x{ATTACK_SCALE}]")
 
                 if (USE_HE or USE_HE_KRUM_HYBRID or USE_NORM_GUARD) and _TENSEAL_AVAILABLE and he_context is not None:
                     if (USE_HE_KRUM_HYBRID or USE_NORM_GUARD) and USE_HEAD_NORM_GUARD:
@@ -1351,6 +1758,21 @@ def main():
                           f"kept={len(norm_guard_survivor_positions)}/"
                           f"{len(accepted_params)}  "
                           f"rejected_ids={sorted(norm_guard_rejected_ids)}")
+
+                    # Issue 5 Task 1: record this round's verified HONEST
+                    # (ground-truth non-Byzantine) head-norms for next
+                    # round's estimate_norm_guard_tau() call, if
+                    # --attack-type bounded_directional is running
+                    # without an explicit --bounded-tau override.
+                    # Deliberately excludes Byzantine clients' norms
+                    # even when they passed verification (e.g. a
+                    # bounded_directional attacker truthfully reporting
+                    # norm < tau) -- the estimate should track the
+                    # honest population only.
+                    _prior_round_honest_head_norms = [
+                        verified_norms[k] for k, pos in enumerate(verified_positions)
+                        if accepted_client_indices[pos] not in BYZANTINE_CLIENTS
+                    ]
 
                     hybrid_accepted_params = [
                         accepted_params[pos] for pos in norm_guard_survivor_positions
@@ -1451,6 +1873,15 @@ def main():
                       f"rejected_ids={sorted(norm_guard_rejected_ids)}  "
                       f"detected_byz={sorted(krum_detected_byz)}")
 
+                # Issue 5 Task 1: same honest-norm tracking as the
+                # HE+Krum hybrid head-norm-guard branch above, for
+                # estimate_norm_guard_tau() -- see that branch's
+                # identical comment for the rationale.
+                _prior_round_honest_head_norms = [
+                    verified_norms[k] for k, pos in enumerate(verified_positions)
+                    if accepted_client_indices[pos] not in BYZANTINE_CLIENTS
+                ]
+
                 if len(survivor_positions) == 0:
                     print("  WARNING: Norm guard rejected ALL clients "
                           "this round -- skipping round.")
@@ -1548,8 +1979,14 @@ def main():
                         # "no-op" warning -- honest default, never
                         # fabricated here.
                         hetero_fit_coeffs=HETERO_FIT_COEFFS,
-                        use_dp_calibration=True,
-                        use_hetero_calibration=True,
+                        # Issue 5 Task 3 (E6 ablation): was hardcoded
+                        # True/True -- now CLI-toggleable via
+                        # --no-dp-calibration / --no-hetero-calibration
+                        # (both default off, i.e. both calibration terms
+                        # on, IDENTICAL to prior hardcoded behavior when
+                        # neither flag is passed).
+                        use_dp_calibration=USE_DP_CALIBRATION,
+                        use_hetero_calibration=USE_HETERO_CALIBRATION,
                         return_diagnostics=True,
                     )
                     _calibrated_krum_baseline_std = krum_score_diag["new_baseline_honest_std"]
