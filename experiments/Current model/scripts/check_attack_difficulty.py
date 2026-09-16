@@ -37,6 +37,7 @@ is safe to wire into a pre-campaign CI/Make target that gates Task 3.
 
 import argparse
 import csv
+import glob
 import os
 import subprocess
 import sys
@@ -49,6 +50,13 @@ _MAIN_PY = os.path.join(_REPO_ROOT, "main.py")
 MINMAX_TPR_LOW, MINMAX_TPR_HIGH = 0.50, 0.85
 CALIBRATION_ROUNDS = 5          # short run: fast enough to iterate gamma
 DEFAULT_BYZANTINE = "1,2"       # matches main.py's own default clients
+
+
+def _sanitize_tag_component(value):
+    """Turn an arbitrary sweep-parameter value into a filesystem/tag-safe
+    fragment (main.py's checkpoint/LOG_CSV naming is built from `tag`, so
+    this must not contain '.', ',', or spaces)."""
+    return str(value).replace(".", "p").replace(",", "-").replace(" ", "")
 
 
 def _run_main(extra_args, tag, workdir, byzantine_clients=None, rounds=None):
@@ -87,6 +95,20 @@ def _run_main(extra_args, tag, workdir, byzantine_clients=None, rounds=None):
         "--byzantine", byz,
         "--seed", "42",
     ] + extra_args
+
+    # Defensive checkpoint cleanup: main.py resumes from any checkpoint
+    # matching this tag+seed, which is exactly the bug that made every
+    # gamma candidate after the first silently replay the first run's
+    # cached result instead of training. Callers below now build a tag
+    # that's unique per sweep parameter combination, which is the real
+    # fix -- but we don't have visibility into every key main.py's
+    # resume logic might match on, so belt-and-suspenders: also nuke
+    # any stale checkpoint/state file for this exact tag+seed before
+    # each run, in this run's own isolated workdir.
+    for stale in glob.glob(os.path.join(workdir, f"*{tag}*seed42*")):
+        if stale.endswith(".csv") or "checkpoint" in os.path.basename(stale).lower() \
+                or "state" in os.path.basename(stale).lower():
+            os.remove(stale)
 
     print(f"\n{'='*70}\n  RUNNING: {' '.join(cmd)}\n  (cwd={workdir})\n{'='*70}")
     result = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True)
@@ -202,7 +224,23 @@ def check_minmax_vs_plain_adaptive_krum(workdir, gamma_init=None,
     if gamma_init is not None:
         extra += ["--minmax-gamma-init", str(gamma_init)]
 
-    log_path = _run_main(extra, tag="check_minmax_adaptive_krum", workdir=workdir,
+    # BUG FIX: this used to be a single fixed tag
+    # ("check_minmax_adaptive_krum") shared by every gamma candidate in
+    # a sweep. main.py resumes from a checkpoint whenever it finds one
+    # matching tag+seed already at the target round count -- so after
+    # gamma=0.5's run finished, gamma=1.0/2.0/4.0/8.0 all hit that same
+    # checkpoint, never trained with their own gamma value, and this
+    # script silently reported gamma=0.5's cached result four more
+    # times (bit-for-bit identical FINAL TEST rows across "different"
+    # candidates was the tell). Each sweep point now gets its own tag
+    # so each candidate actually runs.
+    tag = (
+        f"check_minmax_g{_sanitize_tag_component(gamma_init if gamma_init is not None else 'auto')}"
+        f"_dev{_sanitize_tag_component(minmax_dev_type)}"
+        f"_it{minmax_search_iters}"
+        f"_byz{_sanitize_tag_component(byz)}"
+    )
+    log_path = _run_main(extra, tag=tag, workdir=workdir,
                           byzantine_clients=byz, rounds=rounds)
     byz_clients = [int(c) for c in byz.split(",")]
     tpr = _byzantine_tpr_from_log(log_path, byz_clients)
