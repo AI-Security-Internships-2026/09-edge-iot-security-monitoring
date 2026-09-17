@@ -128,6 +128,13 @@ _parser.add_argument("--byzantine", type=str, default=None,
                            "clients 1,2.")
 _parser.add_argument("--krum-k", type=float, default=None,
                       help="Override ADAPTIVE_KRUM_K / HEAD_NORM_GUARD_K.")
+_parser.add_argument("--assumed-f", type=int, default=None,
+                      help="Override ADAPTIVE_KRUM_HYBRID_ASSUMED_F (the "
+                           "assumed attacker count the HE+Krum hybrid "
+                           "pipeline's plaintext-slice Krum step uses), "
+                           "before clamping to NUM_BYZANTINE. Falls back "
+                           "to hyperparams.json's "
+                           "adaptive_krum_hybrid_assumed_f if omitted.")
 _parser.add_argument("--aggregator", type=str, default=None,
                       choices=["fedavg", "krum", "multi_krum", "median",
                                "trimmed_mean", "adaptive_krum",
@@ -672,7 +679,9 @@ ADAPTIVE_KRUM_METHOD = "mad"
 ADAPTIVE_KRUM_MIN_KEEP_FRACTION = 0.5
 
 ADAPTIVE_KRUM_HYBRID_ASSUMED_F = min(
-    get_value(_HP_CONFIG, "adaptive_krum_hybrid_assumed_f"), NUM_BYZANTINE
+    (_args.assumed_f if _args.assumed_f is not None
+     else get_value(_HP_CONFIG, "adaptive_krum_hybrid_assumed_f")),
+    NUM_BYZANTINE
 )
 
 # ---------------------------------------------------------------------------
