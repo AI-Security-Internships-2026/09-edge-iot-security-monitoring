@@ -28,6 +28,17 @@ Phase 1.2 -- multi-seed Experiment 2 (40 runs):
     all run at the CANONICAL_K / CANONICAL_ASSUMED_F you set below after
     reviewing Phase 1.1's output.
 
+PROX_MU
+-------
+Both phases now pass an EXPLICIT --prox-mu, per model, adopted from the
+Issue 4 Task 4 argmax sweep (network=0.005, application=0) rather than
+inheriting hyperparams.json's fedprox_mu=0.02 implicitly. See
+PROX_MU_BY_MODEL below for the numbers this was chosen on. This is a
+DELIBERATE departure from every existing single-mechanism ablation
+(Krum-only, Pure-DP, Pure-HE, Pure-guard) and from Experiment 1, all of
+which used mu=0.02 -- flag this discontinuity in the paper wherever
+Tier 1's results are compared against those earlier numbers.
+
 RESUMABILITY
 ------------
 Every run is logged to run_manifest.csv (created next to this script,
@@ -71,6 +82,23 @@ CANONICAL_K = 2.5
 CANONICAL_ASSUMED_F = 1
 
 # ---------------------------------------------------------------------------
+# Per-model FedProx mu, adopted from the Issue 4 Task 4 argmax sweep
+# (task4_federated.zip, 5-seed VALIDATION-holdout means):
+#   network:      mu=0.005 -> mean val F1-Macro 0.8684 (best; mu=0.02: 0.8447)
+#   application:  mu=0     -> mean val F1-Macro 0.8055 (best; mu=0.02: 0.7431)
+# This DEVIATES from every existing single-mechanism ablation (Krum-only,
+# Pure-DP, Pure-HE, Pure-guard) and from Experiment 1, all of which used
+# mu=0.02 uniformly. Flag this discontinuity explicitly in the paper
+# wherever Experiment 2's Tier 1 numbers are compared against those
+# earlier results -- they are no longer using the same local-training
+# recipe, only the same architecture/dataset/aggregation logic.
+# ---------------------------------------------------------------------------
+PROX_MU_BY_MODEL = {
+    "network": 0.005,
+    "application": 0,
+}
+
+# ---------------------------------------------------------------------------
 # Fixed experiment grids -- match the paper's plan exactly
 # ---------------------------------------------------------------------------
 K_GRID = [2.5, 3.5]
@@ -92,7 +120,7 @@ EXPERIMENT2_CONFIGS = [
 
 MANIFEST_FIELDS = [
     "tag", "phase", "model", "ablation_mode", "byzantine", "k",
-    "assumed_f", "seed", "status", "started", "finished",
+    "assumed_f", "prox_mu", "seed", "status", "started", "finished",
     "returncode", "log_path",
 ]
 
@@ -144,8 +172,8 @@ def append_manifest(path, row):
         w.writerow(row)
 
 
-def run_one(model, ablation_mode, byzantine, k, assumed_f, seed, tag,
-            results_dir, manifest_path, dry_run):
+def run_one(model, ablation_mode, byzantine, k, assumed_f, prox_mu, seed,
+            tag, results_dir, manifest_path, dry_run):
     existing = load_manifest(manifest_path)
     if tag in existing and existing[tag]["status"] == "done":
         print(f"[skip] {tag} already marked done in manifest")
@@ -157,6 +185,7 @@ def run_one(model, ablation_mode, byzantine, k, assumed_f, seed, tag,
         "--byzantine", byzantine,
         "--krum-k", str(k),
         "--assumed-f", str(assumed_f),
+        "--prox-mu", str(prox_mu),
         "--seed", str(seed),
         "--tag", tag,
     ]
@@ -170,7 +199,7 @@ def run_one(model, ablation_mode, byzantine, k, assumed_f, seed, tag,
     append_manifest(manifest_path, {
         "tag": tag, "phase": "", "model": model,
         "ablation_mode": ablation_mode, "byzantine": byzantine,
-        "k": k, "assumed_f": assumed_f, "seed": seed,
+        "k": k, "assumed_f": assumed_f, "prox_mu": prox_mu, "seed": seed,
         "status": "running", "started": started, "finished": "",
         "returncode": "", "log_path": str(log_path),
     })
@@ -182,7 +211,7 @@ def run_one(model, ablation_mode, byzantine, k, assumed_f, seed, tag,
     append_manifest(manifest_path, {
         "tag": tag, "phase": "", "model": model,
         "ablation_mode": ablation_mode, "byzantine": byzantine,
-        "k": k, "assumed_f": assumed_f, "seed": seed,
+        "k": k, "assumed_f": assumed_f, "prox_mu": prox_mu, "seed": seed,
         "status": "done" if proc.returncode == 0 else "FAILED",
         "started": started, "finished": finished,
         "returncode": proc.returncode, "log_path": str(log_path),
@@ -198,12 +227,13 @@ def phase1_1(results_dir, manifest_path, dry_run):
     """k/assumed_f confound grid: 4 single-seed runs, network model,
     hybrid mitigated, byzantine 1,2 -- the exact condition the plan
     flags as confounded."""
-    print("Phase 1.1 -- k/assumed_f grid (network, exp2_mitigated, "
-          "byzantine 1,2, seed 42)")
+    mu = PROX_MU_BY_MODEL["network"]
+    print(f"Phase 1.1 -- k/assumed_f grid (network, exp2_mitigated, "
+          f"byzantine 1,2, seed 42, mu={mu} per PROX_MU_BY_MODEL)")
     for k in K_GRID:
         for af in ASSUMED_F_GRID:
-            tag = f"network_exp2_mitigated_byz1_2_k{k}_af{af}_seed42"
-            run_one("network", "exp2_mitigated", "1,2", k, af, 42,
+            tag = f"network_exp2_mitigated_byz1_2_k{k}_af{af}_mu{mu}_seed42"
+            run_one("network", "exp2_mitigated", "1,2", k, af, mu, 42,
                      tag, results_dir, manifest_path, dry_run)
 
     print("\nPhase 1.1 done. Before running Phase 1.2:")
@@ -225,12 +255,13 @@ def phase1_2(results_dir, manifest_path, dry_run):
           f"({len(EXPERIMENT2_CONFIGS)} configs x {len(SEEDS)} seeds = "
           f"{len(EXPERIMENT2_CONFIGS) * len(SEEDS)} runs)")
     for model, mode, byz in EXPERIMENT2_CONFIGS:
+        mu = PROX_MU_BY_MODEL[model]
         for seed in SEEDS:
             byz_tag = byz.replace(",", "_")
             tag = (f"{model}_{mode}_byz{byz_tag}_"
-                   f"k{CANONICAL_K}_af{CANONICAL_ASSUMED_F}_seed{seed}")
+                   f"k{CANONICAL_K}_af{CANONICAL_ASSUMED_F}_mu{mu}_seed{seed}")
             run_one(model, mode, byz, CANONICAL_K, CANONICAL_ASSUMED_F,
-                     seed, tag, results_dir, manifest_path, dry_run)
+                     mu, seed, tag, results_dir, manifest_path, dry_run)
 
     print("\nPhase 1.2 done (or dry-run printed). Aggregate results per "
           "(model, mode, byz) across the 5 seeds -- mean +/- std of "
