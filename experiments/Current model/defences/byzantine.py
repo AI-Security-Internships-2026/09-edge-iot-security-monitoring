@@ -280,29 +280,50 @@ def bounded_directional_attack_trained(trained_params, global_params, tau,
     the client's own trained DELTA entirely -- broadly adversarial --
     or negate only the classifier-head slice of the delta -- targeted,
     e.g. flipping a rare-class logit like MITM toward Normal), then
-    rescales the DELTA (not the absolute parameter vector) so its L2
-    norm sits strictly under the HMAC norm guard's rejection threshold:
+    rescales so the quantity the guard actually checks sits strictly
+    under the HMAC norm guard's rejection threshold.
 
-        ||crafted_params - global_params||_2 = max(tau - margin, 0)
+    FIX (this revision, v2): the previous version of this function
+    rescaled the ABSOLUTE crafted parameter vector's norm to
+    target_norm, using only `trained_params` -- it never received
+    `global_params` at all. The real HMAC norm guard (see
+    defences/hmac_norm_guard.py and he_local.py's
+    generate_head_norm_proof() call site) verifies the DELTA norm
+    ||trained_head - global_head||, not the absolute parameter
+    magnitude, so that version was fixed to rescale the DELTA instead.
+    That fix is preserved here.
 
-    FIX (this revision): the previous version of this function rescaled
-    the ABSOLUTE crafted parameter vector's norm to target_norm, using
-    only `trained_params` -- it never received `global_params` at all.
-    But the real HMAC norm guard (see defences/hmac_norm_guard.py and
-    he_local.py's generate_head_norm_proof() call site) verifies the
-    DELTA norm ||trained_head - global_head||, not the absolute
-    parameter magnitude. Since real model weights carry a large
-    baseline magnitude relative to one round's honest local update,
-    forcing the ABSOLUTE crafted norm down to a small target_norm left
-    the actual DELTA (crafted - global) dominated by -global_head,
-    with norm roughly ||global_head|| -- almost always far ABOVE the
-    guard's real threshold, guaranteeing detection regardless of tau.
-    Confirmed empirically: a target_norm of 0.23 (comfortably under a
-    real ~0.28 guard threshold) previously produced an actual delta
-    norm of ~21, versus a genuine honest delta norm of ~0.7 in the
-    same test. This version rescales the DELTA itself, which is the
-    quantity the guard actually measures, so tau now has a real causal
-    path to the guard's pass/fail decision.
+    FIX (this revision, v3 -- NEW): for direction='classifier_head_negate',
+    the v2 code still rescaled the WHOLE delta vector (honest backbone +
+    flipped head) to a single shared target_norm calibrated from
+    HEAD-ONLY honest norms (tau comes from estimate_norm_guard_tau() /
+    --bounded-tau, both computed over classifier-head-only delta norms
+    -- see hmac_norm_guard.py's generate_head_norm_proof(), which only
+    ever measures the classifier-head slice, never the full model).
+    Rescaling a vector multiplies every coordinate by the same scalar,
+    which preserves each slice's SHARE of the total norm exactly. Since
+    the backbone is ~94% of parameters and carries real magnitude, the
+    head slice's own norm after a whole-vector rescale to tau-margin
+    ends up well UNDER tau-margin, not sitting at the guard's actual
+    boundary -- the attack still passed the guard, but was materially
+    weaker than "hug the threshold" implies, because it was spending
+    most of its rescaled norm budget on the (already-honest,
+    guard-irrelevant) backbone rather than on the head slice the guard
+    actually inspects.
+
+    This version rescales ONLY the classifier-head sub-vector to
+    target_norm for direction='classifier_head_negate' -- the backbone
+    keeps its full, un-rescaled honest delta untouched. This makes the
+    head-slice norm land exactly at tau-margin (the real quantity the
+    guard checks), which is a materially stronger and more honest test
+    of the guard's documented magnitude-only blind spot. direction=
+    'negate' (the broadly-adversarial, whole-model variant) is
+    UNCHANGED by this fix -- it is not the variant Experiment 2's
+    Phase 1.3 pilot uses, and its own guard-interaction question (the
+    same dilution logic applies to it too, since the guard is
+    head-only in every mode of this codebase) is left as a separate,
+    not-yet-addressed item rather than silently changed alongside this
+    fix.
 
     PURPOSE (per issue spec): this attack is DESIGNED to defeat the
     magnitude-only HMAC norm guard by construction -- the attacker
@@ -326,7 +347,10 @@ def bounded_directional_attack_trained(trained_params, global_params, tau,
         guard actually verifies, rather than an absolute magnitude the
         guard never looks at.
     tau : float
-        Assumed/estimated norm-guard threshold for this round. Caller
+        Assumed/estimated norm-guard threshold for this round, over
+        the classifier-head-only delta norm (matching what
+        estimate_norm_guard_tau() / the guard's own
+        mad_threshold_head_norms() actually compute against). Caller
         supplies this -- see estimate_norm_guard_tau() below for one
         way to derive it online from the prior round's verified honest
         head-norms.
@@ -337,17 +361,21 @@ def bounded_directional_attack_trained(trained_params, global_params, tau,
         a rough estimate.
     direction : {'negate', 'classifier_head_negate'}
         'negate'                 -- flip the entire trained DELTA, then
-                                     rescale the whole delta vector.
+                                     rescale the whole delta vector to
+                                     tau-margin. UNCHANGED by the v3 fix
+                                     above -- this variant's own
+                                     guard-dilution question is a
+                                     separate, not-yet-addressed item.
         'classifier_head_negate' -- flip only the classifier-head
                                      slice of the delta (requires
                                      model_state_keys); the backbone
-                                     keeps its honest delta. The WHOLE
-                                     delta vector (backbone honest +
-                                     head flipped) is then rescaled to
-                                     the single shared norm budget --
-                                     matching what a real HMAC norm
-                                     guard measures over the full
-                                     committed delta.
+                                     keeps its full, UN-rescaled honest
+                                     delta. ONLY the classifier-head
+                                     sub-vector is rescaled, to
+                                     tau-margin -- matching what the
+                                     HMAC norm guard actually measures
+                                     (the classifier-head-only delta
+                                     norm, never the full model's).
     model_state_keys : list[str] or None
         Required when direction='classifier_head_negate'; same
         convention as classifier_head_flip_attack()'s model_state_keys.
@@ -355,8 +383,13 @@ def bounded_directional_attack_trained(trained_params, global_params, tau,
     Returns
     -------
     crafted_params : list[np.ndarray]
-        global_params + a delta redirected adversarially and rescaled
-        so ||crafted_params - global_params||_2 = max(tau - margin, 0).
+        global_params + a delta redirected adversarially. For
+        direction='negate': the WHOLE delta is rescaled so
+        ||crafted_params - global_params||_2 = max(tau - margin, 0).
+        For direction='classifier_head_negate': only the
+        classifier-head SLICE of the delta is rescaled so
+        ||crafted_head - global_head||_2 = max(tau - margin, 0); the
+        backbone slice is returned at its full, honestly-trained delta.
     """
     if tau is None:
         raise ValueError(
@@ -370,7 +403,23 @@ def bounded_directional_attack_trained(trained_params, global_params, tau,
     honest_delta = [t - g for t, g in zip(trained_params, global_params)]
 
     if direction == "negate":
+        # UNCHANGED by the v3 fix -- see docstring's `direction` entry
+        # and the module-level note above for why this variant's own
+        # guard-dilution behavior is left alone here.
         raw_delta = [-d for d in honest_delta]
+
+        flat, shapes, sizes = _flatten(raw_delta)
+        current_norm = np.linalg.norm(flat)
+        if current_norm < 1e-12:
+            # Degenerate all-zero direction -- shouldn't happen for a
+            # real trained update, but fall back to returning
+            # global_params unmodified (zero delta) rather than divide
+            # by zero.
+            return [g.copy() for g in global_params]
+        scaled_delta = flat * (target_norm / current_norm)
+        delta_parts = _unflatten(scaled_delta, shapes, sizes)
+        return [g + d for g, d in zip(global_params, delta_parts)]
+
     elif direction == "classifier_head_negate":
         if model_state_keys is None:
             raise ValueError(
@@ -378,24 +427,52 @@ def bounded_directional_attack_trained(trained_params, global_params, tau,
                 "model_state_keys (same convention as "
                 "classifier_head_flip_attack)."
             )
+
+        # v3 fix: rescale ONLY the classifier-head sub-vector to
+        # target_norm -- this is the quantity the HMAC norm guard
+        # actually measures (see generate_head_norm_proof(), which
+        # only ever hashes/norms the classifier-head slice). The
+        # backbone keeps its full, un-rescaled honest delta -- Krum's
+        # bulk-slice scoring (in the HE+Krum hybrid pipeline) or no
+        # check at all (pure_norm_guard mode) is what sees the
+        # backbone, not this guard.
+        sensitive_idx = [i for i, k in enumerate(model_state_keys)
+                          if 'classifier' in k]
+        if not sensitive_idx:
+            raise ValueError(
+                "direction='classifier_head_negate': no key in "
+                "model_state_keys matched the 'classifier' prefix -- "
+                "cannot locate the classifier-head slice to attack."
+            )
+
+        # Flip only the head slice's sign; backbone entries pass
+        # through unmodified (still the honest delta).
         raw_delta = []
-        for key, d in zip(model_state_keys, honest_delta):
-            raw_delta.append(-d if 'classifier' in key else d.copy())
+        for i, d in enumerate(honest_delta):
+            raw_delta.append(-d if i in sensitive_idx else d)
+
+        head_only = [raw_delta[i] for i in sensitive_idx]
+        flat_head, shapes_head, sizes_head = _flatten(head_only)
+        current_head_norm = np.linalg.norm(flat_head)
+        if current_head_norm < 1e-12:
+            # Degenerate all-zero head delta -- shouldn't happen for a
+            # real trained update; fall back to returning
+            # global_params' head slice unmodified (zero delta) rather
+            # than divide by zero, backbone still honest.
+            scaled_head = [np.zeros_like(h) for h in head_only]
+        else:
+            scaled_head_flat = flat_head * (target_norm / current_head_norm)
+            scaled_head = _unflatten(scaled_head_flat, shapes_head, sizes_head)
+
+        final_delta = list(raw_delta)
+        for pos, i in enumerate(sensitive_idx):
+            final_delta[i] = scaled_head[pos]
+
+        return [g + d for g, d in zip(global_params, final_delta)]
+
     else:
         raise ValueError(f"Unknown direction: {direction!r} "
                           f"(expected 'negate' or 'classifier_head_negate')")
-
-    flat, shapes, sizes = _flatten(raw_delta)
-    current_norm = np.linalg.norm(flat)
-    if current_norm < 1e-12:
-        # Degenerate all-zero direction -- shouldn't happen for a real
-        # trained update, but fall back to returning global_params
-        # unmodified (zero delta) rather than divide by zero.
-        return [g.copy() for g in global_params]
-    scaled_delta = flat * (target_norm / current_norm)
-    delta_parts = _unflatten(scaled_delta, shapes, sizes)
-    return [g + d for g, d in zip(global_params, delta_parts)]
-
 
 def estimate_norm_guard_tau(prior_round_honest_head_norms, k):
     """
