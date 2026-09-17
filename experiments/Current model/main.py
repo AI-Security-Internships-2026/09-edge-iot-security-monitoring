@@ -959,6 +959,41 @@ def _train_one_client(client_idx, X_tr, y_tr, global_params, client_cfg):
             params = classifier_head_flip_attack(
                 trained_params, model_state_keys, scale=client_cfg["attack_scale"]
             )
+
+            # --- VERIFY the head actually got poisoned and the bulk didn't ---
+            # Added to settle, empirically and per-round, whether
+            # classifier_head_flip_attack is doing what its docstring
+            # claims: poison ONLY 'classifier'-prefixed layers, leave
+            # every other layer byte-identical to trained_params. If
+            # either assertion below ever fires, STOP the run -- it
+            # means either the attack isn't firing (head barely moved)
+            # or the "clean backbone" assumption Experiment 2's whole
+            # blind-spot claim depends on is false (bulk moved).
+            _head_delta = 0.0
+            _bulk_delta = 0.0
+            for _k, _before, _after in zip(model_state_keys, trained_params, params):
+                _d = float(np.linalg.norm((_after - _before).flatten()))
+                if 'classifier' in _k:
+                    _head_delta += _d
+                else:
+                    _bulk_delta += _d
+            print(f"  [Attack-verify] client {client_idx+1}: "
+                  f"head_delta_L2={_head_delta:.6f}  bulk_delta_L2={_bulk_delta:.6f}  "
+                  f"(expect head >> 0, bulk == 0.0 exactly)")
+            assert _bulk_delta == 0.0, (
+                f"BUG: bulk parameters changed by the attack for client "
+                f"{client_idx+1} (bulk_delta_L2={_bulk_delta}) -- the head-only "
+                f"attack should leave every non-classifier layer byte-identical "
+                f"to trained_params (see classifier_head_flip_attack's `.copy()` "
+                f"branch). Investigate immediately."
+            )
+            assert _head_delta > 1.0, (
+                f"BUG: classifier head barely changed (head_delta_L2="
+                f"{_head_delta}) for client {client_idx+1} -- the attack may not "
+                f"be firing at all. Check ATTACK_SCALE={client_cfg['attack_scale']} "
+                f"and the 'classifier' in key match against model_state_keys."
+            )
+            # --- end verify ---
         else:
             attack_type = client_cfg["attack_type"]
             if attack_type == "zero_gradient":
