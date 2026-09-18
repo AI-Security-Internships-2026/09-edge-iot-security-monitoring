@@ -58,11 +58,75 @@ import json
 import time
 import warnings
 import contextlib
+import hashlib
+import subprocess
 import numpy as np
 import torch
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from config_loader import load_hyperparams_config, get_value
+
+
+# ---------------------------------------------------------------------------
+# Issue 5 Task 6 -- run-provenance helpers (git_sha / split_hash).
+#
+# Task 6's reuse-audit requirement is: every final result must be
+# traceable to "dataset + model + git SHA + seed + split hash + alpha +
+# epsilon + aggregator + attack + f + relevant hyperparameters". The
+# experiment_config_<TAG>.json manifest already carries every field in
+# that list EXCEPT git_sha and split_hash -- this block adds both.
+# ---------------------------------------------------------------------------
+
+def _get_git_sha():
+    """Best-effort short+long git SHA of the currently-checked-out repo
+    state. Returns a dict rather than a bare string so a dirty working
+    tree (uncommitted changes at run time) is recorded explicitly --
+    a manifest claiming REUSE-eligibility against a commit that doesn't
+    actually match what was executed is worse than no SHA at all.
+    Never raises: any failure (not a git repo, git not installed,
+    detached/shallow clone quirks) is recorded as a diagnostic string
+    in the manifest instead of crashing the run."""
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            stderr=subprocess.DEVNULL, cwd=os.path.dirname(os.path.abspath(__file__)),
+        ).decode().strip()
+    except Exception as e:
+        return {"git_sha": None, "git_dirty": None,
+                "git_error": f"{type(e).__name__}: {e}"}
+    try:
+        dirty_out = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            stderr=subprocess.DEVNULL, cwd=os.path.dirname(os.path.abspath(__file__)),
+        ).decode()
+        dirty = len(dirty_out.strip()) > 0
+    except Exception:
+        dirty = None  # couldn't determine -- honestly report unknown, not False
+    return {"git_sha": sha, "git_dirty": dirty, "git_error": None}
+
+
+def _hash_arrays(*arrays):
+    """Deterministic sha256 fingerprint over one or more numpy arrays,
+    used as this run's split_hash. Cast to a fixed dtype before hashing
+    so the hash is stable across platforms/upstream dtype changes that
+    don't actually change the split's CONTENT (e.g. float32 vs float64
+    loader output) -- what should invalidate reuse is which ROWS ended
+    up in this split, not the loader's incidental numeric dtype.
+    Order of arguments matters (order-sensitive by design, same
+    convention as hmac_norm_guard.py's _hash_ciphertext) -- callers
+    must pass arrays in a fixed, documented order."""
+    h = hashlib.sha256()
+    for arr in arrays:
+        a = np.asarray(arr)
+        if np.issubdtype(a.dtype, np.floating):
+            a = a.astype(np.float64)
+        elif np.issubdtype(a.dtype, np.integer):
+            a = a.astype(np.int64)
+        h.update(a.tobytes())
+        h.update(str(a.shape).encode())  # shape guards against a
+        # flatten-collision false match between differently-shaped
+        # arrays that happen to share raw bytes
+    return h.hexdigest()
 
 # ---------------------------------------------------------------------------
 # Path setup -- allow running from project root OR from src/
@@ -1457,8 +1521,23 @@ def main():
         print()
 
     meta_path = f"experiment_config_{_TAG}.json"
+    # Issue 5 Task 6: git_sha is knowable right now (doesn't depend on
+    # data loading); split_hash is NOT available yet at this point in
+    # main() (the TEST/VALIDATION holdouts aren't loaded until the
+    # final-evaluation block, well after the training loop) -- it gets
+    # backfilled into this same file in place, see the
+    # "_backfill_split_hash_into_manifest" call near the FINAL TEST /
+    # FINAL VALIDATION holdout-loading block below. Written as None
+    # here (not omitted) so a manifest read before that backfill point
+    # (e.g. a crashed run) is honest about what it doesn't have yet,
+    # rather than missing the key entirely.
+    _git_provenance = _get_git_sha()
     with open(meta_path, "w") as f:
         json.dump({
+            "git_sha": _git_provenance["git_sha"],
+            "git_dirty": _git_provenance["git_dirty"],
+            "git_error": _git_provenance["git_error"],
+            "split_hash": None,  # backfilled after holdouts load -- see below
             "ablation_mode": ABLATION_MODE,
             # Issue 5 Task 4: single canonical aggregator slug -- see
             # _resolve_aggregator_canonical()'s docstring above for why
@@ -2361,6 +2440,34 @@ def main():
     X_val_holdout, y_val_holdout = get_global_validation_holdout(
         MODEL_TYPE, seed=_args.seed
     )
+
+    # ------------------------------------------------------------------
+    # Issue 5 Task 6: backfill split_hash into the manifest now that both
+    # holdouts are actually loaded. Fixed argument order (test X, test y,
+    # val X, val y) -- REQUIRED for two runs' split_hash values to be
+    # comparable at all; changing this order changes the hash even for
+    # byte-identical splits, so it must never vary between runs.
+    # Deliberately hashes the HOLDOUT arrays' actual content, not just a
+    # seed or config value -- this is what makes split_hash catch a
+    # silent data_loader.py change (e.g. a leakage fix, a re-shuffle, a
+    # different holdout size) that a seed alone would not.
+    # ------------------------------------------------------------------
+    _split_hash = _hash_arrays(X_test_holdout, y_test_holdout,
+                                X_val_holdout, y_val_holdout)
+    try:
+        with open(meta_path) as f:
+            _meta = json.load(f)
+        _meta["split_hash"] = _split_hash
+        with open(meta_path, "w") as f:
+            json.dump(_meta, f, indent=2, default=str)
+        print(f"  [Task 6] split_hash backfilled into {meta_path}: "
+              f"{_split_hash[:16]}...")
+    except Exception as e:
+        print(f"  [Task 6] WARNING: could not backfill split_hash into "
+              f"{meta_path} ({type(e).__name__}: {e}) -- manifest's "
+              f"split_hash field will remain None. This run's TEST/"
+              f"VALIDATION results are still valid; only the Task 6 "
+              f"traceability record is incomplete for this run.")
 
     final_val_loss, final_val_acc, final_val_f1_per_class, \
         final_val_recall_per_class, final_val_aucpr_per_class = test(

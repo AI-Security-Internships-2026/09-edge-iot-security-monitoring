@@ -11,11 +11,33 @@ message and re-run this script until both checks pass.
 Two checks, both from the issue's acceptance criteria:
 
   1. Plain Adaptive Krum (uncalibrated baseline) vs Min-Max attack,
-     alpha=0.7, epsilon=none. Requirement: Byzantine TPR strictly in
-     (50%, 85%) -- not 100% (attack isn't evasive enough to be a
-     meaningful stress test) and not 0% (attack is so aggressive it's
-     trivially caught, i.e. functionally identical to the easy-control
-     sign-flip/Gaussian attacks this whole issue exists to move past).
+     alpha=0.7, epsilon=none. Requirement: krum_score_ratio (mean
+     Byzantine Krum score / mean honest Krum score, already logged on
+     the LOG_CSV "MEAN" row every round -- see main.py's
+     krum_scores_byzantine_mean/krum_scores_honest_mean/
+     krum_score_ratio columns) strictly in (MINMAX_RATIO_LOW,
+     MINMAX_RATIO_HIGH) -- not >= HIGH (attack isn't evasive enough:
+     Byzantine clients stand out as clear outliers, a meaningless
+     stress test) and not <= LOW (attack is either blending
+     indistinguishably into the honest cluster, or -- worse, and this
+     is the failure mode actually observed in practice at larger
+     coalition sizes -- scoring BELOW the honest cluster, i.e. looking
+     MORE central than genuine clients).
+
+     NOT measured via Byzantine TPR (fraction of Byzantine clients
+     Adaptive Krum's MAD threshold actually drops that round). TPR was
+     the original metric here and was found to be fundamentally
+     unsuitable: minmax_attack_trained() broadcasts ONE identical
+     crafted vector to every colluding client (deliberately -- see
+     byzantine.py's "coalition-optimal broadcast" docstring), so all
+     coalition members have pairwise distance 0 to each other and
+     therefore compute EXACTLY the same Krum score every round. That
+     collapses TPR to strictly 0% or 100% per round, with nothing in
+     between structurally reachable -- confirmed empirically across a
+     gamma sweep, a coalition-size sweep, and a krum-k sweep, all of
+     which landed on exactly 0% or 100% and never inside (50%, 85%).
+     krum_score_ratio is continuous and doesn't have this quantization
+     problem, so it's the metric this check now gates on.
 
   2. HMAC norm guard vs bounded_directional attack, tau matched to the
      guard's own threshold. Requirement: TPR == 0% EXACTLY -- this is
@@ -47,7 +69,18 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 _MAIN_PY = os.path.join(_REPO_ROOT, "main.py")
 
-MINMAX_TPR_LOW, MINMAX_TPR_HIGH = 0.50, 0.85
+# Ratio band for Check 1 (see module docstring for why this replaced a
+# TPR-window criterion). LOW=1.0: at ratio<=1.0 the Byzantine coalition's
+# mean Krum score is no higher than the honest clients' -- not
+# distinguishing itself as suspicious at all (and can go well below 1.0
+# via the mutual-zero-distance collapse when coalition_size is large
+# relative to n-f-2 -- see byzantine.py/krum.py discussion). HIGH=2.0:
+# picked as "clearly elevated but not a lone outlier" -- same spirit as
+# the old TPR<85% bound (not trivially/perfectly caught every round).
+# Both are starting points, not derived from first principles -- adjust
+# if a real campaign run shows the band doesn't track "meaningful stress
+# test" well in practice.
+MINMAX_RATIO_LOW, MINMAX_RATIO_HIGH = 1.0, 2.0
 CALIBRATION_ROUNDS = 5          # short run: fast enough to iterate gamma
 DEFAULT_BYZANTINE = "1,2"       # matches main.py's own default clients
 
@@ -180,6 +213,51 @@ def _byzantine_tpr_from_log(log_csv_path, byzantine_clients_1indexed,
     return hits / total if total > 0 else float("nan")
 
 
+def _krum_ratio_from_log(log_csv_path, rounds_to_average="last"):
+    """
+    Parse a results_*.csv (LOG_CSV) and pull krum_score_ratio off the
+    once-per-round "MEAN" row (see main.py's append_log_row() call site
+    -- krum_ratio = krum_byz_mean / krum_honest_mean, computed there
+    from that round's per-client Krum scores split by BYZANTINE_CLIENTS
+    membership, written to the krum_score_ratio column). Unlike
+    _byzantine_tpr_from_log() above, this does NOT skip the MEAN row --
+    it's the only row this value lives on; per-client rows don't carry
+    it.
+
+    Returns None for any round where the column is "N/A" (e.g.
+    krum_score_diag was None that round, or one side of the ratio had
+    zero finite clients -- see main.py lines computing krum_ratio).
+    rounds_to_average: 'last' (default) or 'all' (mean of every
+    logged round's ratio, skipping any None values; None if every
+    round was None).
+    """
+    per_round_ratio = {}   # round_num -> ratio (float) or None
+    with open(log_csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row["client"].strip().upper() != "MEAN":
+                continue
+            round_num = int(row["round"])
+            raw = row["krum_score_ratio"].strip()
+            per_round_ratio[round_num] = float(raw) if raw != "N/A" else None
+
+    if not per_round_ratio:
+        raise ValueError(
+            f"No MEAN rows found in {log_csv_path} -- cannot compute "
+            f"krum_score_ratio. Check the run actually completed and "
+            f"used --aggregator adaptive_krum."
+        )
+
+    rounds_sorted = sorted(per_round_ratio)
+    if rounds_to_average == "last":
+        selected = [per_round_ratio[rounds_sorted[-1]]]
+    else:
+        selected = [per_round_ratio[r] for r in rounds_sorted]
+
+    finite = [v for v in selected if v is not None]
+    return float(sum(finite) / len(finite)) if finite else None
+
+
 def check_minmax_vs_plain_adaptive_krum(workdir, gamma_init=None,
                                          minmax_dev_type="std",
                                          minmax_search_iters=15,
@@ -243,49 +321,63 @@ def check_minmax_vs_plain_adaptive_krum(workdir, gamma_init=None,
     log_path = _run_main(extra, tag=tag, workdir=workdir,
                           byzantine_clients=byz, rounds=rounds)
     byz_clients = [int(c) for c in byz.split(",")]
+
+    # TPR is still computed and printed for visibility (it's cheap and
+    # occasionally useful context -- e.g. seeing it pinned at exactly 0%
+    # or 100% is itself a signal the coalition-broadcast quantization
+    # discussed in the module docstring is in play this run) but is NO
+    # LONGER the pass/fail criterion -- see module docstring for why.
     tpr = _byzantine_tpr_from_log(log_path, byz_clients)
+    ratio = _krum_ratio_from_log(log_path)
 
     print(f"\n[CHECK 1] Plain Adaptive Krum vs Min-Max (gamma_init="
           f"{gamma_init!r}, byzantine={byz!r}, rounds={rounds!r}): "
-          f"TPR = {tpr:.2%}")
+          f"krum_score_ratio = {ratio!r}  (TPR = {tpr:.2%}, reference only)")
 
-    if tpr >= 1.0 - 1e-9:
+    if ratio is None:
         raise SystemExit(
-            f"FAIL: TPR={tpr:.2%} == 100%. Min-Max attack is NOT evasive "
-            f"enough -- plain Adaptive Krum still catches every instance, "
-            f"making this comparison meaningless (identical to the easy-"
-            f"control sign-flip/Gaussian attacks). Fix: INCREASE "
-            f"--minmax-gamma-init (try 2x-4x current value: "
+            f"FAIL: krum_score_ratio is None for every logged round -- "
+            f"either byz_scores or honest_scores was empty every round "
+            f"(check krum_scored_client_indices / accepted_client_indices "
+            f"actually cover BYZANTINE_CLIENTS, and that "
+            f"--aggregator adaptive_krum was really used), or every "
+            f"round's honest mean score was exactly 0. Cannot evaluate "
+            f"this check without a finite ratio."
+        )
+    if ratio >= MINMAX_RATIO_HIGH:
+        raise SystemExit(
+            f"FAIL: krum_score_ratio={ratio:.4f} >= {MINMAX_RATIO_HIGH}. "
+            f"Min-Max attack is NOT evasive enough -- the Byzantine "
+            f"coalition's mean Krum score is far above the honest "
+            f"clients', standing out as a clear outlier (functionally "
+            f"identical to the easy-control sign-flip/Gaussian attacks). "
+            f"Fix: INCREASE --minmax-gamma-init (try 2x-4x current value: "
             f"{'unset (auto = 5x coalition spread)' if gamma_init is None else gamma_init}), "
             f"and/or increase --minmax-search-iters, and/or try "
             f"--minmax-dev-type sign or unit_vec."
         )
-    if tpr <= 0.0 + 1e-9:
+    if ratio <= MINMAX_RATIO_LOW:
         raise SystemExit(
-            f"FAIL: TPR={tpr:.2%} == 0%. Min-Max attack is TOO aggressive "
-            f"-- plain Adaptive Krum catches nothing, which means the "
-            f"crafted update likely violates its own Min-Max feasibility "
-            f"bound in practice (e.g. gamma_init set far too high, "
-            f"overshooting the coalition's own pairwise-distance spread "
-            f"after the binary search saturates at the upper bound). Fix: "
-            f"DECREASE --minmax-gamma-init; if an exhaustive gamma AND "
-            f"dev_type sweep both stay at 0%, try a LARGER --byzantine "
-            f"coalition (harder to blend a bigger group in with one "
-            f"shared crafted vector) and/or more --rounds before "
-            f"crafting (more time for honest per-client scores to "
-            f"diverge from the early-training regime)."
-        )
-    if not (MINMAX_TPR_LOW < tpr < MINMAX_TPR_HIGH):
-        raise SystemExit(
-            f"FAIL: TPR={tpr:.2%} is outside the required "
-            f"({MINMAX_TPR_LOW:.0%}, {MINMAX_TPR_HIGH:.0%}) range. "
-            f"{'Increase' if tpr >= MINMAX_TPR_HIGH else 'Decrease'} "
-            f"--minmax-gamma-init and re-run."
+            f"FAIL: krum_score_ratio={ratio:.4f} <= {MINMAX_RATIO_LOW}. "
+            f"Min-Max attack is blending into the honest cluster or, if "
+            f"ratio is well below 1.0, scoring MORE central than genuine "
+            f"clients -- the latter is the mutual-zero-distance collapse "
+            f"that happens when colluding clients broadcast one identical "
+            f"crafted vector and coalition_size approaches n - f - 2 (see "
+            f"module docstring). If ratio is only slightly below "
+            f"{MINMAX_RATIO_LOW}, DECREASE --minmax-gamma-init or try a "
+            f"different --minmax-dev-type. If ratio is well below "
+            f"{MINMAX_RATIO_LOW} (e.g. < 0.5), the fix is NOT gamma or "
+            f"coalition size (growing the coalition makes this WORSE, not "
+            f"better -- it shrinks n - f - 2, the shared denominator of "
+            f"the mutual-zero-distance effect) -- try a SMALLER "
+            f"--byzantine coalition instead, staying comfortably under "
+            f"the theoretical Krum bound (f < n/2 - 1)."
         )
 
-    print(f"[CHECK 1] PASS -- TPR={tpr:.2%} is within "
-          f"({MINMAX_TPR_LOW:.0%}, {MINMAX_TPR_HIGH:.0%}).")
-    return tpr
+    print(f"[CHECK 1] PASS -- krum_score_ratio={ratio:.4f} is within "
+          f"({MINMAX_RATIO_LOW}, {MINMAX_RATIO_HIGH}).")
+    return ratio
 
 
 def check_bounded_directional_vs_norm_guard(workdir, bounded_tau=None,

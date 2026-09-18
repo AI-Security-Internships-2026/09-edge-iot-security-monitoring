@@ -203,6 +203,27 @@ class RunRecord:
         vals = list(self.dp_final_epsilon.values())
         return float(np.mean(vals)) if vals else None
 
+    # Issue 5 Task 6 -- provenance fields. None for any manifest written
+    # before the git_sha/split_hash backfill patch (main.py), which is
+    # exactly the signal build_provenance_audit() below uses to flag a
+    # run as "legacy / unverifiable" rather than silently treating a
+    # missing field as passing traceability.
+    @property
+    def git_sha(self):
+        return self.manifest.get("git_sha")
+
+    @property
+    def git_dirty(self):
+        return self.manifest.get("git_dirty")
+
+    @property
+    def split_hash(self):
+        return self.manifest.get("split_hash")
+
+    @property
+    def dataset(self):
+        return self.manifest.get("dataset")
+
 
 def load_manifest(run_dir):
     # experiment_config_*.json is disambiguated from dp_final_epsilon_*
@@ -480,6 +501,12 @@ def build_master_dataframe(runs):
             "byzantine_tpr": tpr,
             "honest_fpr": fpr,
             "run_dir": r.run_dir,
+            # Issue 5 Task 6 -- carried through so build_provenance_audit()
+            # doesn't need to re-open every manifest a second time.
+            "dataset": r.dataset,
+            "git_sha": r.git_sha,
+            "git_dirty": r.git_dirty,
+            "split_hash": r.split_hash,
         }
         # E8-only runtime columns, if this run has them (see
         # load_runtime()'s fix docstring) -- absent (not NaN-filled)
@@ -507,6 +534,140 @@ def build_master_dataframe(runs):
             na_position="last",
         ).reset_index(drop=True)
     return df
+
+
+def build_provenance_audit(df, supplementary_dir):
+    """
+    Issue 5 Task 6 -- writes provenance_audit.csv, the literal
+    traceability record the issue asks for: "Every final result must be
+    traceable to: dataset + model + git SHA + seed + split hash + alpha
+    + epsilon + aggregator + attack + f + relevant hyperparameters."
+
+    This does NOT decide REUSE/NEW_RUN/RERUN itself (that's
+    experiments/configs/EXP1_campaign.json, a human/process-level
+    decision) -- it mechanically checks the two things a spreadsheet
+    can actually verify:
+
+      1. COMPLETENESS: does this run's manifest have a non-null
+         git_sha and split_hash at all? Any run whose manifest predates
+         the Task 6 backfill patch (main.py) will have both fields as
+         None -- flagged as PROVENANCE_INCOMPLETE, never silently
+         treated as passing.
+
+      2. CONSISTENCY: within one logical condition (same experiment +
+         dataset + aggregator + alpha + attack_type + target_epsilon --
+         i.e. everything that's SUPPOSED to be identical across the
+         5-seed repeats of one cell), do all seeds share the same
+         split_hash? A mismatch means two "repeats" of the same
+         condition were actually evaluated against different TEST/
+         VALIDATION holdouts -- a real correctness bug (stale data_loader
+         .py version, accidental cross-condition file reuse, etc.), not
+         a cosmetic one, and paired seed-level statistics
+         (paired_ttest_cohend et al.) are not meaningful across such a
+         mismatch. git_sha is reported per-group too but NOT flagged as
+         an error on its own -- a legitimate mid-campaign hotfix
+         (re-running only the affected seeds) will show >1 git_sha in a
+         group; that's a "look at this", not necessarily a "this is
+         wrong".
+
+    Returns the path written, or None if df is empty.
+    """
+    if df.empty:
+        print("  No runs to audit -- skipping provenance_audit.csv.")
+        return None
+
+    os.makedirs(supplementary_dir, exist_ok=True)
+    path = os.path.join(supplementary_dir, "provenance_audit.csv")
+
+    group_cols = ["experiment", "dataset", "aggregator", "alpha",
+                  "attack_type", "target_epsilon"]
+    rows_out = []
+
+    for _, row in df.sort_values(
+            group_cols + ["seed"], na_position="last").iterrows():
+        # BUG FIX (caught by smoke test): `row.get(...) is None` silently
+        # never fires once this column has passed through a pandas
+        # DataFrame that also holds float NaNs elsewhere -- pandas
+        # commonly stores a missing object-column value as float `nan`,
+        # not Python `None`, and `float('nan') is None` is False. Use
+        # pd.isna(), which is correct for both None and NaN.
+        incomplete = pd.isna(row.get("git_sha")) or pd.isna(row.get("split_hash"))
+        rows_out.append({
+            "experiment": row.get("experiment"),
+            "dataset": row.get("dataset"),
+            "aggregator": row.get("aggregator"),
+            "alpha": row.get("alpha"),
+            "attack_type": row.get("attack_type"),
+            "target_epsilon": row.get("target_epsilon"),
+            "seed": row.get("seed"),
+            "condition_tag": row.get("condition_tag"),
+            "git_sha": row.get("git_sha"),
+            "git_dirty": row.get("git_dirty"),
+            "split_hash": row.get("split_hash"),
+            "status": "PROVENANCE_INCOMPLETE" if incomplete else "OK",
+            "run_dir": row.get("run_dir"),
+        })
+
+    out_df = pd.DataFrame(rows_out)
+
+    # CONSISTENCY check -- only meaningful for groups with a complete
+    # split_hash on every member; a group that's already flagged
+    # PROVENANCE_INCOMPLETE for some seeds gets a SPLIT_HASH_UNKNOWN
+    # note instead of a false "consistent" or false "mismatch" verdict.
+    #
+    # BUG FIX #1 (caught by smoke test): the original matched each row
+    # back to its group's note via a Python dict keyed by
+    # `tuple(row[group_cols])`, looked up again per-row with
+    # `.apply(...)`. group_cols legitimately contains NaN for many
+    # conditions (e.g. non-DP runs have no target_epsilon), and
+    # float('nan') != float('nan'), so every row whose group key held a
+    # NaN silently failed the lookup and got "" (confirmed: EVERY row
+    # came back empty, including the deliberately-mismatched one).
+    # BUG FIX #2: replacing that with a pd.merge on group_cols then
+    # broke differently -- reconstructing group keys as plain Python
+    # dicts round-trips None through a fresh DataFrame as an object
+    # dtype, which no longer matches out_df's original float64 NaN
+    # column dtype (target_epsilon), and pandas refuses to merge on
+    # mismatched key dtypes rather than silently mis-joining.
+    # FIX: use groupby(..., dropna=False).ngroup() instead -- pandas'
+    # OWN grouping machinery already correctly buckets NaN-containing
+    # keys together (that's what dropna=False is for); ngroup() then
+    # hands back a stable integer group id per ROW with no key
+    # reconstruction or re-matching involved at all, so there is no
+    # NaN-equality or dtype step left to get wrong.
+    out_df["_group_id"] = out_df.groupby(group_cols, dropna=False).ngroup()
+
+    group_notes = {}
+    for gid, sub in out_df.groupby("_group_id"):
+        hashes = sub["split_hash"].dropna().unique().tolist()
+        shas = sub["git_sha"].dropna().unique().tolist()
+        if sub["split_hash"].isna().any():
+            note = "SPLIT_HASH_UNKNOWN (one or more seeds pre-date provenance backfill)"
+        elif len(hashes) > 1:
+            note = f"SPLIT_HASH_MISMATCH across seeds ({len(hashes)} distinct hashes) -- INVESTIGATE"
+        else:
+            note = "split_hash consistent across all seeds"
+        if len(shas) > 1:
+            note += f" | git_sha VARIES across seeds ({len(shas)} distinct SHAs -- likely a mid-campaign hotfix; confirm intentional)"
+        group_notes[gid] = note
+
+    out_df["group_consistency_note"] = out_df["_group_id"].map(group_notes)
+    out_df = out_df.drop(columns=["_group_id"])
+
+    out_df.to_csv(path, index=False)
+
+    n_incomplete = (out_df["status"] == "PROVENANCE_INCOMPLETE").sum()
+    n_mismatch = out_df["group_consistency_note"].str.contains(
+        "MISMATCH", na=False).sum()
+    print(f"  Wrote {path} ({len(out_df)} rows).")
+    print(f"    PROVENANCE_INCOMPLETE rows: {n_incomplete} "
+          f"(pre-dates git_sha/split_hash backfill -- REUSE_PENDING_PROVENANCE, "
+          f"not REUSE, in the campaign audit)")
+    if n_mismatch:
+        print(f"    *** SPLIT_HASH_MISMATCH rows: {n_mismatch} -- these "
+              f"conditions' seed-paired statistics are NOT trustworthy "
+              f"until investigated. See {path}. ***")
+    return path
 
 
 # ===========================================================================
@@ -1591,6 +1752,9 @@ def run_all(results_root, tables_dir, figures_dir, supplementary_dir,
     class_names = class_names_from_runs(runs)
     print(f"  {len(df)} run(s) in master DataFrame; "
           f"{len(class_names)} class(es) recovered from FINAL_TEST_CSV headers.")
+
+    print(f"\n{'='*70}\n  PROVENANCE AUDIT (Task 6)\n{'='*70}")
+    build_provenance_audit(df, supplementary_dir)
 
     registry = TestRegistry()
 
