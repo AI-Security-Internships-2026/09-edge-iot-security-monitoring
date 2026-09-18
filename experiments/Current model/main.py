@@ -218,8 +218,8 @@ _parser.add_argument("--attack-type", type=str, default="sign_flip",
                       choices=["sign_flip", "gaussian", "zero_gradient",
                                "minmax", "minsum", "bounded_directional"],
                       help="Which Byzantine attack the malicious clients use. "
-                           "Issue 5 Task 1 adds minmax/minsum (Fang et al. "
-                           "USENIX'20 stealthy, distance-aware, AGR-agnostic "
+                           "Issue 5 Task 1 adds minmax/minsum (Shejwalkar & "
+                           "Houmansadr NDSS'21 stealthy, distance-aware, AGR-agnostic "
                            "poisoners -- coalition-broadcast, see "
                            "defences/byzantine.py) and bounded_directional "
                            "(targeted direction, magnitude capped just under "
@@ -410,6 +410,19 @@ _parser.add_argument("--hetero-fit-coeffs-json", type=str, default=None,
                            "correct, honest default until a real fit "
                            "exists; never fabricate a placeholder value "
                            "here to make this flag 'do something.'")
+_parser.add_argument("--log-honest-head-norms", action="store_true",
+                      help="E6 fix: write honest_head_norms_<tag>.csv "
+                           "(per-round classifier-head DELTA L2 norm of every "
+                           "honest client) in ANY ablation mode, and feed "
+                           "them to the online bounded_directional tau "
+                           "estimate. Automatically on for --attack-type "
+                           "bounded_directional. Used by scripts/"
+                           "freeze_bounded_tau.py to derive a FROZEN --bounded-tau "
+                           "from a validation-only pilot; the honest-norm list was "
+                           "previously only populated inside the norm-guard/HE "
+                           "branches, so bounded_directional under "
+                           "calibrated_krum_dp_sweep never fired (tau stayed "
+                           "None every round).")
 _args = _parser.parse_args()
 
 MODEL_TYPE = _args.model_type
@@ -418,10 +431,16 @@ if _args.hetero_fit_coeffs_json is not None:
     import json as _json_hetero
     with open(_args.hetero_fit_coeffs_json) as _f_hetero:
         HETERO_FIT_COEFFS = _json_hetero.load(_f_hetero)
+    # E6 guard: a schema-1 file would trip hetero_variance()'s assert
+    # only mid-run (round 1 of a 25-round DP run). Fail at startup.
+    assert HETERO_FIT_COEFFS.get("schema_version") == 2, (
+        f"--hetero-fit-coeffs-json {_args.hetero_fit_coeffs_json!r} has "
+        f"schema_version={HETERO_FIT_COEFFS.get('schema_version')!r}; "
+        f"expected 2. Re-fit with scripts/fit_hetero_variance.py.")
     print(f"  [Issue 4] Loaded real hetero_fit_coeffs from "
           f"{_args.hetero_fit_coeffs_json}: r_squared="
           f"{HETERO_FIT_COEFFS.get('r_squared', 'N/A')}, "
-          f"n_rows_fit={HETERO_FIT_COEFFS.get('n_rows_fit', 'N/A')}")
+          f"n_pairs_fit={HETERO_FIT_COEFFS.get('n_pairs_fit', 'N/A')}")
 else:
     HETERO_FIT_COEFFS = None
 
@@ -432,6 +451,14 @@ else:
 # use_hetero_calibration=True) call -- purely additive.
 USE_DP_CALIBRATION = not _args.no_dp_calibration
 USE_HETERO_CALIBRATION = not _args.no_hetero_calibration
+if (_args.aggregator == "calibrated_krum"
+        or _args.ablation_mode == "calibrated_krum_dp_sweep") \
+        and USE_HETERO_CALIBRATION and HETERO_FIT_COEFFS is None:
+    print("  *** WARNING [E6]: heterogeneity calibration is ENABLED but no "
+          "--hetero-fit-coeffs-json was given -- the hetero term is a "
+          "silent no-op. 'Full' will equal 'DP-only' and 'Hetero-only' "
+          "will equal 'Off'. Pass a fit file, or --no-hetero-calibration "
+          "if that is intended. ***")
 
 import random
 random.seed(_args.seed)
@@ -781,6 +808,7 @@ FINAL_VALIDATION_CSV     = f"results_{_TAG}_FINAL_VALIDATION.csv"
 # epsilon, written exactly once after the last round.
 DP_FINAL_EPSILON_JSON = f"dp_final_epsilon_{_TAG}.json"
 DP_FINAL_EPSILON_CSV  = f"dp_final_epsilon_{_TAG}.csv"
+HONEST_HEAD_NORMS_CSV = f"honest_head_norms_{_TAG}.csv"
 
 # ---------------------------------------------------------------------------
 # Imports
@@ -854,7 +882,8 @@ if USE_ADAPTIVE_KRUM or USE_HE_KRUM_HYBRID:
     from defences.krum import adaptive_multi_krum
 
 if USE_CALIBRATED_KRUM:
-    from defences.krum import calibrated_adaptive_multi_krum
+    from defences.krum import (calibrated_adaptive_multi_krum,
+                                public_noise_multiplier_map)
 
 # BAS1 (Issue 3) Task 1 -- only imported when the dispatch table
 # actually selects one of these (AGGREGATOR is None on every
@@ -1627,6 +1656,10 @@ def main():
             "prox_mu_cli_override": _args.prox_mu,
             "hetero_fit_coeffs_json_path": _args.hetero_fit_coeffs_json,
             "hetero_fit_coeffs_active": HETERO_FIT_COEFFS is not None,
+            "hetero_fit_coeffs_r_squared": (HETERO_FIT_COEFFS or {}).get("r_squared"),
+            "hetero_fit_coeffs_n_pairs_fit": (HETERO_FIT_COEFFS or {}).get("n_pairs_fit"),
+            "calibrated_byz_sigma_policy": ("public_median_honest_sigma"
+                                             if USE_CALIBRATED_KRUM else None),
             "device": str(_DEVICE),
             "cuda_available": _CUDA_AVAILABLE,
             "client_pool_workers": CLIENT_POOL_WORKERS,
@@ -1660,6 +1693,34 @@ def main():
     # USE_NORM_GUARD/USE_HEAD_NORM_GUARD actually populates it -- see
     # client_cfg["bounded_tau"] update at the top of the round loop.
     _prior_round_honest_head_norms = None
+
+    # E6 fix: honest head-delta norms recorded in EVERY mode (not only
+    # norm-guard/HE) so bounded_directional can fire and tau can be
+    # frozen from a pilot. Head = 'classifier'-prefixed state_dict
+    # entries, same convention as he_local.SENSITIVE_PREFIX / the guard.
+    _LOG_HONEST_HEAD_NORMS = bool(
+        _args.log_honest_head_norms
+        or (USE_BYZANTINE_ATTACK and ATTACK_TYPE == "bounded_directional")
+    )
+    _honest_head_norm_rows = []
+    # attack_diag_<tag>.jsonl is opened in append mode below; a fresh run
+    # must not inherit rounds from a previous run that used the same tag.
+    if start_round == 0 and os.path.exists(f"attack_diag_{_TAG}.jsonl"):
+        os.remove(f"attack_diag_{_TAG}.jsonl")
+    _HEAD_IDX = []
+    if _LOG_HONEST_HEAD_NORMS:
+        _norm_keys = list(get_model(num_features=sample_features,
+                                     num_classes=NUM_CLASSES,
+                                     dp_safe=DP_SAFE).state_dict().keys())
+        _HEAD_IDX = [j for j, k in enumerate(_norm_keys)
+                     if k.startswith("classifier")]
+        assert _HEAD_IDX, "no 'classifier'-prefixed state_dict keys found"
+    if (USE_BYZANTINE_ATTACK and ATTACK_TYPE == "bounded_directional"
+            and BOUNDED_TAU_OVERRIDE is None):
+        print("  *** WARNING [E6]: bounded_directional without --bounded-tau: "
+              "tau is estimated online (not frozen) and the attack is "
+              "SKIPPED in round 1. Final-campaign runs must pass a frozen "
+              "--bounded-tau (see scripts/freeze_bounded_tau.py). ***")
 
     pool_cm = (
         contextlib.nullcontext()
@@ -1750,8 +1811,8 @@ def main():
             # branch or the plain _run_training_wave() branch above --
             # both populate the same trained_params_by_client dict).
             # Every Byzantine client is overwritten with the SAME
-            # crafted vector (coalition-optimal broadcast, per Fang et
-            # al. -- see defences/byzantine.py's module docstring).
+            # crafted vector (coalition-optimal broadcast, per Shejwalkar &
+            # Houmansadr -- see defences/byzantine.py's module docstring).
             # ----------------------------------------------------------
             if USE_BYZANTINE_ATTACK and ATTACK_TYPE in ("minmax", "minsum"):
                 _coalition_honest_params = [
@@ -1767,6 +1828,7 @@ def main():
                         gamma_init=MINMAX_GAMMA_INIT,
                         search_iters=MINMAX_SEARCH_ITERS,
                         return_diagnostics=True,
+                        global_params=global_params,
                     )
                     for i in BYZANTINE_CLIENTS:
                         if i in trained_params_by_client:
@@ -1774,7 +1836,64 @@ def main():
                     print(f"  [{ATTACK_TYPE.upper()} attack] "
                           f"gamma={_minmax_diag['gamma']:.4f}  "
                           f"dev_type={_minmax_diag['dev_type_used']}  "
-                          f"coalition_size={_minmax_diag['coalition_size']}")
+                          f"coalition_size={_minmax_diag['coalition_size']}  "
+                          f"constraint_ratio={_minmax_diag['constraint_ratio']:.6f} "
+                          f"(must be <= 1: "
+                          f"{'OK' if _minmax_diag['constraint_satisfied'] else 'VIOLATED'})  "
+                          f"crafted_update_L2="
+                          f"{_minmax_diag.get('crafted_update_l2_norm', float('nan')):.4e}")
+                    # Issue 5 Task 2: log update-norm and distance
+                    # statistics of the crafted update, one JSON line per
+                    # round, next to the run's other outputs.
+                    import json as _json
+                    # Hardened: numpy scalars/bools (e.g. constraint_satisfied)
+                    # are not JSON-serializable by default and would crash
+                    # the run mid-training.
+                    def _json_default(o):
+                        if hasattr(o, "tolist"):
+                            return o.tolist()
+                        return str(o)
+                    with open(f"attack_diag_{_TAG}.jsonl", "a") as _fh:
+                        _fh.write(_json.dumps({"round": round_num,
+                                                **_minmax_diag},
+                                               default=_json_default) + "\n")
+
+            if _LOG_HONEST_HEAD_NORMS:
+                def _head_delta_norm(_p):
+                    return float(np.linalg.norm(np.concatenate(
+                        [(_p[j] - global_params[j]).flatten()
+                         for j in _HEAD_IDX]).astype(np.float64)))
+                _hn = []
+                for _ci in range(NUM_CLIENTS):
+                    if USE_BYZANTINE_ATTACK and _ci in BYZANTINE_CLIENTS:
+                        continue
+                    _n = _head_delta_norm(trained_params_by_client[_ci])
+                    _hn.append(_n)
+                    _honest_head_norm_rows.append([round_num, _ci + 1, _n])
+                # Overwritten later in the round by the guard branches
+                # when they run (verified norms); stands alone otherwise.
+                _prior_round_honest_head_norms = _hn
+
+            # E6 fix: verify bounded_directional ACTUALLY fired and hit
+            # its norm budget -- previously a silent tau=None skipped it.
+            if (USE_BYZANTINE_ATTACK and ATTACK_TYPE == "bounded_directional"
+                    and client_cfg["bounded_tau"] is not None):
+                _target = max(client_cfg["bounded_tau"] - BOUNDED_MARGIN, 0.0)
+                for _bi in BYZANTINE_CLIENTS:
+                    _bp = trained_params_by_client[_bi]
+                    if BOUNDED_DIRECTION == "classifier_head_negate":
+                        _idx = _HEAD_IDX
+                    else:
+                        _idx = list(range(len(_bp)))
+                    _got = float(np.linalg.norm(np.concatenate(
+                        [(_bp[j] - global_params[j]).flatten()
+                         for j in _idx]).astype(np.float64)))
+                    print(f"  [Bounded-verify] client {_bi+1}: delta-norm="
+                          f"{_got:.5f}  target(tau-margin)={_target:.5f}")
+                    assert abs(_got - _target) <= 1e-3 * max(_target, 1.0) + 1e-4, (
+                        f"BUG: bounded_directional client {_bi+1} delta-norm "
+                        f"{_got} != target {_target}; attack not applied "
+                        f"as specified.")
 
             for i, (X_tr, y_tr, X_te, y_te) in enumerate(clients_data):
                 params = trained_params_by_client[i]
@@ -2078,11 +2197,24 @@ def main():
                     # is always None under 'baseline'/'krum_baseline')
                     # -- dp_variance() treats None as "no DP noise for
                     # this client", not missing data.
+                    # E6 leak fix: Byzantine clients have no DP state, so
+                    # dp_noise_multiplier_by_client.get(orig_id) was None
+                    # for exactly the attackers -- ground truth leaking
+                    # into the aggregator's metadata. Every client is now
+                    # assigned its publicly-declared sigma (median honest
+                    # sigma for clients without a DP state). See
+                    # defences/krum.py:public_noise_multiplier_map().
+                    _public_sigma_map = (
+                        public_noise_multiplier_map(
+                            accepted_client_indices,
+                            dp_noise_multiplier_by_client)
+                        if USE_DP else {}
+                    )
                     _calibrated_metadata = {
                         pos: {
                             "n_samples": accepted_weights[pos],
                             "class_entropy": CLIENT_CLASS_ENTROPY[orig_id],
-                            "noise_multiplier": dp_noise_multiplier_by_client.get(orig_id)
+                            "noise_multiplier": _public_sigma_map.get(orig_id)
                                                  if USE_DP else None,
                             "epsilon": DP_EPSILON if USE_DP else None,
                         }
@@ -2503,6 +2635,14 @@ def main():
     # exactly once, here, after the round loop (same "write once, after
     # training" convention as FINAL_TEST_CSV/DP_FINAL_EPSILON_* above).
     # -----------------------------------------------------------------
+    if _LOG_HONEST_HEAD_NORMS:
+        with open(HONEST_HEAD_NORMS_CSV, "w", newline="") as _f:
+            _w = csv.writer(_f)
+            _w.writerow(["round_id", "client_id", "head_delta_l2"])
+            _w.writerows(_honest_head_norm_rows)
+        print(f"  [E6] Honest head-delta norms written to: "
+              f"{HONEST_HEAD_NORMS_CSV} ({len(_honest_head_norm_rows)} rows)")
+
     with open(PER_CLIENT_KRUM_LOG_CSV, "w", newline="") as _f:
         _writer = csv.writer(_f)
         _writer.writerow(PER_CLIENT_KRUM_LOG_HEADER)

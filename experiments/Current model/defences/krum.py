@@ -1250,3 +1250,41 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
         }
         return result, kept, diag
     return result, kept
+
+
+def public_noise_multiplier_map(client_ids, sigma_by_client):
+    """
+    Server-visible DP noise multiplier for every client in `client_ids`,
+    for use as per_client_metadata[...]["noise_multiplier"] in
+    calibrated_adaptive_multi_krum().
+
+    WHY THIS EXISTS (E6 / Issue 5 leak fix): main.py builds
+    `sigma_by_client` from the persistent DP client states, and
+    Byzantine clients are deliberately EXCLUDED from those states (they
+    run no Opacus engine). Reading `sigma_by_client.get(client_id)`
+    directly therefore returned None for exactly the attackers and a real
+    sigma for exactly the honest clients -- i.e. the aggregator's
+    "metadata" encoded the ground-truth Byzantine labels, shrinking every
+    honest<->Byzantine pair's variance divisor relative to honest<->honest
+    pairs and handing Calibrated Krum an oracle advantage.
+
+    A real server only knows the publicly-declared DP configuration
+    (target epsilon, delta, clip norm), which is identical for every
+    client regardless of whether it is honest. So every client that has
+    no entry in `sigma_by_client` is assigned the MEDIAN of the sigmas
+    that do exist -- the attacker is assumed to DECLARE the standard DP
+    configuration. Whether it actually adds that noise is precisely the
+    signal calibration should be able to exploit, not something the
+    metadata may reveal.
+
+    Returns {client_id: sigma_or_None}. If `sigma_by_client` is empty
+    (no DP active anywhere) every client maps to None, unchanged from
+    the previous behaviour.
+    """
+    known = [float(s) for s in sigma_by_client.values() if s is not None]
+    fallback = float(np.median(known)) if known else None
+    out = {}
+    for cid in client_ids:
+        s = sigma_by_client.get(cid)
+        out[cid] = float(s) if s is not None else fallback
+    return out
