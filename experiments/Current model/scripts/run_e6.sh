@@ -19,6 +19,11 @@ for S in "${SEEDS[@]}"; do
           --bounded-direction classifier_head_negate --krum-k "$K" --seed "$S")
   HET=(--hetero-fit-coeffs-json "$FIT")
   run() { tag=$1; shift
+    # resume support: skip runs that already finished cleanly
+    if [ -s "results_network_${tag}_seed${S}_FINAL_TEST.csv" ] && \
+       [ -s "dp_final_epsilon_network_${tag}_seed${S}.json" ]; then
+      echo "SKIP (already complete): $tag seed $S"; return
+    fi
     rm -f "checkpoint_network_${tag}_seed${S}"*   # DP runs refuse stale checkpoints
     python3 main.py "${COMMON[@]}" --tag "$tag" "$@"
     grep -q '"use_dp": true' "experiment_config_network_${tag}_seed${S}.json" || { echo "DP not active: $tag"; exit 1; }
