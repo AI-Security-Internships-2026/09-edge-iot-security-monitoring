@@ -22,6 +22,12 @@ Usage:
     python scripts/run_e2_campaign.py                    # run everything
     python scripts/run_e2_campaign.py --only-aggregator calibrated_krum
     python scripts/run_e2_campaign.py --resume-from E2-042
+
+    # 5-way parallel split (e.g. one per tmux window):
+    python scripts/run_e2_campaign.py --num-shards 5 --shard-index 0
+    python scripts/run_e2_campaign.py --num-shards 5 --shard-index 1
+    ... etc through --shard-index 4
+    # or just use scripts/launch_e2_tmux.sh, which wraps this.
 """
 
 import argparse
@@ -127,6 +133,17 @@ def main():
     ap.add_argument("--resume-from", default=None,
                      help="Cell id (e.g. E2-042) to resume from, skipping "
                           "everything before it.")
+    ap.add_argument("--num-shards", type=int, default=None,
+                     help="Split the campaign into N independent shards "
+                          "(e.g. for N parallel tmux windows). Must be "
+                          "used together with --shard-index.")
+    ap.add_argument("--shard-index", type=int, default=None,
+                     help="Which shard (0-indexed, < --num-shards) this "
+                          "invocation runs. Assignment is by "
+                          "crc32(cell_id) % num_shards -- stable "
+                          "regardless of --only-* filters or list order, "
+                          "so re-running the same --shard-index always "
+                          "targets the same cells.")
     ap.add_argument("--skip-prereq-check", action="store_true",
                      help="Skip the hetero_fit_coeffs_a0.7.json existence "
                           "check. Does NOT skip per-cell result "
@@ -137,6 +154,27 @@ def main():
         campaign = json.load(f)
 
     cells = campaign["cells"]
+
+    if (args.num_shards is None) != (args.shard_index is None):
+        print("--num-shards and --shard-index must be given together "
+              "(both or neither).", file=sys.stderr)
+        sys.exit(1)
+    if args.num_shards is not None:
+        if not (0 <= args.shard_index < args.num_shards):
+            print(f"--shard-index must be in [0, {args.num_shards}), "
+                  f"got {args.shard_index}.", file=sys.stderr)
+            sys.exit(1)
+        # Sort by cell_id first so shard assignment is stable regardless
+        # of the campaign JSON's on-disk order (E2-001..E2-090 sorts
+        # lexicographically = numerically here), then take index modulo
+        # num_shards -- gives an EXACT even split (90/5 = 18/18/18/18/18)
+        # since cells are homogeneous cost (~25 rounds each regardless
+        # of aggregator/attack), unlike a hash-based split which can
+        # land anywhere from 15-21 per shard by chance.
+        cells_sorted = sorted(cells, key=lambda c: c["cell_id"])
+        cells = [c for i, c in enumerate(cells_sorted)
+                 if i % args.num_shards == args.shard_index]
+
     if args.only_aggregator:
         cells = [c for c in cells if c["aggregator"] == args.only_aggregator]
     if args.only_attack:
