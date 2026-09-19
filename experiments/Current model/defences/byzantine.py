@@ -85,7 +85,7 @@ def _direction_and_coalition_matrix(byzantine_trained_params_list, dev_type):
 
 def minmax_attack_trained(byzantine_trained_params_list, dev_type="std",
                            gamma_init=None, search_iters=15,
-                           return_diagnostics=False):
+                           return_diagnostics=False, global_params=None):
     """
     Min-Max optimized distance-aware poisoner (Fang et al., USENIX
     Security 2020). See this module's header comment for the full
@@ -127,6 +127,18 @@ def minmax_attack_trained(byzantine_trained_params_list, dev_type="std",
     return_diagnostics : bool
         If True, also return a dict with the resolved gamma and the
         bound it was searched against.
+    global_params : list[np.ndarray] or None
+        Current global model, for diagnostics ONLY (Issue 5 Task 2:
+        "log update norm and distance statistics"). Does NOT affect the
+        crafted vector itself -- the craft is still w_avg + gamma *
+        direction, anchored to the coalition's own honestly-trained
+        params exactly as before. If provided, the returned diagnostics
+        include crafted_update_l2_norm = ||crafted - global_params||,
+        i.e. how far the poisoned broadcast update is from what the
+        server currently holds, for logging/plausibility-checking
+        across rounds and conditions. If None, that key is omitted
+        (not zero -- omitted, so callers can't mistake "not measured"
+        for "measured as zero").
 
     Returns
     -------
@@ -180,6 +192,18 @@ def minmax_attack_trained(byzantine_trained_params_list, dev_type="std",
     crafted_params = _unflatten(crafted_flat, shapes, sizes)
 
     if return_diagnostics:
+        # Issue 5 Task 2: "verify Min-Max ... generate valid stealthy
+        # updates" -- re-derive the ACHIEVED worst-case distance at
+        # gamma_star (not just the pass/fail bool _feasible() used
+        # during the search) so the feasibility margin is inspectable,
+        # not just asserted.
+        worst_at_star = 0.0
+        for i in range(W.shape[0]):
+            dist = np.linalg.norm(crafted_flat - W[i])
+            if dist > worst_at_star:
+                worst_at_star = dist
+        constraint_ratio = float(worst_at_star / max_pair_dist) if max_pair_dist > 0 else float("nan")
+
         diag = {
             "attack": "minmax",
             "dev_type_used": dev_type_used,
@@ -187,14 +211,21 @@ def minmax_attack_trained(byzantine_trained_params_list, dev_type="std",
             "gamma_search_upper_bound": float(gamma_hi),
             "coalition_size": int(W.shape[0]),
             "coalition_max_pairwise_distance": float(max_pair_dist),
+            "constraint_worst_distance": float(worst_at_star),
+            "constraint_ratio": constraint_ratio,
+            "constraint_satisfied": bool(constraint_ratio <= 1.0 + 1e-9),
         }
+        if global_params is not None:
+            global_flat, _, _ = _flatten(global_params)
+            diag["crafted_update_l2_norm"] = float(
+                np.linalg.norm(crafted_flat - global_flat))
         return crafted_params, diag
     return crafted_params
 
 
 def minsum_attack_trained(byzantine_trained_params_list, dev_type="std",
                            gamma_init=None, search_iters=15,
-                           return_diagnostics=False):
+                           return_diagnostics=False, global_params=None):
     """
     Min-Sum optimized distance-aware poisoner (Fang et al., USENIX
     Security 2020). Same coalition-broadcast convention and
@@ -213,7 +244,8 @@ def minsum_attack_trained(byzantine_trained_params_list, dev_type="std",
 
     Parameters and return value: identical shape to
     minmax_attack_trained() -- see that docstring for the full
-    parameter reference.
+    parameter reference, including global_params (diagnostics-only,
+    does not affect the crafted vector).
     """
     assert len(byzantine_trained_params_list) >= 1, \
         "minsum_attack_trained needs at least one honestly-trained " \
@@ -258,6 +290,10 @@ def minsum_attack_trained(byzantine_trained_params_list, dev_type="std",
     crafted_params = _unflatten(crafted_flat, shapes, sizes)
 
     if return_diagnostics:
+        total_at_star = sum(np.linalg.norm(crafted_flat - W[i]) ** 2
+                             for i in range(W.shape[0]))
+        constraint_ratio = float(total_at_star / min_sum) if min_sum > 0 else float("nan")
+
         diag = {
             "attack": "minsum",
             "dev_type_used": dev_type_used,
@@ -265,7 +301,14 @@ def minsum_attack_trained(byzantine_trained_params_list, dev_type="std",
             "gamma_search_upper_bound": float(gamma_hi),
             "coalition_size": int(W.shape[0]),
             "coalition_min_sum_sq_distance": float(min_sum),
+            "constraint_worst_distance": float(total_at_star),
+            "constraint_ratio": constraint_ratio,
+            "constraint_satisfied": bool(constraint_ratio <= 1.0 + 1e-9),
         }
+        if global_params is not None:
+            global_flat, _, _ = _flatten(global_params)
+            diag["crafted_update_l2_norm"] = float(
+                np.linalg.norm(crafted_flat - global_flat))
         return crafted_params, diag
     return crafted_params
 
