@@ -481,7 +481,17 @@ LEARNING_RATE = 0.001
 # accountant must be calibrated against. Computed from the actual
 # NUM_ROUNDS/LOCAL_EPOCHS in effect this run -- never hardcoded.
 TOTAL_EPOCHS_PER_CLIENT = NUM_ROUNDS * LOCAL_EPOCHS
-PROX_MU = _args.prox_mu if _args.prox_mu is not None else get_value(_HP_CONFIG, "fedprox_mu")
+
+# Hardcoded per-model-type FedProx mu defaults (overrides hyperparams.json's
+# flat, UNVALIDATED fedprox_mu=0.02 for whichever model_type is NOT given
+# an explicit --prox-mu). --prox-mu on the CLI still takes priority over
+# both of these, same as before.
+_PROX_MU_HARDCODED_DEFAULTS = {
+    "network": 0.005,
+    "application": 0.0,
+}
+PROX_MU = (_args.prox_mu if _args.prox_mu is not None
+           else _PROX_MU_HARDCODED_DEFAULTS[MODEL_TYPE])
 
 if _args.byzantine is not None:
     _byzantine_1indexed = sorted(int(c.strip()) for c in _args.byzantine.split(","))

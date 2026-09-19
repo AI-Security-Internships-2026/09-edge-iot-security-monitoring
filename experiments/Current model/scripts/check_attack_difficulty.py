@@ -8,7 +8,9 @@ writes. If the checks below fail, DO NOT proceed to the full 5-seed
 campaign -- tune the attack hyperparameters flagged in each failure
 message and re-run this script until both checks pass.
 
-Two checks, both from the issue's acceptance criteria:
+Three checks, all from the issue's acceptance criteria (Check 3 added
+to close a gap found during E2 prep: the original script validated
+Min-Max but not Min-Sum, even though Task 2 requires both):
 
   1. Plain Adaptive Krum (uncalibrated baseline) vs Min-Max attack,
      alpha=0.7, epsilon=none. Requirement: krum_score_ratio (mean
@@ -26,7 +28,12 @@ Two checks, both from the issue's acceptance criteria:
      per-round TPR quantized to exactly {0%, 100%}. See
      MINMAX_RATIO_LOW/HIGH's comment below for the full account.
 
-  2. HMAC norm guard vs bounded_directional attack, tau matched to the
+  2. Plain Adaptive Krum vs Min-Sum attack -- same gate and same
+     rationale as (1) (Min-Sum shares Min-Max's coalition-broadcast
+     structure, so TPR is quantized the same way); tuned independently
+     since Min-Sum's crafted-update objective differs from Min-Max's.
+
+  3. HMAC norm guard vs bounded_directional attack, tau matched to the
      guard's own threshold. Requirement: TPR == 0% EXACTLY -- this is
      the attack's whole point (defeat a magnitude-only check by
      truthfully reporting a norm under threshold) and is meant to be
@@ -39,9 +46,16 @@ Usage
     # to sweep --minmax-gamma-init while tuning, e.g.:
     python scripts/check_attack_difficulty.py --gamma-candidates 0.5,1,2,4,8
 
-Exit code is 0 iff both checks pass; non-zero (with a specific message
-about which check failed and which knob to adjust) otherwise, so this
-is safe to wire into a pre-campaign CI/Make target that gates Task 3.
+    # Min-Sum can be swept independently of Min-Max if it needs a
+    # different gamma/coalition to pass:
+    python scripts/check_attack_difficulty.py \
+        --gamma-candidates 0.5,1,2,4,8 \
+        --minsum-gamma-candidates 1,2,4,8,16
+
+Exit code is 0 iff all three checks pass; non-zero (with a specific
+message about which check failed and which knob to adjust) otherwise,
+so this is safe to wire into a pre-campaign CI/Make target that gates
+Task 3.
 """
 
 import argparse
@@ -86,6 +100,19 @@ _MAIN_PY = os.path.join(_REPO_ROOT, "main.py")
 # score to be noticeably elevated (>1.2x) but not wildly so (<3x) —
 # re-tune this band, not gamma_init, if it doesn't fit your setup.
 MINMAX_RATIO_LOW, MINMAX_RATIO_HIGH = 1.2, 3.0
+
+# Check 3 (Issue 5 Task 2 gap fix) -- Min-Sum. Same coalition-broadcast
+# structure as Min-Max (Shejwalkar & Houmansadr, same paper): all
+# colluding clients broadcast ONE identical crafted vector, so per-round
+# Byzantine TPR is quantized to {0%, 100%} here too, for the identical
+# structural reason documented above MINMAX_RATIO_LOW/HIGH. Reusing the
+# same krum_score_ratio gate and the same (1.2, 3.0) band as a starting
+# point -- NOT assumed identical to Min-Max's actual passing gamma/dev
+# combo, since Min-Sum's crafted-update objective differs (minimizes sum
+# of squared distances to all clients rather than maximizing distance to
+# the nearest honest neighbour), so it must be calibrated independently.
+MINSUM_RATIO_LOW, MINSUM_RATIO_HIGH = 1.2, 3.0
+
 CALIBRATION_ROUNDS = 5          # short run: fast enough to iterate gamma
 DEFAULT_BYZANTINE = "1,2"       # matches main.py's own default clients
 
@@ -380,6 +407,82 @@ def check_minmax_vs_plain_adaptive_krum(workdir, gamma_init=None,
     return ratio
 
 
+def check_minsum_vs_plain_adaptive_krum(workdir, gamma_init=None,
+                                         minsum_dev_type="std",
+                                         minsum_search_iters=15,
+                                         byzantine_clients=None,
+                                         rounds=None):
+    """Acceptance item 1 (Min-Sum half, previously missing entirely).
+
+    Mirrors check_minmax_vs_plain_adaptive_krum() exactly -- same
+    krum_score_ratio gate, same coalition-collapse caution -- just with
+    --attack-type minsum. See that function's docstring for the full
+    rationale; not duplicated here beyond what differs.
+    """
+    byz = byzantine_clients if byzantine_clients is not None else DEFAULT_BYZANTINE
+    extra = [
+        "--aggregator", "adaptive_krum",
+        "--ablation-mode", "krum_baseline",
+        "--attack-type", "minsum",
+        # main.py's minmax-* flags are shared by minsum (see main.py's
+        # --minmax-dev-type / --minmax-search-iters / --minmax-gamma-init
+        # help text -- there is no separate --minsum-* flag set).
+        "--minmax-dev-type", minsum_dev_type,
+        "--minmax-search-iters", str(minsum_search_iters),
+    ]
+    if gamma_init is not None:
+        extra += ["--minmax-gamma-init", str(gamma_init)]
+
+    tag = (
+        f"check_minsum_g{_sanitize_tag_component(gamma_init if gamma_init is not None else 'auto')}"
+        f"_dev{_sanitize_tag_component(minsum_dev_type)}"
+        f"_it{minsum_search_iters}"
+        f"_byz{_sanitize_tag_component(byz)}"
+    )
+    log_path = _run_main(extra, tag=tag, workdir=workdir,
+                          byzantine_clients=byz, rounds=rounds)
+    byz_clients = [int(c) for c in byz.split(",")]
+    tpr = _byzantine_tpr_from_log(log_path, byz_clients)
+    ratio = _byzantine_score_ratio_from_log(log_path)
+
+    print(f"\n[CHECK 3] Plain Adaptive Krum vs Min-Sum (gamma_init="
+          f"{gamma_init!r}, byzantine={byz!r}, rounds={rounds!r}): "
+          f"TPR = {tpr:.2%} (informational only)  "
+          f"krum_score_ratio = {ratio:.4f} (gating metric)")
+
+    if ratio <= 1.0 + 1e-9:
+        collapse = ratio < 0.9
+        raise SystemExit(
+            f"FAIL: krum_score_ratio={ratio:.4f} <= 1.0 -- Byzantine "
+            f"clients score AS CENTRAL AS OR MORE CENTRAL THAN honest "
+            f"ones under Min-Sum, i.e. not just evasive but effectively "
+            f"invisible. "
+            + (
+                f"ratio << 1 strongly suggests the same mutual-zero-"
+                f"distance collapse documented for Min-Max -- SHRINK the "
+                f"--byzantine coalition (check n - f - 2 stays "
+                f"comfortably above coalition size), not gamma."
+                if collapse else
+                f"Fix: DECREASE --minmax-gamma-init so the crafted "
+                f"update sits farther from the honest cluster; if that "
+                f"alone doesn't move ratio above 1, check coalition "
+                f"size against n - f - 2 as above."
+            )
+        )
+    if not (MINSUM_RATIO_LOW < ratio < MINSUM_RATIO_HIGH):
+        raise SystemExit(
+            f"FAIL: krum_score_ratio={ratio:.4f} is outside the required "
+            f"({MINSUM_RATIO_LOW}, {MINSUM_RATIO_HIGH}) range. "
+            f"{'Attack is such an obvious outlier this is barely stealthier than sign-flip/Gaussian -- DECREASE' if ratio >= MINSUM_RATIO_HIGH else 'Attack is too close to blending into the honest cluster -- INCREASE'} "
+            f"--minmax-gamma-init and re-run."
+        )
+
+    print(f"[CHECK 3] PASS -- krum_score_ratio={ratio:.4f} is within "
+          f"({MINSUM_RATIO_LOW}, {MINSUM_RATIO_HIGH}). "
+          f"(TPR={tpr:.2%}, kept only as a secondary, non-gating signal.)")
+    return ratio
+
+
 def check_bounded_directional_vs_norm_guard(workdir, bounded_tau=None,
                                              bounded_margin=0.05,
                                              byzantine_clients=None,
@@ -458,6 +561,18 @@ def main():
                               "loop, gamma-candidates as the INNER loop. "
                               "If omitted, uses DEFAULT_BYZANTINE ('1,2') "
                               "only.")
+    parser.add_argument("--minsum-gamma-candidates", type=str, default=None,
+                         help="Same as --gamma-candidates but for Check 3 "
+                              "(Min-Sum). Defaults to whatever "
+                              "--gamma-candidates resolved to if omitted, "
+                              "since Min-Sum often -- but is not "
+                              "guaranteed to -- share a workable gamma "
+                              "range with Min-Max.")
+    parser.add_argument("--minsum-byzantine-candidates", type=str, default=None,
+                         help="Same as --byzantine-candidates but for "
+                              "Check 3 (Min-Sum). Defaults to whatever "
+                              "--byzantine-candidates resolved to if "
+                              "omitted.")
     parser.add_argument("--calibration-rounds", type=int, default=None,
                          help="Overrides CALIBRATION_ROUNDS (default 5) "
                               "for both checks.")
@@ -506,14 +621,53 @@ def main():
                 pass  # TemporaryDirectory cleans up on exit
             sys.exit(1)
 
+        # Check 3 (Min-Sum) -- same outer/inner sweep structure as
+        # Check 1, run second so a Check 1 failure is reported first
+        # (Check 1 currently has the larger literature precedent for
+        # what gamma/coalition ranges are reasonable to try first).
+        minsum_gamma_candidates = (
+            [float(g) for g in args.minsum_gamma_candidates.split(",")]
+            if args.minsum_gamma_candidates
+            else gamma_candidates
+        )
+        minsum_byzantine_candidates = (
+            args.minsum_byzantine_candidates.split(";")
+            if args.minsum_byzantine_candidates
+            else byzantine_candidates
+        )
+
+        passed_minsum = False
+        last_error_minsum = None
+        for byz in minsum_byzantine_candidates:
+            for gamma in minsum_gamma_candidates:
+                try:
+                    check_minsum_vs_plain_adaptive_krum(
+                        workdir, gamma_init=gamma, byzantine_clients=byz,
+                        rounds=args.calibration_rounds,
+                    )
+                    passed_minsum = True
+                    break
+                except SystemExit as e:
+                    last_error_minsum = e
+                    print(f"  (byzantine={byz!r}, gamma_init={gamma!r} "
+                          f"failed for Min-Sum, trying next candidate if "
+                          f"any remain)")
+            if passed_minsum:
+                break
+        if not passed_minsum:
+            print(f"\nAll byzantine/gamma candidates exhausted without "
+                  f"passing Check 3 (Min-Sum).\n{last_error_minsum}")
+            sys.exit(1)
+
         check_bounded_directional_vs_norm_guard(
             workdir, bounded_tau=args.bounded_tau,
             rounds=args.calibration_rounds,
         )
 
         print(f"\n{'='*70}\n"
-              f"  ALL TASK 2 CHECKS PASSED -- safe to proceed to the full\n"
-              f"  E1-E8 5-seed campaign (Task 3).\n"
+              f"  ALL TASK 2 CHECKS PASSED (Min-Max, Min-Sum, bounded-\n"
+              f"  directional) -- safe to proceed to the full E1-E8\n"
+              f"  5-seed campaign (Task 3), including E2.\n"
               f"{'='*70}")
 
         if args.keep_workdir:
