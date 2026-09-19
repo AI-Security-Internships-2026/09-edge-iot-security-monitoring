@@ -141,14 +141,14 @@ def main():
               f"CSVs (check its actual --help for the real flag names -- "
               f"the ASSUMPTION note at the top of this script explains "
               f"why this couldn't be verified in advance):\n"
-              f"    python {_FIT_SCRIPT} "
+              f"    python {_FIT_SCRIPT} --csv "
               f"{' '.join(csv_paths)} --out {args.out}\n"
               f"Then confirm the output JSON has \"schema_version\": 2 "
               f"(fit_hetero_variance_regression()'s current schema) "
               f"before pointing --hetero-fit-coeffs-json at it.")
         sys.exit(2)
 
-    fit_cmd = [sys.executable, _FIT_SCRIPT, *csv_paths, "--out", args.out]
+    fit_cmd = [sys.executable, _FIT_SCRIPT, "--csv", *csv_paths, "--out", args.out]
     print("\nRUNNING FIT:", " ".join(fit_cmd))
     subprocess.run(fit_cmd, cwd=_REPO_ROOT, check=True)
 
