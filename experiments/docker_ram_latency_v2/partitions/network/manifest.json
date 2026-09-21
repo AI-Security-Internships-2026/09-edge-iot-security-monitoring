@@ -1,0 +1,54 @@
+{
+  "model_type": "network",
+  "num_features": 37,
+  "num_classes": 8,
+  "class_names": [
+    "Normal",
+    "DDoS_UDP",
+    "DDoS_ICMP",
+    "Ransomware",
+    "DDoS_HTTP",
+    "DDoS_TCP",
+    "Vulnerability_scanner",
+    "MITM"
+  ],
+  "subsample_rows_target": 100000,
+  "subsample_rows_actual": 72374,
+  "num_clients": 2,
+  "dirichlet_alpha": 0.7,
+  "test_size": 0.2,
+  "seed": 42,
+  "clients": [
+    {
+      "client_id": 0,
+      "train_rows": 31332,
+      "test_rows": 7834,
+      "class_counts_train": [
+        5862,
+        5293,
+        7388,
+        354,
+        2313,
+        5137,
+        4971,
+        14
+      ]
+    },
+    {
+      "client_id": 1,
+      "train_rows": 26566,
+      "test_rows": 6642,
+      "class_counts_train": [
+        8538,
+        7919,
+        5267,
+        833,
+        3112,
+        304,
+        475,
+        118
+      ]
+    }
+  ],
+  "note": "Feature count measured directly from this run's VarianceThreshold/text-engineering output on a 100000-row stratified subsample of the current, label-corrected pipeline -- not assumed from any prior ablation's figure."
+}

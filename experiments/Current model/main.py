@@ -214,9 +214,65 @@ _parser.add_argument("--gaussian-std", type=float, default=None,
                      help="Standard deviation for --attack-type gaussian. "
                           "Ignored for other attack types. Default is "
                           "model-aware (network=50.0, application=30.0).")
+_parser.add_argument("--seed", type=int, default=42,
+                     help="Random seed for torch/numpy/python-random and "
+                          "the client Dirichlet partition (passed "
+                          "explicitly to load_partition() below). Default "
+                          "42 preserves prior single-seed behavior for any "
+                          "script/tag that doesn't pass this explicitly. "
+                          "NOTE: data_loader.py's class-capping step "
+                          "(Normal -> 18%) stays pinned at its own "
+                          "hardcoded seed=42 regardless of this flag, by "
+                          "design -- all seeds of a given model share one "
+                          "underlying capped dataset, so multi-seed "
+                          "variance reflects training-procedure randomness "
+                          "(init, partition, batch order, DP/attack noise) "
+                          "only, not 'which rows got sampled'. See that "
+                          "module's docstring.")
+_parser.add_argument("--ablation-mode", type=str, default=None,
+                     choices=["pure_dp", "pure_he", "pure_zkp",
+                              "krum_dp_sweep", "exp2_unmitigated",
+                              "exp2_mitigated", "baseline", "krum_baseline"],
+                     help="Override the hardcoded ABLATION_MODE below via "
+                          "CLI, so many parallel runs (e.g. one per tmux "
+                          "session) don't require hand-editing this file "
+                          "between launches. Falls back to the hardcoded "
+                          "ABLATION_MODE value below if omitted.")
 _args = _parser.parse_args()
 
 MODEL_TYPE = _args.model_type
+
+# ---------------------------------------------------------------------------
+# Reproducibility -- seed EVERY randomness source this run touches, as
+# early as possible (before model init, data loading, or pool creation).
+#
+# Covers: model weight initialization, the Dirichlet client partition
+# (passed explicitly to load_partition() below -- previously always used
+# its unseeded default of 42 regardless of this flag), DataLoader batch
+# shuffling, and Opacus's DP-SGD noise (PrivacyEngine.make_private[_with_
+# epsilon]() draws from torch's global RNG here -- no explicit generator=
+# is passed, so seeding torch globally seeds DP noise too). Also fixes,
+# as a side effect, this file's own previously-documented gap: byzantine.py's
+# gaussian_attack()/gaussian_attack_trained() call np.random.normal()
+# directly on the global numpy RNG with no seed of their own -- seeding
+# numpy here makes Gaussian-attack draws reproducible per --seed too.
+#
+# CPU path caveat: client training runs inside a persistent
+# ProcessPoolExecutor (see CLIENT_POOL_WORKERS below). Forked worker
+# processes inherit this seeded RNG state at fork time, so different
+# --seed values reliably produce different, independent-looking per-client
+# training trajectories (what multi-seed mean/std needs) -- but exact
+# bit-for-bit reproducibility of a SINGLE seed across repeated runs is NOT
+# guaranteed on this path, because ProcessPoolExecutor's task-to-worker
+# scheduling isn't itself deterministic. The GPU path (_CUDA_AVAILABLE,
+# see below) runs sequentially in-process with no such pool, and IS fully
+# deterministic per seed.
+import random
+random.seed(_args.seed)
+np.random.seed(_args.seed)
+torch.manual_seed(_args.seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(_args.seed)
 
 # -- Sanity-check toggle --------------------------------------------------
 SANITY_CHECK = False
@@ -298,10 +354,11 @@ GAUSSIAN_STD  = _args.gaussian_std if _args.gaussian_std is not None else _GAUSS
 # a base and hand-edit the derived flags below -- or just set the flags
 # directly and remove/bypass this block.
 # ---------------------------------------------------------------------------
-ABLATION_MODE = "krum_dp_sweep"   # <-- set for the Gaussian-noise sweep
-                                   # (Sweep 2). Switch back to "pure_dp" /
-                                   # "pure_he" / "pure_zkp" for other
-                                   # single-mechanism ablation runs.
+ABLATION_MODE = (_args.ablation_mode if _args.ablation_mode is not None
+                 else "exp2_unmitigated")   # <-- hardcoded fallback if
+                                   # --ablation-mode isn't passed. Switch
+                                   # this string to change the default for
+                                   # any script that omits the CLI flag.
 
 if ABLATION_MODE == "pure_dp":
     USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_ZKP = False
@@ -338,9 +395,62 @@ elif ABLATION_MODE == "krum_dp_sweep":
                                   # this mode at all (USE_HE/HYBRID/ZKP are
                                   # all False here).
 
+elif ABLATION_MODE == "exp2_unmitigated":
+    # Experiment 2's HEADLINE run: classifier-head-only attack against
+    # the HE+Krum hybrid with the Layer-2 guard turned OFF. This is the
+    # run that demonstrates the blind spot (Krum scores only the
+    # plaintext bulk slice; the encrypted head is aggregated blind).
+    # USE_HEAD_NORM_GUARD=False here is the ENTIRE point of this mode --
+    # do not flip it on and call the result "unmitigated".
+    USE_HE_KRUM_HYBRID = True
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_ZKP = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = True
+    USE_HEAD_NORM_GUARD = False
+
+elif ABLATION_MODE == "exp2_mitigated":
+    # Same attack, same hybrid pipeline, Layer-2 ciphertext-bound HMAC
+    # head-norm guard turned ON (ZKP Part 2 -- verify_head_norm_proof +
+    # mad_threshold_head_norms, the SAME mechanism pure_zkp uses, not a
+    # bare norm check). This is the mitigation-confirmation run, paired
+    # with exp2_unmitigated above  run both with the SAME --byzantine
+    # selection so they're a real before/after pair, not just two
+    # differently-configured runs.
+    USE_HE_KRUM_HYBRID = True
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_ZKP = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = True
+    USE_HEAD_NORM_GUARD = True
+
+elif ABLATION_MODE == "baseline":
+    # Locked clean baseline -- no attack, no defenses of any kind (plain
+    # FedProx). The reference point every other ablation and both main
+    # experiments are compared against throughout the paper.
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_ZKP = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = False
+    BYZANTINE_HEAD_ONLY = False
+
+elif ABLATION_MODE == "krum_baseline":
+    # Adaptive Krum defending against a live, full-model attack, with NO
+    # DP/HE/ZKP privacy layer active at all -- isolates Krum's own
+    # detection/utility behavior from any privacy-mechanism interaction,
+    # the same role krum_dp_sweep plays for Experiment 1 but WITHOUT DP
+    # noise in the picture. Attack type selected via --attack-type on the
+    # CLI, same convention as krum_dp_sweep.
+    USE_ADAPTIVE_KRUM = True
+    USE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_ZKP = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = True
+    BYZANTINE_HEAD_ONLY = False
+
 else:
     raise ValueError(f"Unknown ABLATION_MODE={ABLATION_MODE!r} -- must be "
-                     f"'pure_dp', 'pure_he', 'pure_zkp', or 'krum_dp_sweep'.")
+                     f"'pure_dp', 'pure_he', 'pure_zkp', 'krum_dp_sweep', "
+                     f"'exp2_unmitigated', 'exp2_mitigated', 'baseline', "
+                     f"or 'krum_baseline'.")
 
 # UNCHANGED, deliberately -- USE_HE + USE_ADAPTIVE_KRUM (or USE_KRUM)
 # together is still forbidden. USE_HE_KRUM_HYBRID is the correct,
@@ -365,8 +475,19 @@ HE_POLY_DEGREE = 8192
 
 # Head-norm guard config -- used by USE_HE_KRUM_HYBRID (as a pre-filter
 # before Krum) and by USE_ZKP (as the ENTIRE defence, no Krum). See
-# defences/zkp.py Part 2. Unused (harmless) under krum_dp_sweep.
-USE_HEAD_NORM_GUARD = True
+# defences/zkp.py Part 2. Unused (harmless) under krum_dp_sweep/pure_dp/
+# pure_he.
+#
+# FIX (this revision): previously this was an UNCONDITIONAL `= True`,
+# which silently clobbered exp2_unmitigated's explicit
+# `USE_HEAD_NORM_GUARD = False` set above in the ABLATION_MODE block --
+# the exact "not reset per-mode" fragility already flagged as an open
+# item. Only fall back to True if the mode above didn't already set it
+# (pure_zkp doesn't reference this flag at all -- its branch always runs
+# the guard unconditionally -- so this default only actually matters for
+# any future mode that omits the assignment).
+if "USE_HEAD_NORM_GUARD" not in globals():
+    USE_HEAD_NORM_GUARD = True
 HEAD_NORM_GUARD_K = _args.krum_k if _args.krum_k is not None else 2.5
 HEAD_NORM_GUARD_MIN_KEEP_FRACTION = 0.5
 
@@ -402,8 +523,9 @@ _THREADS_PER_WORKER = max(1, _CPU_COUNT // CLIENT_POOL_WORKERS)
 # ---------------------------------------------------------------------------
 # Output paths -- one set per model type/ablation so runs don't collide
 # ---------------------------------------------------------------------------
-_TAG               = (f"{MODEL_TYPE}_{ABLATION_MODE}" if _args.tag is None
-                      else f"{MODEL_TYPE}_{_args.tag}")
+_TAG               = (f"{MODEL_TYPE}_{ABLATION_MODE}_seed{_args.seed}"
+                      if _args.tag is None
+                      else f"{MODEL_TYPE}_{_args.tag}_seed{_args.seed}")
 CHECKPOINT_PARAMS       = f"checkpoint_{_TAG}.npz"
 CHECKPOINT_PROGRESS     = f"checkpoint_{_TAG}_progress.json"
 CHECKPOINT_BEST_PARAMS   = f"checkpoint_{_TAG}_best.npz"
@@ -968,7 +1090,7 @@ def main():
     clients_data = []
     for i in range(NUM_CLIENTS):
         print(f"  Partition {i+1}/{NUM_CLIENTS}...", end="\r")
-        clients_data.append(load_partition(i, NUM_CLIENTS))
+        clients_data.append(load_partition(i, NUM_CLIENTS, seed=_args.seed))
     sample_features = clients_data[0][0].shape[1]
     print(f"\nFeature count (measured, not assumed): {sample_features}")
     print(f"All {NUM_CLIENTS} clients loaded.\n")
