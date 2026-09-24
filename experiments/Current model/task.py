@@ -127,8 +127,38 @@ def test(model, X_test, y_test, num_classes, device='cpu', return_extended=False
         y_true_bin = np.hstack([1 - y_true_bin, y_true_bin])
 
     per_class_aucpr = np.full(num_classes, np.nan)
+
+    # A model that has diverged during training (e.g. an unmitigated
+    # Byzantine attack under an aggregator with no robustness -- FedAvg
+    # under sign-flip is the known case) can produce non-finite (NaN/inf)
+    # softmax probabilities. average_precision_score's own internal
+    # assert_all_finite() raises a hard ValueError on that input, which
+    # previously killed the entire run/process rather than recording
+    # what is itself a legitimate, reportable result: this
+    # (aggregator, attack) combination causes catastrophic divergence.
+    # Guard per-class so a run isn't lost to this -- report NaN for any
+    # class whose probs aren't finite, same convention already used
+    # above for a class absent from the test set, and print a clear,
+    # one-time diagnostic distinguishing this cause from that one so
+    # it's traceable in the run's stdout/log rather than silently
+    # blending into ordinary "no support" NaNs.
+    _diverged_logged = False
     for c in range(num_classes):
-        if y_true_bin[:, c].sum() > 0:
-            per_class_aucpr[c] = average_precision_score(y_true_bin[:, c], probs[:, c])
+        if y_true_bin[:, c].sum() == 0:
+            continue
+        class_probs = probs[:, c]
+        if not np.all(np.isfinite(class_probs)):
+            if not _diverged_logged:
+                n_nonfinite_rows = int((~np.isfinite(probs).all(axis=1)).sum())
+                print(f"  [WARNING] test(): model output contains non-finite "
+                      f"probabilities ({n_nonfinite_rows}/{len(probs)} rows "
+                      f"affected) -- likely training divergence (e.g. an "
+                      f"unmitigated Byzantine attack). Affected per-class "
+                      f"AUC-PR values are reported as NaN rather than "
+                      f"crashing the run; per-class F1/Recall above still "
+                      f"reflect the (likely very poor) argmax predictions.")
+                _diverged_logged = True
+            continue  # leave per_class_aucpr[c] as NaN
+        per_class_aucpr[c] = average_precision_score(y_true_bin[:, c], class_probs)
 
     return loss, accuracy, per_class_f1, per_class_recall, per_class_aucpr
