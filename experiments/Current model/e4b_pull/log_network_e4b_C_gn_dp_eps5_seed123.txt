@@ -1,0 +1,837 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/usr/local/lib/python3.12/dist-packages/opacus/privacy_engine.py:98: UserWarning: Secure RNG turned off. This is perfectly fine for experimentation as it allows for much faster training performance, but remember to turn it on and retrain one last time before production with ``secure_mode`` turned on.
+  warnings.warn(
+/usr/local/lib/python3.12/dist-packages/opacus/accountants/analysis/rdp.py:332: UserWarning: Optimal order is the largest alpha. Please consider expanding the range of alphas to get a tighter privacy bound.
+  warnings.warn(
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+
+=================================================================
+  FL-IDS Unified Loop -- MODEL: NETWORK
+  Ablation mode: pure_dp
+  Rounds=25  Clients=10  Epochs=5
+  Device=cuda  (CUDA available: True)
+  Byzantine=2 (clients [1, 2])  Attack=OFF
+  Attack function: sign_flip_attack_trained
+  USE_KRUM=False  USE_ADAPTIVE_KRUM=False  USE_HE=False  USE_HE_KRUM_HYBRID=False  USE_DP=True  USE_NORM_GUARD=False
+  DP: eps(full-run target)=5.0  delta=1e-05  max_grad_norm=1.5  batch_size=512  accountant=rdp
+  [PRV1] DP-active clients each get a persistent, in-process (model, optimizer, engine) state (dp_persistent_client_state.py) -- one PrivacyEngine per client, created once before Round 1, reused unmodified for all 25 rounds. NOT using the ProcessPoolExecutor pool for training this run.
+=================================================================
+
+Loading data partitions...
+  Partition 1/10...  Preprocessed cache loaded (network, seed=123): 426,171 train / 53,271 val / 53,272 test rows, 39 features
+  Partition 2/10...  Partition 3/10...  Partition 4/10...  Partition 5/10...  Partition 6/10...  Partition 7/10...  Partition 8/10...  Partition 9/10...  Partition 10/10...
+Feature count (measured, not assumed): 39
+All 10 clients loaded.
+
+Building criterion once (class weights, FocalLoss)...
+Criterion built.
+
+Starting fresh run.
+
+  [PRV1] Building 8 persistent DP client state(s), in-process -- each DP-active client's PrivacyEngine created exactly once, calibrated against the FULL 125-optimizer-epoch horizon (25 rounds x 5 local epochs), target full_run_target_epsilon=5.0...
+    Client  1: sample_rate=0.01856  sigma=1.6248
+    Client  2: sample_rate=0.02557  sigma=1.8457
+    Client  3: sample_rate=0.02128  sigma=1.7212
+    Client  4: sample_rate=0.01195  sigma=1.3623
+    Client  5: sample_rate=0.01566  sigma=1.5161
+    Client  6: sample_rate=0.00835  sigma=1.1938
+    Client  7: sample_rate=0.01295  sigma=1.4014
+    Client  8: sample_rate=0.00836  sigma=1.1938
+    Client  9: sample_rate=0.03296  sigma=2.0630
+    Client 10: sample_rate=0.00873  sigma=1.2122
+
+[ROUND 1/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 237.7s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.2s
+  [Best checkpoint] New best F1-Macro: 0.1244 (round 1) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 1.5600  Acc: 0.3988  F1-Macro: 0.1244  [237.9s]
+  Per-class F1:
+    Normal                       0.5450  ##########
+    DDoS_UDP                     0.4502  #########
+    DDoS_ICMP                    0.0000  
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.0000  
+    DDoS_TCP                     0.0000  
+    Vulnerability_scanner        0.0000  
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 1): mean=0.9472  target(full-run)=5.0
+[ROUND 2/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.2s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.2s
+  [Best checkpoint] New best F1-Macro: 0.3479 (round 2) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.8965  Acc: 0.6702  F1-Macro: 0.3479  [254.3s]
+  Per-class F1:
+    Normal                       0.4916  #########
+    DDoS_UDP                     0.9608  ###################
+    DDoS_ICMP                    0.8938  #################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.0000  
+    DDoS_TCP                     0.0000  
+    Vulnerability_scanner        0.4367  ########
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 2): mean=1.2977  target(full-run)=5.0
+[ROUND 3/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 256.4s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.4s
+  [Best checkpoint] New best F1-Macro: 0.4863 (round 3) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.6239  Acc: 0.7945  F1-Macro: 0.4863  [256.9s]
+  Per-class F1:
+    Normal                       0.6858  #############
+    DDoS_UDP                     0.9532  ###################
+    DDoS_ICMP                    0.9586  ###################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.0000  
+    DDoS_TCP                     0.8663  #################
+    Vulnerability_scanner        0.4262  ########
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 3): mean=1.5922  target(full-run)=5.0
+[ROUND 4/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.6s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.5s
+  [Best checkpoint] New best F1-Macro: 0.5465 (round 4) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.4383  Acc: 0.8609  F1-Macro: 0.5465  [255.2s]
+  Per-class F1:
+    Normal                       0.8039  ################
+    DDoS_UDP                     0.9865  ###################
+    DDoS_ICMP                    0.9059  ##################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.1958  ###
+    DDoS_TCP                     0.8858  #################
+    Vulnerability_scanner        0.5943  ###########
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 4): mean=1.8464  target(full-run)=5.0
+[ROUND 5/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 238.8s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.6s
+  [Best checkpoint] New best F1-Macro: 0.5782 (round 5) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.3802  Acc: 0.8819  F1-Macro: 0.5782  [239.4s]
+  Per-class F1:
+    Normal                       0.8169  ################
+    DDoS_UDP                     0.9478  ##################
+    DDoS_ICMP                    0.9819  ###################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.3288  ######
+    DDoS_TCP                     0.8813  #################
+    Vulnerability_scanner        0.6693  #############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 5): mean=2.0758  target(full-run)=5.0
+[ROUND 6/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.6s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.3s
+  [Best checkpoint] New best F1-Macro: 0.5900 (round 6) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.3420  Acc: 0.8914  F1-Macro: 0.5900  [255.0s]
+  Per-class F1:
+    Normal                       0.8378  ################
+    DDoS_UDP                     0.9543  ###################
+    DDoS_ICMP                    0.9813  ###################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.3740  #######
+    DDoS_TCP                     0.8967  #################
+    Vulnerability_scanner        0.6762  #############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 6): mean=2.2861  target(full-run)=5.0
+[ROUND 7/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.5s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.6s
+  [Best checkpoint] New best F1-Macro: 0.6166 (round 7) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.3409  Acc: 0.9033  F1-Macro: 0.6166  [255.0s]
+  Per-class F1:
+    Normal                       0.8277  ################
+    DDoS_UDP                     0.9545  ###################
+    DDoS_ICMP                    0.9868  ###################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.4642  #########
+    DDoS_TCP                     0.9064  ##################
+    Vulnerability_scanner        0.7934  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 7): mean=2.4820  target(full-run)=5.0
+[ROUND 8/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 257.5s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.3215  Acc: 0.8995  F1-Macro: 0.6084  [257.7s]
+  Per-class F1:
+    Normal                       0.8401  ################
+    DDoS_UDP                     0.9946  ###################
+    DDoS_ICMP                    0.9373  ##################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.4167  ########
+    DDoS_TCP                     0.9048  ##################
+    Vulnerability_scanner        0.7740  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 8): mean=2.6663  target(full-run)=5.0
+[ROUND 9/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 246.5s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  [Best checkpoint] New best F1-Macro: 0.6200 (round 9) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.3073  Acc: 0.9036  F1-Macro: 0.6200  [246.7s]
+  Per-class F1:
+    Normal                       0.8502  #################
+    DDoS_UDP                     0.9957  ###################
+    DDoS_ICMP                    0.9376  ##################
+    Ransomware                   0.0414  
+    DDoS_HTTP                    0.4475  ########
+    DDoS_TCP                     0.8961  #################
+    Vulnerability_scanner        0.7915  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 9): mean=2.8410  target(full-run)=5.0
+[ROUND 10/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.2s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  Loss: 0.3077  Acc: 0.8942  F1-Macro: 0.5983  [254.3s]
+  Per-class F1:
+    Normal                       0.8659  #################
+    DDoS_UDP                     0.9913  ###################
+    DDoS_ICMP                    0.9166  ##################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.3981  #######
+    DDoS_TCP                     0.8911  #################
+    Vulnerability_scanner        0.7232  ##############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 10): mean=3.0079  target(full-run)=5.0
+[ROUND 11/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 256.1s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  Loss: 0.2906  Acc: 0.9047  F1-Macro: 0.6122  [256.2s]
+  Per-class F1:
+    Normal                       0.8685  #################
+    DDoS_UDP                     0.9545  ###################
+    DDoS_ICMP                    0.9718  ###################
+    Ransomware                   0.0000  
+    DDoS_HTTP                    0.4418  ########
+    DDoS_TCP                     0.8920  #################
+    Vulnerability_scanner        0.7688  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 11): mean=3.1679  target(full-run)=5.0
+[ROUND 12/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 250.0s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  Loss: 0.3045  Acc: 0.8986  F1-Macro: 0.6154  [250.1s]
+  Per-class F1:
+    Normal                       0.8700  #################
+    DDoS_UDP                     0.9849  ###################
+    DDoS_ICMP                    0.8942  #################
+    Ransomware                   0.0429  
+    DDoS_HTTP                    0.4454  ########
+    DDoS_TCP                     0.8987  #################
+    Vulnerability_scanner        0.7869  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 12): mean=3.3219  target(full-run)=5.0
+[ROUND 13/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 251.1s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.2825  Acc: 0.8973  F1-Macro: 0.6102  [251.2s]
+  Per-class F1:
+    Normal                       0.8758  #################
+    DDoS_UDP                     0.9577  ###################
+    DDoS_ICMP                    0.9959  ###################
+    Ransomware                   0.0018  
+    DDoS_HTTP                    0.4093  ########
+    DDoS_TCP                     0.9072  ##################
+    Vulnerability_scanner        0.7341  ##############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 13): mean=3.4708  target(full-run)=5.0
+[ROUND 14/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.9s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.6s
+  [Best checkpoint] New best F1-Macro: 0.6312 (round 14) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.2681  Acc: 0.9065  F1-Macro: 0.6312  [255.5s]
+  Per-class F1:
+    Normal                       0.8789  #################
+    DDoS_UDP                     0.9949  ###################
+    DDoS_ICMP                    0.9348  ##################
+    Ransomware                   0.1354  ##
+    DDoS_HTTP                    0.4311  ########
+    DDoS_TCP                     0.9063  ##################
+    Vulnerability_scanner        0.7679  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 14): mean=3.6151  target(full-run)=5.0
+[ROUND 15/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 256.7s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.6s
+  Loss: 0.3045  Acc: 0.9002  F1-Macro: 0.6113  [257.4s]
+  Per-class F1:
+    Normal                       0.8660  #################
+    DDoS_UDP                     0.9528  ###################
+    DDoS_ICMP                    0.9652  ###################
+    Ransomware                   0.0695  #
+    DDoS_HTTP                    0.4134  ########
+    DDoS_TCP                     0.9010  ##################
+    Vulnerability_scanner        0.7224  ##############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 15): mean=3.7551  target(full-run)=5.0
+[ROUND 16/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 246.8s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  [Best checkpoint] New best F1-Macro: 0.6400 (round 16) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+  Loss: 0.3048  Acc: 0.9087  F1-Macro: 0.6400  [246.9s]
+  Per-class F1:
+    Normal                       0.8357  ################
+    DDoS_UDP                     0.9940  ###################
+    DDoS_ICMP                    0.9488  ##################
+    Ransomware                   0.1526  ###
+    DDoS_HTTP                    0.4951  #########
+    DDoS_TCP                     0.9131  ##################
+    Vulnerability_scanner        0.7804  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 16): mean=3.8915  target(full-run)=5.0
+[ROUND 17/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 245.7s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.6s
+  Loss: 0.2712  Acc: 0.9082  F1-Macro: 0.6361  [246.3s]
+  Per-class F1:
+    Normal                       0.8638  #################
+    DDoS_UDP                     0.9929  ###################
+    DDoS_ICMP                    0.9269  ##################
+    Ransomware                   0.1894  ###
+    DDoS_HTTP                    0.4477  ########
+    DDoS_TCP                     0.9064  ##################
+    Vulnerability_scanner        0.7619  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 17): mean=4.0244  target(full-run)=5.0
+[ROUND 18/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 252.4s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.2s
+  [Best checkpoint] New best F1-Macro: 0.6797 (round 18) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.2669  Acc: 0.9206  F1-Macro: 0.6797  [252.5s]
+  Per-class F1:
+    Normal                       0.8516  #################
+    DDoS_UDP                     0.9943  ###################
+    DDoS_ICMP                    0.9852  ###################
+    Ransomware                   0.3822  #######
+    DDoS_HTTP                    0.5249  ##########
+    DDoS_TCP                     0.9079  ##################
+    Vulnerability_scanner        0.7911  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 18): mean=4.1542  target(full-run)=5.0
+[ROUND 19/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.7s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  Loss: 0.2786  Acc: 0.9038  F1-Macro: 0.6346  [254.8s]
+  Per-class F1:
+    Normal                       0.8790  #################
+    DDoS_UDP                     0.9846  ###################
+    DDoS_ICMP                    0.9026  ##################
+    Ransomware                   0.2474  ####
+    DDoS_HTTP                    0.4419  ########
+    DDoS_TCP                     0.9012  ##################
+    Vulnerability_scanner        0.7206  ##############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 19): mean=4.2812  target(full-run)=5.0
+[ROUND 20/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 238.0s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.2s
+  Loss: 0.2552  Acc: 0.9191  F1-Macro: 0.6785  [238.2s]
+  Per-class F1:
+    Normal                       0.8871  #################
+    DDoS_UDP                     0.9929  ###################
+    DDoS_ICMP                    0.9665  ###################
+    Ransomware                   0.4337  ########
+    DDoS_HTTP                    0.4749  #########
+    DDoS_TCP                     0.9031  ##################
+    Vulnerability_scanner        0.7698  ###############
+    MITM                         0.0000  
+
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+  [PRV1] DP epsilon (cumulative, composed thru round 20): mean=4.4055  target(full-run)=5.0
+[ROUND 21/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 252.2s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.4s
+  Loss: 0.2423  Acc: 0.9154  F1-Macro: 0.6623  [252.5s]
+  Per-class F1:
+    Normal                       0.8896  #################
+    DDoS_UDP                     0.9992  ###################
+    DDoS_ICMP                    0.9934  ###################
+    Ransomware                   0.2896  #####
+    DDoS_HTTP                    0.4506  #########
+    DDoS_TCP                     0.9108  ##################
+    Vulnerability_scanner        0.7655  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 21): mean=4.5274  target(full-run)=5.0
+[ROUND 22/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 256.9s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  [Best checkpoint] New best F1-Macro: 0.6987 (round 22) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.2253  Acc: 0.9305  F1-Macro: 0.6987  [257.0s]
+  Per-class F1:
+    Normal                       0.8790  #################
+    DDoS_UDP                     0.9571  ###################
+    DDoS_ICMP                    0.9960  ###################
+    Ransomware                   0.4977  #########
+    DDoS_HTTP                    0.5474  ##########
+    DDoS_TCP                     0.9021  ##################
+    Vulnerability_scanner        0.8103  ################
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 22): mean=4.6470  target(full-run)=5.0
+[ROUND 23/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.6s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.3s
+  Loss: 0.2219  Acc: 0.9226  F1-Macro: 0.6709  [254.9s]
+  Per-class F1:
+    Normal                       0.8756  #################
+    DDoS_UDP                     0.9978  ###################
+    DDoS_ICMP                    0.9926  ###################
+    Ransomware                   0.3090  ######
+    DDoS_HTTP                    0.4918  #########
+    DDoS_TCP                     0.9140  ##################
+    Vulnerability_scanner        0.7867  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 23): mean=4.7644  target(full-run)=5.0
+[ROUND 24/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 249.3s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  [Best checkpoint] New best F1-Macro: 0.7068 (round 24) -> checkpoint_network_e4b_C_gn_dp_eps5_seed123_best.npz
+  Loss: 0.2273  Acc: 0.9308  F1-Macro: 0.7068  [249.5s]
+  Per-class F1:
+    Normal                       0.8730  #################
+    DDoS_UDP                     0.9960  ###################
+    DDoS_ICMP                    0.9872  ###################
+    Ransomware                   0.5512  ###########
+    DDoS_HTTP                    0.5459  ##########
+    DDoS_TCP                     0.9092  ##################
+    Vulnerability_scanner        0.7918  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 24): mean=4.8798  target(full-run)=5.0
+[ROUND 25/25]
+  -- Data split (train partition, per client) --
+    Client  Total     Normal  DDoS_UDP  DDoS_ICM  Ransomwa  DDoS_HTT  DDoS_TCP  Vulnerab      MITM
+     1      27585     10879       950      1922        14      1442      7145      5165        68 [BYZANTINE]
+sys:1: UserWarning: Full backward hook is firing when gradients are computed with respect to module outputs since no inputs require gradients. See https://docs.pytorch.org/docs/main/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook for more details.
+     2      20025      1573      5257     10031         2      1863      1110        62       127 [BYZANTINE]
+     3      24056      1140      5471      8152      1704      1446      2624      3449        70
+     4      42850     18772      1705     11441      1342        61      1784      7703        42
+     5      32692      5871       930     13562       332        80     11600       161       156
+     6      61349     19152     22421     17132       968       471       208       976        21
+     7      39524     13598       518     15312      1070      1279      3988      3696        63
+     8      61269     17166     26002       297       117      2472      5074      9962       179
+     9      15534      1688       604      4895      1323      2992      2498      1514        20
+    10      58665      5551     23668      1088       995     23830        14      3391       128
+
+  [Timing] Training wave (all 10 clients): 254.9s
+  Aggregation: FedProx
+  [Timing] Eval wave (all 10 clients): 0.1s
+  Loss: 0.2201  Acc: 0.9256  F1-Macro: 0.6875  [255.0s]
+  Per-class F1:
+    Normal                       0.8758  #################
+    DDoS_UDP                     0.9970  ###################
+    DDoS_ICMP                    0.9945  ###################
+    Ransomware                   0.4364  ########
+    DDoS_HTTP                    0.5053  ##########
+    DDoS_TCP                     0.9147  ##################
+    Vulnerability_scanner        0.7765  ###############
+    MITM                         0.0000  
+
+  [PRV1] DP epsilon (cumulative, composed thru round 25): mean=4.9935  target(full-run)=5.0
+
+-----------------------------------------------------------------
+  [PRV1] FINAL COMPOSED EPSILON (paper-citable -- read once, after the last round, directly off each client's own never-reset PrivacyEngine)
+    Client  1: final_total_epsilon=4.9948  (target=5.0, sigma=1.6248)
+    Client  2: final_total_epsilon=4.9913  (target=5.0, sigma=1.8457)
+    Client  3: final_total_epsilon=4.9978  (target=5.0, sigma=1.7212)
+    Client  4: final_total_epsilon=4.9924  (target=5.0, sigma=1.3623)
+    Client  5: final_total_epsilon=4.9931  (target=5.0, sigma=1.5161)
+    Client  6: final_total_epsilon=4.9923  (target=5.0, sigma=1.1938)
+    Client  7: final_total_epsilon=4.9952  (target=5.0, sigma=1.4014)
+    Client  8: final_total_epsilon=4.9923  (target=5.0, sigma=1.1938)
+    Client  9: final_total_epsilon=4.9937  (target=5.0, sigma=2.0630)
+    Client 10: final_total_epsilon=4.9923  (target=5.0, sigma=1.2122)
+  Written to: dp_final_epsilon_network_e4b_C_gn_dp_eps5_seed123.json, dp_final_epsilon_network_e4b_C_gn_dp_eps5_seed123.csv
+-----------------------------------------------------------------
+
+-----------------------------------------------------------------
+  [FINAL TEST-HOLDOUT] loss=0.2127  acc=0.9288  F1-Macro=0.7534
+    Written to: results_network_e4b_C_gn_dp_eps5_seed123_FINAL_TEST.csv
+-----------------------------------------------------------------
+  [Task 6] split_hash backfilled into experiment_config_network_e4b_C_gn_dp_eps5_seed123.json: 9b44b55cb9e20fe9...
+  [FINAL VALIDATION-HOLDOUT] loss=0.2197  acc=0.9267  F1-Macro=0.7514
+    Written to: results_network_e4b_C_gn_dp_eps5_seed123_FINAL_VALIDATION.csv
+-----------------------------------------------------------------
+  [Issue 4 Task 1] Per-client Krum-score log written to: per_client_krum_scores_network_e4b_C_gn_dp_eps5_seed123.csv (250 rows)
+
+=================================================================
+  Training complete -- 25 rounds  [NETWORK]  [ABLATION_MODE=pure_dp]
+  Results logged to:     results_network_e4b_C_gn_dp_eps5_seed123.csv
+  Checkpoint:            checkpoint_network_e4b_C_gn_dp_eps5_seed123.npz (round 25)
+=================================================================
+
