@@ -46,6 +46,29 @@ def build_criterion_network(seed=42):
 
 
 def build_criterion_application(seed=42):
+    """
+    History (referenced from hyperparams.json's
+    class_weight_multipliers_application.validated_on_split -- keep
+    this numbering in sync if either side changes):
+
+      1. Pre-DAT1: Uploading/XSS/Fingerprinting multipliers (1.3/1.5/1.3)
+         were picked by observing weak-class performance on each
+         client's own local held-out split -- a test-adjacent metric,
+         since no separate global TEST holdout existed yet at that
+         point in the pipeline.
+      2. DAT1 introduced a proper global TRAIN/VALIDATION/TEST split
+         (see docs/SPLIT_PROTOCOL.md) with an untouched TEST holdout
+         evaluated exactly once.
+      3. These three multipliers were carried over UNCHANGED into the
+         post-DAT1 pipeline rather than re-derived -- they are current
+         hyperparameters.json still marks them "UNVALIDATED" for
+         exactly this reason.
+      4. Before these values are cited in the paper as deliberately
+         tuned, they must be re-derived from a per-class VALIDATION-F1
+         sweep (not client-local splits, not TEST) and this docstring
+         updated to record that sweep's result, per DAT1 Task 2's
+         no-tuning-on-test requirement.
+    """
     counts = get_class_counts_application(seed=seed)
     w = _inverse_sqrt_weights(counts)
     MAX_WEIGHT_RATIO = 5.0

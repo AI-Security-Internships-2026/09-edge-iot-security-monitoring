@@ -41,15 +41,30 @@ same convention:
      historical values like "DP_MAX_GRAD_NORM=1.5" in prose, which
      would make a naive "must not contain 1.5" check false-positive).
 
+  4. ADDENDUM (Mati86 review): the synthetic-cache test above is
+     useful but was judged not to fully replace a real end-to-end
+     smoke run. test_real_smoke_run_test_holdout_never_opened_during_
+     training() below runs the ACTUAL main.py via runpy.run_path(),
+     for real, against a tiny synthetic-but-schema-compatible CSV
+     (data_loader.DATASET_PATH is now overridable via the
+     EDGE_IIOT_CSV_PATH env var for exactly this purpose), and uses
+     sys.addaudithook() as the "equivalent runtime file-access
+     instrumentation" the review comment explicitly allows for, to
+     record every file main.py opens and confirm the TEST-holdout
+     split artifact is opened at most once. See that test's own
+     docstring for its documented fork-vs-spawn scope limitation.
+
 Run with: pytest tests/test_dat1_smoke_run.py -v
 """
 import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import data_loader as dl
@@ -175,6 +190,106 @@ def test_test_holdout_never_touched_during_client_partitioning(
         )
 
 
+def _write_synthetic_edge_iiot_csv(csv_path, rows_per_class=50, n_numeric_features=15,
+                                    seed=999):
+    """
+    Builds a small, schema-compatible stand-in for the real ~1.2GB
+    Edge-IIoTset CSV, so main.py can be run FOR REAL (not imported
+    piecemeal) without needing the real dataset on disk.
+
+    Only includes what _load_raw()/encode_labels() actually require --
+    Attack_type (every ALL_CLASSES value, so encode_labels' explicit
+    index mapping never sees an unknown class) and Attack_label, plus
+    generic numeric feature columns for VarianceThreshold/StandardScaler
+    to act on. TEXT_FEATURE_COLS/METHOD_COL are intentionally omitted:
+    engineer_text_features() skips any of them that aren't present
+    (`if col not in df.columns: continue`), so this is a safe, honest
+    minimal fixture rather than a guess at the real dataset's full
+    ~40-column schema. If a future column becomes load-bearing in
+    _load_raw() (e.g. a required non-numeric field), extend this
+    fixture rather than the synthetic-cache tests above.
+    """
+    rng = np.random.default_rng(seed)
+    rows = []
+    for cls in dl.ALL_CLASSES:
+        for _ in range(rows_per_class):
+            row = {f"feat_{i}": rng.normal() for i in range(n_numeric_features)}
+            row["Attack_type"] = cls
+            row["Attack_label"] = 0 if cls == "Normal" else 1
+            rows.append(row)
+    df = pd.DataFrame(rows).sample(frac=1, random_state=seed).reset_index(drop=True)
+    df.to_csv(csv_path, index=False)
+
+
+def test_real_smoke_run_test_holdout_never_opened_during_training(
+    tmp_path, monkeypatch, isolated_splits_dir
+):
+    """
+    DAT1 (Mati86 review): a REAL 1-round, 10-client main.py invocation,
+    not the synthetic-cache stand-in above, using runtime file-access
+    instrumentation (sys.addaudithook) to record every file main.py
+    opens and confirm the global TEST-holdout split artifact is opened
+    at most once, matching the static call-site check
+    (test_main_py_calls_test_holdout_exactly_once_after_round_loop)
+    against ACTUAL runtime behavior rather than just source shape.
+
+    Mechanism:
+      - EDGE_IIOT_CSV_PATH env var (see data_loader.py) points main.py
+        at a tiny synthetic CSV instead of the real ~1.2GB dataset.
+      - sys.argv is set for --rounds 1 so this runs in seconds.
+      - runpy.run_path executes the REAL main.py source, not a
+        reimplementation of it.
+      - sys.addaudithook records every "open"/"os.open" event for the
+        lifetime of that run.
+
+    Known scope limitation (documented rather than hidden): main.py
+    uses ProcessPoolExecutor for USE_DP=False runs. sys.addaudithook
+    only auto-propagates to worker processes that are FORKED (the
+    default multiprocessing start method on Linux); it would NOT
+    propagate under a spawn-based start method (e.g. default Windows/
+    macOS). This test's guarantee is therefore scoped to fork-based
+    execution, matching this project's Linux CI. If the start method
+    ever changes to spawn, this test would need per-process
+    instrumentation instead (e.g. a sitecustomize.py injected into
+    worker processes) to keep the same guarantee.
+    """
+    import runpy
+
+    csv_path = tmp_path / "tiny_edge_iiot.csv"
+    _write_synthetic_edge_iiot_csv(csv_path)
+    monkeypatch.setenv("EDGE_IIOT_CSV_PATH", str(csv_path))
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main.py", "--model-type", "network", "--seed", "42", "--rounds", "1"],
+    )
+
+    opened_paths = []
+
+    def _audit_hook(event, args):
+        if event in ("open", "os.open"):
+            opened_paths.append(str(args[0]))
+
+    sys.addaudithook(_audit_hook)
+
+    runpy.run_path(MAIN_PY_PATH, run_name="__main__")
+
+    test_npz_name = f"TVT_global_network_42.npz"
+    test_npz_opens = [p for p in opened_paths if os.path.basename(p) == test_npz_name]
+    # Loaded at most once: either "not yet built" (0 opens, if this is
+    # the very first build and it's written rather than opened-then-
+    # read) or "built once and read back for the final holdout eval"
+    # (1 open). More than 1 means it was opened again somewhere during
+    # client partitioning, which is the exact leak this test exists to
+    # catch.
+    assert len(test_npz_opens) <= 1, (
+        f"TVT_global_network_42.npz was opened {len(test_npz_opens)} "
+        f"times during a real 1-round/10-client run -- expected at "
+        f"most once (the single final-evaluation read). Extra opens "
+        f"indicate the TEST holdout is being touched somewhere during "
+        f"client local-train steps."
+    )
+
+
 def test_test_holdout_matches_global_test_when_evaluated_separately(
     isolated_splits_dir
 ):
@@ -298,6 +413,39 @@ def test_hyperparams_config_exists_and_has_required_keys():
         )
 
 
+def test_fedprox_mu_is_validated_and_matches_main_py_defaults():
+    """
+    DAT1 (Mati86 review, item 5): fedprox_mu was previously a flat
+    UNVALIDATED 0.02 inherited from the pre-DAT1 pipeline. It is now
+    per-model_type, backed by the Issue 4/5 mu-sweep's VALIDATION-split
+    results (network argmax=0.005 @ val macro-F1 0.868; application
+    argmax=0 @ val macro-F1 0.806) -- NOT the global argmax of either
+    model considered alone, since no single mu is best for both. This
+    checks the config states real values (not the old placeholder) and
+    that they match what main.py actually hardcodes as its defaults,
+    so the two can never silently drift apart again.
+    """
+    with open(HYPERPARAMS_PATH) as f:
+        cfg = json.load(f)
+
+    mu_cfg = cfg["fedprox_mu"]
+    assert mu_cfg.get("network") == 0.005, (
+        f"hyperparams.json fedprox_mu.network={mu_cfg.get('network')!r}, "
+        f"expected 0.005 (VALIDATION-split argmax)."
+    )
+    assert mu_cfg.get("application") == 0.0, (
+        f"hyperparams.json fedprox_mu.application={mu_cfg.get('application')!r}, "
+        f"expected 0.0 (VALIDATION-split argmax)."
+    )
+    assert not mu_cfg["validated_on_split"].startswith(
+        "UNVALIDATED -- inherited from pre-DAT1 pipeline"
+    ), (
+        "fedprox_mu still carries the pre-DAT1 placeholder provenance "
+        "text -- it should now cite the actual VALIDATION-split "
+        "mu-sweep results."
+    )
+
+
 def test_main_and_task_actually_read_from_config():
     """
     Positive wiring check: confirms main.py/task.py actually call
@@ -315,12 +463,27 @@ def test_main_and_task_actually_read_from_config():
     assert "from config_loader import" in main_src, (
         "main.py does not import config_loader."
     )
-    for key in ("fedprox_mu", "dp_max_grad_norm", "adaptive_krum_k",
+    # fedprox_mu is deliberately NOT read via get_value(_HP_CONFIG, ...):
+    # it is sourced from a per-model_type hardcoded default (validated
+    # against the Issue 4/5 mu-sweep's VALIDATION-split results: network
+    # argmax=0.005, application argmax=0), overridable by --prox-mu on
+    # the CLI. hyperparams.json's fedprox_mu entry is now documentation
+    # of that same validated choice, not main.py's runtime source of
+    # truth -- so it is intentionally excluded from this loop and
+    # checked separately below instead of via get_value(...).
+    for key in ("dp_max_grad_norm", "adaptive_krum_k",
                "adaptive_krum_hybrid_assumed_f"):
         assert f'get_value(_HP_CONFIG, "{key}")' in main_src, (
             f"main.py does not call get_value(_HP_CONFIG, {key!r}) -- "
             f"this parameter does not appear to be config-driven."
         )
+
+    assert '"network": 0.005' in main_src and '"application": 0.0' in main_src, (
+        "main.py's per-model_type FedProx mu defaults do not match the "
+        "validated values (network=0.005, application=0.0) -- if this "
+        "mechanism moved or was renamed, update this check accordingly; "
+        "do not just delete it."
+    )
 
     assert "from config_loader import load_hyperparams_config" in task_src, (
         "task.py does not import config_loader."

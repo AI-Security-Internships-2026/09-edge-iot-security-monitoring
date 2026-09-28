@@ -84,6 +84,43 @@ def test_tvt_split_determinism_across_fresh_builds(isolated_splits_dir):
     np.testing.assert_array_equal(test_idx_1, test_idx_2)
 
 
+def test_tvt_split_npz_byte_identical_across_fresh_builds(isolated_splits_dir):
+    """
+    DAT1 determinism requirement, literal form (Mati86 review comment):
+    the acceptance criterion asks for byte-identical .npz ARTIFACTS, not
+    just identical decoded index arrays (the test above). Builds fresh
+    under seed=42, reads the raw file bytes, deletes, rebuilds fresh
+    again under the same seed, and asserts the two files are
+    byte-for-byte identical -- this only holds because
+    _get_or_build_tvt_indices now saves via _deterministic_savez rather
+    than np.savez_compressed (which embeds a wall-clock timestamp per
+    zip member and would make this assertion fail even with identical
+    array content).
+    """
+    import hashlib
+
+    y = _synthetic_labels(seed=1)
+    seed = 42
+
+    dl._get_or_build_tvt_indices("synthtest", y, seed)
+    paths = dl._tvt_split_paths("synthtest", seed)
+    with open(paths["npz"], "rb") as f:
+        bytes_1 = f.read()
+
+    os.remove(paths["npz"])
+    os.remove(paths["hash"])
+
+    dl._get_or_build_tvt_indices("synthtest", y, seed)
+    with open(paths["npz"], "rb") as f:
+        bytes_2 = f.read()
+
+    assert hashlib.sha256(bytes_1).hexdigest() == hashlib.sha256(bytes_2).hexdigest(), (
+        "Two fresh builds of the same seed produced non-byte-identical "
+        ".npz files -- check for embedded timestamps or non-deterministic "
+        "member ordering in the save path."
+    )
+
+
 def test_scaler_determinism_across_fresh_fits(isolated_splits_dir):
     """
     DAT1 determinism requirement (scaler half): fitting fresh twice on
@@ -216,4 +253,48 @@ def test_grep_audit_fit_transform_only_inside_scaler_helper():
             f"something other than an isolated TRAIN-only call site). Move "
             f"this call inside _fit_or_load_scalers or justify explicitly "
             f"why it's safe."
+        )
+
+
+def test_grep_audit_fit_transform_repo_wide():
+    """
+    DAT1 grep audit requirement, repository-wide form (Mati86 review
+    comment): the acceptance criterion says
+    'grep -n ".fit_transform(" experiments/Current model/*.py' -- i.e.
+    every .py file in the directory, not only data_loader.py. The test
+    above already confirms data_loader.py's own .fit_transform( calls
+    are correctly isolated inside _fit_or_load_scalers(); this test
+    confirms no OTHER .py file in the same directory (main.py, task.py,
+    config_loader.py, etc.) calls .fit_transform( at all -- if one ever
+    does, it must be reviewed the same way, not silently missed because
+    only data_loader.py was ever scanned.
+    """
+    dir_path = os.path.dirname(dl.__file__)
+    # Only the actual pipeline/entry-point code is in scope here -- test
+    # files legitimately mention ".fit_transform(" in prose/docstrings
+    # when describing what THIS audit covers (see this file's own
+    # docstring, and test_dat1_smoke_run.py's), which would otherwise be
+    # a false positive of exactly the kind the config-wiring test above
+    # already documents avoiding for a different literal.
+    py_files = sorted(
+        f for f in os.listdir(dir_path)
+        if f.endswith(".py") and not f.startswith("test_")
+    )
+    assert "data_loader.py" in py_files, (
+        "Sanity check on the file listing itself -- data_loader.py "
+        "should always be found next to itself."
+    )
+
+    for fname in py_files:
+        if fname == "data_loader.py":
+            continue  # covered by test_grep_audit_fit_transform_only_inside_scaler_helper
+        with open(os.path.join(dir_path, fname), encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        hits = [(i + 1, l.strip()) for i, l in enumerate(lines) if ".fit_transform(" in l]
+        assert not hits, (
+            f"{fname} contains .fit_transform( call(s) outside "
+            f"data_loader.py: {hits} -- every fit_transform in the "
+            f"repository must trace to TRAIN-only data lineage inside "
+            f"_fit_or_load_scalers(); this one was not audited by the "
+            f"data_loader.py-only test."
         )

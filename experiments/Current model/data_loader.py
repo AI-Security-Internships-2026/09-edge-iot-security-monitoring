@@ -9,9 +9,18 @@ from sklearn.feature_selection import VarianceThreshold
 from sklearn.model_selection import train_test_split
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATASET_PATH = os.path.join(
-    BASE_DIR, "datasets", "Edge-IIoTset dataset",
-    "Selected dataset for ML and DL", "DNN-EdgeIIoT-dataset.csv"
+# DAT1 (Mati86 review, real-smoke-run item): allow the real dataset CSV
+# path to be overridden via env var. Default is UNCHANGED from before --
+# this only matters when EDGE_IIOT_CSV_PATH is explicitly set, which lets
+# a real 1-round/10-client main.py smoke run point at a small synthetic
+# stand-in CSV instead of the ~1.2GB real dataset, without needing any
+# other code change or import-time monkeypatch.
+DATASET_PATH = os.environ.get(
+    "EDGE_IIOT_CSV_PATH",
+    os.path.join(
+        BASE_DIR, "datasets", "Edge-IIoTset dataset",
+        "Selected dataset for ML and DL", "DNN-EdgeIIoT-dataset.csv"
+    ),
 )
 CACHE_PATH = os.path.join(
     BASE_DIR, "datasets", "dnn_preprocessed_cache.npz"
@@ -369,6 +378,36 @@ def _build_application_features(df: pd.DataFrame) -> np.ndarray:
     return combined.values.astype(float)
 
 
+def _deterministic_savez(path, **arrays):
+    """
+    DAT1 (Mati86 review, byte-identical-.npz item): np.savez_compressed
+    writes each array into a zip container via zipfile, which stamps
+    every member with the CURRENT WALL-CLOCK TIME unless told otherwise
+    -- meaning two independent builds of the exact same indices would
+    never produce byte-identical FILES (only byte-identical decoded
+    arrays), even though the determinism requirement asks for the
+    former. This writes the same zip member layout np.savez_compressed
+    would, but with a fixed per-member timestamp and a sorted, stable
+    member order, so repeated builds of identical input arrays are
+    byte-identical at the file level, not just at the decoded-array
+    level. np.load() reads the result exactly as it would any other
+    .npz -- nothing downstream changes.
+    """
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, arr in sorted(arrays.items()):
+            member_buf = io.BytesIO()
+            np.save(member_buf, arr, allow_pickle=False)
+            info = zipfile.ZipInfo(f"{name}.npy", date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, member_buf.getvalue())
+    with open(path, "wb") as f:
+        f.write(buf.getvalue())
+
+
 def _tvt_split_paths(model_type, seed):
     base = os.path.join(SPLITS_DIR, f"TVT_global_{model_type}_{seed}")
     return {"npz": base + ".npz", "hash": base + ".sha256"}
@@ -443,7 +482,7 @@ def _get_or_build_tvt_indices(model_type, y_filtered, seed):
 
     train_idx, val_idx, test_idx = np.sort(train_idx), np.sort(val_idx), np.sort(test_idx)
 
-    np.savez_compressed(paths["npz"], train_idx=train_idx, val_idx=val_idx, test_idx=test_idx)
+    _deterministic_savez(paths["npz"], train_idx=train_idx, val_idx=val_idx, test_idx=test_idx)
     test_hash = hashlib.sha256(test_idx.tobytes()).hexdigest()
     with open(paths["hash"], "w") as f:
         f.write(test_hash)

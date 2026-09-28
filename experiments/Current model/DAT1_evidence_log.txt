@@ -1,0 +1,34 @@
+=== grep -n ".fit_transform(" main.py data_loader.py task.py config_loader.py ===
+data_loader.py:517:        X_vt = vt.fit_transform(X_train_raw)
+
+=== manual test-execution harness (real pytest not installable offline -- see harness docstring) ===
+  TVT split BUILT (synthtest, seed=42): 979 train / 122 val / 123 test  [hash: eb7aacba4023...]
+  TVT split BUILT (synthtest, seed=42): 979 train / 122 val / 123 test  [hash: eb7aacba4023...]
+  TVT split BUILT (synthtest, seed=42): 979 train / 122 val / 123 test  [hash: eb7aacba4023...]
+  TVT split BUILT (synthtest, seed=42): 979 train / 122 val / 123 test  [hash: eb7aacba4023...]
+  Scalers FIT on TRAIN rows only (network, seed=123), pickled to scalers_network_123.pkl.
+  Scalers FIT on TRAIN rows only (network, seed=123), pickled to scalers_network_123.pkl.
+  TVT split BUILT (synthtest, seed=7): 813 train / 102 val / 102 test  [hash: 0734990a1194...]
+  TVT split BUILT (synthtest, seed=2024): 1,234 train / 154 val / 155 test  [hash: dda5ac619423...]
+  Scalers FIT on TRAIN rows only (network, seed=2024), pickled to scalers_network_2024.pkl.
+  Scalers FIT on TRAIN rows only (network, seed=2024), pickled to scalers_network_2024.pkl.
+==============================================================================
+PASSED  test_data_pipeline_dat1.test_tvt_split_determinism_across_fresh_builds
+PASSED  test_data_pipeline_dat1.test_tvt_split_npz_byte_identical_across_fresh_builds
+PASSED  test_data_pipeline_dat1.test_scaler_determinism_across_fresh_fits
+PASSED  test_data_pipeline_dat1.test_tvt_hash_check_catches_corruption
+PASSED  test_data_pipeline_dat1.test_scaler_unaffected_by_test_only_outlier
+PASSED  test_data_pipeline_dat1.test_grep_audit_fit_transform_only_inside_scaler_helper
+PASSED  test_data_pipeline_dat1.test_grep_audit_fit_transform_repo_wide
+PASSED  test_dat1_smoke_run.test_test_holdout_never_touched_during_client_partitioning
+PASSED  test_dat1_smoke_run.test_test_holdout_matches_global_test_when_evaluated_separately
+PASSED  test_dat1_smoke_run.test_main_py_calls_test_holdout_exactly_once_after_round_loop
+PASSED  test_dat1_smoke_run.test_final_test_csv_is_distinct_from_progress_log_csv
+PASSED  test_dat1_smoke_run.test_hyperparams_config_exists_and_has_required_keys
+PASSED  test_dat1_smoke_run.test_fedprox_mu_is_validated_and_matches_main_py_defaults
+PASSED  test_dat1_smoke_run.test_main_and_task_actually_read_from_config
+PASSED  test_dat1_smoke_run.test_config_loader_rejects_missing_required_keys
+FAILED  test_dat1_smoke_run.test_real_smoke_run_test_holdout_never_opened_during_training
+        -> ModuleNotFoundError: No module named 'torch'
+==============================================================================
+15 passed, 1 failed out of 16

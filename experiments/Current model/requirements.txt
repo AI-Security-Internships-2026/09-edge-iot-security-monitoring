@@ -31,6 +31,13 @@
 
 torch==2.13.0
 opacus==1.6.0
+pyarrow==17.0.0  # Issue 5 E7 -- required by ciciot2023_loader.py to stream the
+                 # cleaned CICIoT2023 Parquet file (pq.ParquetFile row-group
+                 # reads). Not previously needed since Edge-IIoTset uses CSV
+                 # via pandas alone. Version not pinned from a real pip freeze
+                 # (this dependency didn't exist yet at that freeze) -- a
+                 # recent 1.x/2.x release compatible with pandas==3.0.3 should
+                 # work; confirm and correct this pin after installing.
 tenseal==0.3.16
 pandas==3.0.3
 scikit-learn==1.9.0

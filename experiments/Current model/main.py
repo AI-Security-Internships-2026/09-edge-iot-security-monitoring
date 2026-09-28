@@ -342,7 +342,7 @@ _parser.add_argument("--ablation-mode", type=str, default=None,
                       choices=["pure_dp", "pure_he", "pure_norm_guard",
                                "krum_dp_sweep", "exp2_unmitigated",
                                "exp2_mitigated", "baseline", "krum_baseline",
-                               "calibrated_krum_dp_sweep"],
+                               "calibrated_krum_dp_sweep", "fedavg_attack"],
                       help="Override the hardcoded ABLATION_MODE below via CLI. "
                            "calibrated_krum_dp_sweep (Issue 4 follow-up fix): "
                            "mirrors krum_dp_sweep's shape (USE_DP=True, "
@@ -594,6 +594,18 @@ elif ABLATION_MODE == "baseline":
     USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_NORM_GUARD = False
     USE_DP = False
     USE_BYZANTINE_ATTACK = False
+    BYZANTINE_HEAD_ONLY = False
+    AGGREGATOR = _args.aggregator if _args.aggregator is not None else "fedavg"
+
+elif ABLATION_MODE == "fedavg_attack":
+    # E7 (Issue 5): undefended FedAvg baseline UNDER Byzantine attack --
+    # mirrors "baseline" exactly but with the attack switched ON, and
+    # mirrors "krum_baseline"'s attack-on shape but WITHOUT Adaptive
+    # Krum -- no existing mode gave plain FedAvg + attack + no DP/
+    # Krum/HE, which E7's method x attack matrix requires.
+    USE_KRUM = USE_ADAPTIVE_KRUM = USE_HE = USE_HE_KRUM_HYBRID = USE_NORM_GUARD = False
+    USE_DP = False
+    USE_BYZANTINE_ATTACK = True
     BYZANTINE_HEAD_ONLY = False
     AGGREGATOR = _args.aggregator if _args.aggregator is not None else "fedavg"
 

@@ -2,8 +2,9 @@
   "_comment": "DAT1 Task 2. Every scalar tunable below carries a validated_on_split field stating which split (if any) actually justifies its value -- see docs/SPLIT_PROTOCOL.md. Values marked UNVALIDATED are literals inherited unchanged from the pre-DAT1 pipeline and must be re-derived against VALIDATION before being cited in the paper as deliberately tuned, per SPLIT_PROTOCOL.md's per-parameter provenance table.",
 
   "fedprox_mu": {
-    "value": 0.02,
-    "validated_on_split": "UNVALIDATED -- inherited from pre-DAT1 pipeline; pending the Issue 4/5 mu-sweep against VALIDATION (see fedprox_mu_sweep_default below)."
+    "network": 0.005,
+    "application": 0.0,
+    "validated_on_split": "VALIDATION-split mu-sweep (mu in {0, 0.005, 0.02, 0.05, 0.1}, task4_federated, 5 seeds x 2 modalities): network argmax=0.005 (val macro-F1 0.868 vs 0.845 at the old flat 0.02); application argmax=0 (val macro-F1 0.806 vs 0.743 at 0.02). No single mu is optimal for both modalities simultaneously, so this is now per-model_type rather than a flat scalar -- main.py's _PROX_MU_HARDCODED_DEFAULTS reads these two values directly (not via get_value(_HP_CONFIG, 'fedprox_mu')); --prox-mu on the CLI still overrides both, e.g. for the mu-sweep experiment itself."
   },
 
   "dp_max_grad_norm": {

@@ -85,11 +85,20 @@ def load_hyperparams_config(path=None):
 def get_value(cfg, key):
     """
     Extracts the scalar 'value' field of a provenance-wrapped tunable,
-    e.g. cfg['fedprox_mu'] == {"value": 0.02, "validated_on_split": "..."}
-    -> get_value(cfg, 'fedprox_mu') == 0.02.
+    e.g. cfg['dp_max_grad_norm'] == {"value": 1.5, "validated_on_split": "..."}
+    -> get_value(cfg, 'dp_max_grad_norm') == 1.5.
 
-    Only meaningful for keys in PROVENANCE_REQUIRED_KEYS; sweep-array
-    and class-weight-multiplier keys are read directly from cfg[key]
-    by their own call sites instead, since they aren't single scalars.
+    NOTE: fedprox_mu is NOT one of these -- it is per-model_type
+    ({"network": 0.005, "application": 0.0, "validated_on_split": "..."}),
+    validated separately for each modality since no single mu was
+    VALIDATION-optimal for both. main.py reads it directly via
+    _PROX_MU_HARDCODED_DEFAULTS[MODEL_TYPE], not via get_value(), so
+    calling get_value(cfg, 'fedprox_mu') will raise KeyError -- that is
+    expected, not a bug.
+
+    Only meaningful for keys in PROVENANCE_REQUIRED_KEYS that use the
+    flat {"value": ...} shape; sweep-array and class-weight-multiplier
+    keys are read directly from cfg[key] by their own call sites
+    instead, since they aren't single scalars.
     """
     return cfg[key]["value"]
