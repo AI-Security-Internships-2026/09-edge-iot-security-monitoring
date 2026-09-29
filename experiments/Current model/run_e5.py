@@ -254,6 +254,13 @@ def cmd_run(cfg, path, args):
         print("NOTE: minmax_gamma_init is null -> main.py auto-picks 5x coalition spread; "
               "record the value you froze if you tuned it (check_attack_difficulty.py).")
     cells = classify(cfg)
+    if args.shard:
+        si, sn = (int(x) for x in args.shard.split("/"))
+        assert 0 <= si < sn, "--shard must be i/n with 0 <= i < n"
+        # shard on the position in the FULL, stable cell list (not on the todo list) so that
+        # sessions started at different times never overlap or skip cells
+        cells = [c for i, c in enumerate(cells) if i % sn == si]
+        print(f"[shard {si}/{sn}] owns {len(cells)} cells")
     todo = [c for c in cells if c["action"] in ("NEW_RUN", "RERUN")]
     print(f"{len(todo)} runs to launch, {len(cells)-len(todo)} reused.")
     if args.dry_run:
@@ -265,7 +272,10 @@ def cmd_run(cfg, path, args):
         for f in futs:
             tag, seed, rc = f.result()
             print(f"  {'OK ' if rc == 0 else 'FAIL'} {tag} seed{seed} rc={rc}")
-    cmd_plan(cfg, path)   # re-audit so cells[] reflects what actually validated
+    if args.shard:
+        print("Shard finished. Run `python scripts/run_e5.py plan` once ALL shards are done to re-audit.")
+    else:
+        cmd_plan(cfg, path)   # re-audit so cells[] reflects what actually validated
 
 # ----------------------------------------------------------------- summarize
 def detection(rows):
@@ -415,6 +425,7 @@ def main():
     ap.add_argument("--config", default=CFG_PATH_DEFAULT)
     ap.add_argument("--parallel", type=int, default=1)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--shard", default=None, help="i/n: run only cells with index %% n == i (0-based)")
     ap.add_argument("--allow-unfrozen", action="store_true")
     a = ap.parse_args()
     cfg = load_cfg(a.config)
