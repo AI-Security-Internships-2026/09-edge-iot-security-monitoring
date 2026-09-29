@@ -1590,6 +1590,7 @@ def main():
             "git_error": _git_provenance["git_error"],
             "split_hash": None,  # backfilled after holdouts load -- see below
             "ablation_mode": ABLATION_MODE,
+            "seed": _args.seed,  # E5/Task 6 traceability: seed was previously only in the filename
             # Issue 5 Task 4: single canonical aggregator slug -- see
             # _resolve_aggregator_canonical()'s docstring above for why
             # this was missing before and what precedence it mirrors.
