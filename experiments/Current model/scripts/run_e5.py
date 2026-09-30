@@ -41,15 +41,16 @@ def unique_cells(cfg):
             c["roles"].append(role)
     for seed in cfg["seeds"]:
         for agg in cfg["aggregators"]:
-            for f in cfg["f_sweep"]:
+            for f in (cfg["f_sweep"] if "E5a" in cfg.get("sweeps", ["E5a", "E5b"]) else [df]):
                 add(agg, f, dk, seed, "E5a")
-            for k in cfg["k_sweep"]:
-                add(agg, df, k, seed, "E5b")
+            if "E5b" in cfg.get("sweeps", ["E5a", "E5b"]):
+                for k in cfg["k_sweep"]:
+                    add(agg, df, k, seed, "E5b")
     out = []
     for c in cells.values():
         c["tag"] = f"E5_f{c['f']}_k{fmt_k(c['k'])}_{c['aggregator']}"
         out.append(c)
-    return sorted(out, key=lambda c: (c["seed"], c["aggregator"], c["f"], c["k"]))
+    return sorted(out, key=lambda c: (c["seed"], c["f"], c["k"], c["aggregator"]))
 
 def mode_for(cond, agg):
     if cond["dp"]:
@@ -241,6 +242,31 @@ def run_one(cfg, cell, main_py):
         shutil.move(p, dest / os.path.basename(p))
     return cell["tag"], cell["seed"], rc
 
+def cmd_adopt(cfg, path, manifest_path):
+    """Copy the frozen condition from an existing E6 manifest (same alpha/eps/attack/tau) into the E5 config."""
+    m = json.load(open(manifest_path)); c = cfg["condition"]; aa = c.setdefault("attack_args", {})
+    for mk, ck in (("alpha_dirichlet", "alpha"), ("dp_full_run_target_epsilon", "epsilon"),
+                   ("attack_type", "attack_type"), ("num_rounds", "rounds"),
+                   ("dataset", "dataset"), ("model_type", "model_type")):
+        if m.get(mk) is not None: c[ck] = m[mk]
+    c["dp"] = bool(m.get("use_dp"))
+    got = {}
+    for mk, ak in (("bounded_tau_override", "bounded_tau"), ("bounded_margin", "bounded_margin"),
+                   ("bounded_direction", "bounded_direction")):
+        if m.get(mk) is not None: aa[ak] = m[mk]; got[ak] = m[mk]
+    if m.get("adaptive_krum_k") is not None: cfg["default_k"] = m["adaptive_krum_k"]
+    if m.get("num_byzantine"): cfg["default_f"] = m["num_byzantine"]
+    print("adopted: alpha=%s eps=%s attack=%s rounds=%s default_k=%s default_f=%s attack_args=%s" % (
+        c.get("alpha"), c.get("epsilon"), c.get("attack_type"), c.get("rounds"), cfg["default_k"], cfg["default_f"], aa))
+    print("manifest hetero path (for your info, set hetero_fit_coeffs_json yourself):", m.get("hetero_fit_coeffs_json_path"))
+    missing = [k for k in ("bounded_tau", "bounded_margin", "bounded_direction") if k not in got]
+    if missing:
+        print("WARNING: manifest lacks", missing, "- set them by hand; frozen stays false.")
+    else:
+        cfg["frozen"] = True
+        cfg["frozen_note"] = f"Inherited from frozen E6 condition ({os.path.basename(manifest_path)}); no TEST metric used to choose it."
+    json.dump(cfg, open(path, "w"), indent=2)
+
 def cmd_run(cfg, path, args):
     if not cfg.get("frozen") and not args.allow_unfrozen:
         sys.exit("REFUSING TO RUN: config 'frozen' is false. Freeze attack/condition on VALIDATION first "
@@ -278,6 +304,9 @@ def cmd_run(cfg, path, args):
         cmd_plan(cfg, path)   # re-audit so cells[] reflects what actually validated
 
 # ----------------------------------------------------------------- summarize
+def det_counts(rows):
+    return tuple(sum(r["classification"] == t for r in rows) for t in ("TP", "FN", "FP", "TN"))
+
 def detection(rows):
     tp = sum(r["classification"] == "TP" for r in rows); fn = sum(r["classification"] == "FN" for r in rows)
     fp = sum(r["classification"] == "FP" for r in rows); tn = sum(r["classification"] == "TN" for r in rows)
@@ -303,7 +332,9 @@ def cmd_summarize(cfg, args):
         tpr, fpr = detection(info["per_client_rows"])
         t = info["test_row"]
         rc_a, rc_r = rare_cols(t, "test_aucpr_"), rare_cols(t, "test_recall_")
+        tp_, fn_, fp_, tn_ = det_counts(info["per_client_rows"])
         recs.append(dict(
+            tp=tp_, fn=fn_, fp=fp_, tn=tn_,
             aggregator=c["aggregator"], f=c["f"], k=c["k"], seed=c["seed"], roles="+".join(c["roles"]),
             byz_tpr=tpr, honest_fpr=fpr, macro_f1=float(t["test_f1_macro"]),
             rare_aucpr=mean_finite([t[x] for x in rc_a]), rare_recall=mean_finite([t[x] for x in rc_r]),
@@ -322,9 +353,10 @@ def cmd_summarize(cfg, args):
         if n < 2: return float("nan")
         return float(stats.t.ppf(0.975, n - 1) * x.std(ddof=1) / math.sqrt(n))
     tables, tests = [], []
-    for sweep, var, vals, fixed_key, fixed_val in (
+    _sw = cfg.get("sweeps", ["E5a", "E5b"])
+    for sweep, var, vals, fixed_key, fixed_val in [t for t in (
             ("E5a", "f", cfg["f_sweep"], "k", cfg["default_k"]),
-            ("E5b", "k", cfg["k_sweep"], "f", cfg["default_f"])):
+            ("E5b", "k", cfg["k_sweep"], "f", cfg["default_f"])) if t[0] in _sw]:
         for v in vals:
             sel = {a: sorted([r for r in recs if r["aggregator"] == a and r[var] == v and r[fixed_key] == fixed_val],
                              key=lambda r: r["seed"]) for a in cfg["aggregators"]}
@@ -381,6 +413,7 @@ def cmd_summarize(cfg, args):
 
 
 def write_param_sensitivity(cfg, recs, ci95):
+    from scipy import stats
     """Issue #23 Task 5 Table A (MAD-k) and Table B (Byzantine f), 5-seed mean +/- 95% CI, with seed counts."""
     import numpy as np
     d = Path(cfg.get("param_sensitivity_dir", "experiments/results/param_sensitivity")); d.mkdir(parents=True, exist_ok=True)
@@ -391,17 +424,33 @@ def write_param_sensitivity(cfg, recs, ci95):
     def ms(vals):
         v = [x for x in vals if _fin(x)]
         return (float(np.mean(v)) if v else float("nan"), ci95(v) if len(v) > 1 else float("nan"), len(v))
+    def cp(x, n):
+        if n == 0: return (float("nan"), float("nan"))
+        lo = 0.0 if x == 0 else float(stats.beta.ppf(0.025, x, n - x + 1))
+        hi = 1.0 if x == n else float(stats.beta.ppf(0.975, x + 1, n - x))
+        return lo, hi
+    def pooled(src, seeds, num, den_extra):
+        x = sum(src[i][num] for i in seeds); n = x + sum(src[i][den_extra] for i in seeds)
+        return x, n, cp(x, n)
+    def per_seed(src, seeds, num, oth):
+        return ";".join(f"{i}:{src[i][num]}/{src[i][num]+src[i][oth]}" for i in seeds)
     rowsA, rowsB = [], []
-    for k in cfg["k_sweep"]:
+    for k in (cfg["k_sweep"] if "E5b" in cfg.get("sweeps", ["E5a", "E5b"]) else []):
         a, b = pick(A, {r["seed"] for r in recs}, f=cfg["default_f"], k=k), pick(B, {r["seed"] for r in recs}, f=cfg["default_f"], k=k)
         s_ = sorted(set(a) & set(b))
         cf, pf = ms([a[i]["honest_fpr"] for i in s_]), ms([b[i]["honest_fpr"] for i in s_])
         dl = ms([b[i]["honest_fpr"] - a[i]["honest_fpr"] for i in s_])   # positive = Calibrated better
         rowsA.append({"k": k, "n_paired_seeds": len(s_), "calibrated_honest_fpr_mean": cf[0], "calibrated_honest_fpr_ci95": cf[1],
                       "plain_adaptive_honest_fpr_mean": pf[0], "plain_adaptive_honest_fpr_ci95": pf[1],
-                      "delta_fpr_mean": dl[0], "delta_fpr_ci95": dl[1],
+                      "delta_fpr_mean": dl[0], "delta_fpr_ci95_t_DO_NOT_USE_small_n": dl[1],
+                      "calibrated_fp_pooled": "%d/%d" % pooled(a, s_, "fp", "tn")[:2],
+                      "calibrated_fpr_pooled_CP95": "%.4f-%.4f" % pooled(a, s_, "fp", "tn")[2],
+                      "plain_fp_pooled": "%d/%d" % pooled(b, s_, "fp", "tn")[:2],
+                      "plain_fpr_pooled_CP95": "%.4f-%.4f" % pooled(b, s_, "fp", "tn")[2],
+                      "calibrated_fp_per_seed": per_seed(a, s_, "fp", "tn"),
+                      "plain_fp_per_seed": per_seed(b, s_, "fp", "tn"),
                       "delta_fpr_ge_0": bool(dl[0] >= 0) if dl[2] else None})
-    for f in cfg["f_sweep"]:
+    for f in (cfg["f_sweep"] if "E5a" in cfg.get("sweeps", ["E5a", "E5b"]) else []):
         a, b = pick(A, {r["seed"] for r in recs}, f=f, k=cfg["default_k"]), pick(B, {r["seed"] for r in recs}, f=f, k=cfg["default_k"])
         s_ = sorted(set(a) & set(b))
         r_ = {}
@@ -410,10 +459,19 @@ def write_param_sensitivity(cfg, recs, ci95):
             mu, ci, n = ms([src[i][m] for i in s_]); r_[nm + "_mean"], r_[nm + "_ci95"] = mu, ci
         gap = r_["plain_adaptive_byz_tpr_mean"] - r_["calibrated_byz_tpr_mean"]
         rowsB.append({"f": f, "n_paired_seeds": len(s_), **r_,
+                      "calibrated_fp_pooled": "%d/%d" % pooled(a, s_, "fp", "tn")[:2],
+                      "calibrated_fpr_pooled_CP95": "%.4f-%.4f" % pooled(a, s_, "fp", "tn")[2],
+                      "plain_fp_pooled": "%d/%d" % pooled(b, s_, "fp", "tn")[:2],
+                      "plain_fpr_pooled_CP95": "%.4f-%.4f" % pooled(b, s_, "fp", "tn")[2],
+                      "calibrated_tp_pooled": "%d/%d" % pooled(a, s_, "tp", "fn")[:2],
+                      "plain_tp_pooled": "%d/%d" % pooled(b, s_, "tp", "fn")[:2],
+                      "calibrated_fp_per_seed": per_seed(a, s_, "fp", "tn"),
+                      "plain_fp_per_seed": per_seed(b, s_, "fp", "tn"),
                       "honest_fpr_dominance": bool(r_["calibrated_honest_fpr_mean"] < r_["plain_adaptive_honest_fpr_mean"]) if s_ else None,
                       "tpr_gap_pp_plain_minus_cal": 100 * gap,
                       "tpr_within_5pp": bool(abs(gap) <= 0.05) if (s_ and f in (1, 2)) else None})
     for name, rows in (("table_A_mad_k.csv", rowsA), ("table_B_byzantine_f.csv", rowsB)):
+        if not rows: continue
         with open(d / name, "w", newline="") as fh:
             w = csv.DictWriter(fh, list(rows[0].keys())); w.writeheader(); w.writerows(rows)
     print(f"Wrote {d}/table_A_mad_k.csv, table_B_byzantine_f.csv. "
@@ -421,7 +479,8 @@ def write_param_sensitivity(cfg, recs, ci95):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["plan", "run", "summarize"])
+    ap.add_argument("action", choices=["plan", "run", "summarize", "adopt"])
+    ap.add_argument("--manifest", default=None, help="adopt: E6 experiment_config_*.json to copy the frozen condition from")
     ap.add_argument("--config", default=CFG_PATH_DEFAULT)
     ap.add_argument("--parallel", type=int, default=1)
     ap.add_argument("--dry-run", action="store_true")
@@ -430,7 +489,8 @@ def main():
     a = ap.parse_args()
     cfg = load_cfg(a.config)
     {"plan": lambda: cmd_plan(cfg, a.config), "run": lambda: cmd_run(cfg, a.config, a),
-     "summarize": lambda: cmd_summarize(cfg, a)}[a.action]()
+     "summarize": lambda: cmd_summarize(cfg, a),
+     "adopt": lambda: cmd_adopt(cfg, a.config, a.manifest)}[a.action]()
 
 if __name__ == "__main__":
     main()

@@ -1,9 +1,9 @@
 {
   "_comment": "E5 (Issue 5, Task 3): E5a Byzantine-fraction sweep + E5b MAD-k sweep, Adaptive vs Calibrated Krum. Edit 'condition' ONCE, verify it on VALIDATION only, then set frozen=true. `scripts/run_e5.py plan` refuses to launch NEW_RUN/RERUN cells while frozen=false. `plan` rewrites only the 'cells' array below; every other key is yours. Stress condition per Issue #23 Task 5.",
-  "frozen": false,
-  "frozen_note": "Set to true only after the attack parameters below were chosen from a VALIDATION-only/pilot run (never final TEST TPR).",
+  "frozen": true,
+  "frozen_note": "E6 artefacts not available on this VM, so nothing is reused. tau=2.111776 / margin=0.05 are the values recorded in the E6 write-up (frozen before any TEST). Direction classifier_head_negate was chosen here because E6's direction could not be verified -- CONFIRM against E6 before comparing E5 with E6.",
   "main_py": "main.py",
-  "results_root": "experiments/results/E5",
+  "results_root": "../results/E5",
   "scan_dirs": [],
   "condition": {
     "dataset": "edge_iiotset",
@@ -13,9 +13,9 @@
     "epsilon": 5.0,
     "attack_type": "bounded_directional",
     "attack_args": {
-      "bounded_tau": null,
+      "bounded_tau": 2.111776,
       "bounded_margin": 0.05,
-      "bounded_direction": "negate"
+      "bounded_direction": "classifier_head_negate"
     },
     "rounds": 25,
     "hetero_fit_coeffs_json": "hetero_fit_coeffs.json",
@@ -33,7 +33,7 @@
     "calibrated_krum"
   ],
   "default_f": 2,
-  "default_k": 2.5,
+  "default_k": 3.5,
   "f_sweep": [
     1,
     2,
@@ -47,5 +47,11 @@
     4.0
   ],
   "cells": [],
-  "param_sensitivity_dir": "experiments/results/param_sensitivity"
+  "param_sensitivity_dir": "../results/param_sensitivity",
+  "sweeps": [
+    "E5a",
+    "E5b"
+  ],
+  "_sweeps_note": "Both sweeps. Cells are ordered seed-by-seed (42 first), so stop the job at the deadline: summarize uses completed seeds only.",
+  "_hetero_note": "Fit = E3-based hetero_fit_coeffs.json (25 no-DP adaptive runs, alpha in {0.1..10}, R2=0.49), NOT E6's a0.3 fit. Not comparable to E6 numbers."
 }
