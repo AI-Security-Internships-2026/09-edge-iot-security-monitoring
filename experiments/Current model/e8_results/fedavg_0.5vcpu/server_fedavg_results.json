@@ -1,0 +1,69 @@
+{
+  "mode": "fedavg",
+  "config": {
+    "num_real_clients": 2,
+    "synthetic_n_clients": 10,
+    "rounds": 3,
+    "num_byzantine": 2,
+    "k": 2.5,
+    "min_keep_fraction": 0.5,
+    "timed_repeats_per_round": 5,
+    "hetero_fit_json": null,
+    "he_poly_degree": null,
+    "real_cgroup_mem_limit_mb": 2048.0,
+    "real_cgroup_cpu_limit_cores": 0.5
+  },
+  "krum_timing": {
+    "per_round": [
+      {
+        "round": 1,
+        "fedavg_time_s": 0.00658,
+        "all_calls_s": [
+          0.00326,
+          0.02039,
+          0.00303,
+          0.00301,
+          0.00324
+        ],
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": null,
+        "num_dropped": null
+      },
+      {
+        "round": 2,
+        "fedavg_time_s": 0.00258,
+        "all_calls_s": [
+          0.00233,
+          0.00235,
+          0.00232,
+          0.0036,
+          0.00228
+        ],
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": null,
+        "num_dropped": null
+      },
+      {
+        "round": 3,
+        "fedavg_time_s": 0.00346,
+        "all_calls_s": [
+          0.00667,
+          0.00298,
+          0.00261,
+          0.00249,
+          0.00257
+        ],
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": null,
+        "num_dropped": null
+      }
+    ],
+    "ram_peak_mb": 45.0,
+    "ram_avg_mb": 42.5,
+    "cgroup_mem_peak_mb": 37.0,
+    "note": "Timing at n=10 clients (2 real + 8 jittered copies); NOT an accuracy/detection result."
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "mode": "dp_calibrated_krum",
+  "config": {
+    "num_real_clients": 2,
+    "synthetic_n_clients": 10,
+    "rounds": 3,
+    "num_byzantine": 2,
+    "k": 2.5,
+    "min_keep_fraction": 0.5,
+    "timed_repeats_per_round": 5,
+    "hetero_fit_json": "hetero_fit_coeffs.json",
+    "he_poly_degree": null,
+    "real_cgroup_mem_limit_mb": 2048.0,
+    "real_cgroup_cpu_limit_cores": 1.0
+  },
+  "krum_timing": {
+    "per_round": [
+      {
+        "round": 1,
+        "dp_calibrated_krum_time_s": 0.03766,
+        "all_calls_s": [
+          0.03611,
+          0.03966,
+          0.03448,
+          0.03883,
+          0.03925
+        ],
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": 10,
+        "num_dropped": 0
+      },
+      {
+        "round": 2,
+        "dp_calibrated_krum_time_s": 0.03767,
+        "all_calls_s": [
+          0.04257,
+          0.04439,
+          0.03551,
+          0.03122,
+          0.03466
+        ],
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": 10,
+        "num_dropped": 0
+      },
+      {
+        "round": 3,
+        "dp_calibrated_krum_time_s": 0.03049,
+        "all_calls_s": [
+          0.02813,
+          0.02836,
+          0.02852,
+          0.03442,
+          0.03302
+        ],
+        "n_clients_synthetic": 10,
+        "n_clients_real": 2,
+        "num_kept": 10,
+        "num_dropped": 0
+      }
+    ],
+    "ram_peak_mb": 58.3,
+    "ram_avg_mb": 45.7,
+    "cgroup_mem_peak_mb": 88.6,
+    "note": "Timing at n=10 clients (2 real + 8 jittered copies); NOT an accuracy/detection result."
+  }
+}

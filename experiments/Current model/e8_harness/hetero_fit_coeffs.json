@@ -1,0 +1,29 @@
+{
+  "intercept": 9.510037953287737,
+  "coef_n_samples_diff": 5.481370352405427e-05,
+  "coef_entropy_diff": 0.7721856464594606,
+  "r_squared": 0.49095213813055305,
+  "n_pairs_fit": 17500,
+  "fit_target": "log1p(abs(pairwise per-neighbour raw_krum_score diff))",
+  "schema_version": 2,
+  "fit_provenance": {
+    "source": "E3 adaptive_krum, no-DP, minmax f=2",
+    "alphas": [
+      0.1,
+      0.3,
+      0.7,
+      1.0,
+      10.0
+    ],
+    "seeds": [
+      42,
+      123,
+      456,
+      789,
+      2024
+    ],
+    "n_runs": 25,
+    "cohort_handling": "round_id prefixed with run tag so each run-round is its own honest cohort",
+    "note": "fit seeds overlap E3/E5 evaluation seeds; fit uses only training-time client scores (no TEST data)"
+  }
+}

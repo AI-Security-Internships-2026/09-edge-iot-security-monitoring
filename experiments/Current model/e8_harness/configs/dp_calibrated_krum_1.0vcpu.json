@@ -1,0 +1,17 @@
+{
+  "mode": "dp_calibrated_krum",
+  "num_features": 39,
+  "num_classes": 8,
+  "total_params": 79688,
+  "epochs_per_round": 2,
+  "rounds": 3,
+  "batch_size": 512,
+  "learning_rate": 0.001,
+  "train_rows": null,
+  "test_rows": null,
+  "alpha_dirichlet": 0.7,
+  "dp_epsilon_target": 5.0,
+  "dp_max_grad_norm": 1.5,
+  "real_cgroup_mem_limit_mb": 2048.0,
+  "real_cgroup_cpu_limit_cores": 1.0
+}
