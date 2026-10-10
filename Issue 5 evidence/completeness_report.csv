@@ -1,0 +1,524 @@
+cell_id,experiment,action,result_complete,provenance,git_dirty,problems,note
+E1/network_task4_fedavg_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedavg_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedavg_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedavg_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedavg_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.005_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.005_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.005_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.005_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.005_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.02_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.02_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.02_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.02_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.02_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.05_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.05_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.05_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.05_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.05_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.1_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.1_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.1_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.1_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_mu0.1_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_dpsafe_arch_no_dp_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_dpsafe_arch_no_dp_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_dpsafe_arch_no_dp_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_dpsafe_arch_no_dp_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_fedprox_dpsafe_arch_no_dp_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_cnnlstm_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_cnnlstm_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_cnnlstm_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_cnnlstm_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_cnnlstm_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_mlp_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_mlp_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_mlp_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_mlp_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_mlp_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_rf_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_rf_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_rf_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_rf_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_rf_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_xgboost_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_xgboost_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_xgboost_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_xgboost_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/network_task4_centralized_xgboost_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedavg_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedavg_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedavg_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedavg_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedavg_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.005_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.005_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.005_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.005_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.005_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.02_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.02_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.02_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.02_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.02_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.05_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.05_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.05_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.05_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.05_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.1_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.1_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.1_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.1_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_mu0.1_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_dpsafe_arch_no_dp_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_dpsafe_arch_no_dp_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_dpsafe_arch_no_dp_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_dpsafe_arch_no_dp_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_fedprox_dpsafe_arch_no_dp_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_cnnlstm_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_cnnlstm_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_cnnlstm_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_cnnlstm_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_cnnlstm_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_mlp_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_mlp_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_mlp_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_mlp_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_mlp_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_rf_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_rf_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_rf_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_rf_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_rf_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_xgboost_seed42,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_xgboost_seed123,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_xgboost_seed456,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_xgboost_seed789,E1,REUSE,True,NO_MANIFEST,,,
+E1/application_task4_centralized_xgboost_seed2024,E1,REUSE,True,NO_MANIFEST,,,
+E2/network_e2_fedavg_sign_flip_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_sign_flip_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_sign_flip_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_gaussian_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_gaussian_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_gaussian_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_minmax_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_minmax_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_minmax_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_minsum_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_minsum_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_minsum_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_bounded_directional_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_bounded_directional_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_fedavg_bounded_directional_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_sign_flip_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_sign_flip_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_sign_flip_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_gaussian_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_gaussian_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_gaussian_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_minmax_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_minmax_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_minmax_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_minsum_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_minsum_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_minsum_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_bounded_directional_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_bounded_directional_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_multi_krum_bounded_directional_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_sign_flip_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_sign_flip_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_sign_flip_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_gaussian_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_gaussian_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_gaussian_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_minmax_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_minmax_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_minmax_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_minsum_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_minsum_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_minsum_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_bounded_directional_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_bounded_directional_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_median_bounded_directional_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_sign_flip_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_sign_flip_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_sign_flip_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_gaussian_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_gaussian_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_gaussian_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_minmax_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_minmax_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_minmax_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_minsum_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_minsum_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_minsum_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_bounded_directional_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_bounded_directional_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_trimmed_mean_bounded_directional_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_sign_flip_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_sign_flip_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_sign_flip_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_gaussian_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_gaussian_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_gaussian_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_minmax_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_minmax_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_minmax_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_minsum_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_minsum_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_minsum_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_bounded_directional_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_bounded_directional_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_adaptive_krum_bounded_directional_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_sign_flip_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_sign_flip_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_sign_flip_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_gaussian_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_gaussian_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_gaussian_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_minmax_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_minmax_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_minmax_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_minsum_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_minsum_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_minsum_seed456,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_bounded_directional_seed42,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_bounded_directional_seed123,E2,REUSE,True,COMPLETE,True,,
+E2/network_e2_calibrated_krum_bounded_directional_seed456,E2,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a10_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a10_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a10_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a10_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a10_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a1_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a1_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a1_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a1_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a1_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.7_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.7_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.7_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.7_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.7_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.3_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.3_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.3_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.3_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.3_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.1_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.1_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.1_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.1_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_adaptive_a0.1_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a10_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a10_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a10_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a10_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a10_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a1_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a1_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a1_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a1_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a1_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.7_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.7_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.7_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.7_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.7_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.3_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.3_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.3_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.3_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.3_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.1_seed42_seed42,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.1_seed123_seed123,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.1_seed456_seed456,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.1_seed789_seed789,E3,REUSE,True,COMPLETE,True,,
+E3/network_e3_calibrated_a0.1_seed2024_seed2024,E3,REUSE,True,COMPLETE,True,,
+E4/E4_adaptive_krum_eps0.2_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps0.2_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps0.2_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps0.5_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps0.5_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps0.5_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps1_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps1_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps1_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps3_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps3_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps3_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps5_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps5_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps5_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps10_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps10_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps10_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps15_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_adaptive_krum_eps15_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_adaptive_krum_eps15_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps0.2_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps0.2_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps0.2_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps0.5_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps0.5_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps0.5_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps1_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps1_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps1_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps3_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps3_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps3_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps5_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps5_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps5_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps10_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps10_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps10_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps15_a0.7_minmax_seed42,E4,REUSE,True,NO_MANIFEST (recover from VM),,,
+E4/E4_calibrated_krum_eps15_a0.7_minmax_seed123,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4/E4_calibrated_krum_eps15_a0.7_minmax_seed456,E4,NEW_RUN,False,NO_MANIFEST (recover from VM),,missing FINAL_TEST; missing FINAL_VALIDATION; missing per_client_scores; missing dp_final_epsilon,seeds 123/456 not run (no VM access) -- descoping requested from supervisor
+E4b/network_e4b_A_bn_nodp_seed42,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_A_bn_nodp_seed123,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_A_bn_nodp_seed456,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_A_bn_nodp_seed789,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_A_bn_nodp_seed2024,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_B_gn_nodp_seed42,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_B_gn_nodp_seed123,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_B_gn_nodp_seed456,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_B_gn_nodp_seed789,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_B_gn_nodp_seed2024,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_C_gn_dp_eps5_seed42,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_C_gn_dp_eps5_seed123,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_C_gn_dp_eps5_seed456,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_C_gn_dp_eps5_seed789,E4b,REUSE,True,COMPLETE,True,,
+E4b/network_e4b_C_gn_dp_eps5_seed2024,E4b,REUSE,True,COMPLETE,True,,
+E5b/network_task5_madk_plain_k2.0_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.0_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.0_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.0_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.0_seed2024,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.0_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.0_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.0_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.0_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.0_seed2024,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.5_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.5_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.5_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.5_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k2.5_seed2024,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.5_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.5_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.5_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.5_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k2.5_seed2024,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.0_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.0_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.0_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.0_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.0_seed2024,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k3.0_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k3.0_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k3.0_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k3.0_seed789,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k3.0_seed2024,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_plain_k3.5_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.5_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.5_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.5_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k3.5_seed2024,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k3.5_seed42,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k3.5_seed123,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k3.5_seed456,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k3.5_seed789,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k3.5_seed2024,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_plain_k4.0_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k4.0_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k4.0_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k4.0_seed789,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_plain_k4.0_seed2024,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k4.0_seed42,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k4.0_seed123,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k4.0_seed456,E5b,REUSE,True,NO_MANIFEST,,,
+E5b/network_task5_madk_calibrated_k4.0_seed789,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5b/network_task5_madk_calibrated_k4.0_seed2024,E5b,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5a/network_task5_fsweep_plain_f1_seed42,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f1_seed123,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f1_seed456,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f1_seed789,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f1_seed2024,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f1_seed42,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f1_seed123,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f1_seed456,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f1_seed789,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f1_seed2024,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f2_seed42,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f2_seed123,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f2_seed456,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f2_seed789,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f2_seed2024,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f2_seed42,E5a,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5a/network_task5_fsweep_calibrated_f2_seed123,E5a,RERUN,False,NO_MANIFEST,,missing FINAL_TEST; missing FINAL_VALIDATION,
+E5a/network_task5_fsweep_calibrated_f2_seed456,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f2_seed789,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f2_seed2024,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f3_seed42,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f3_seed123,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f3_seed456,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f3_seed789,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_plain_f3_seed2024,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f3_seed42,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f3_seed123,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f3_seed456,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f3_seed789,E5a,REUSE,True,NO_MANIFEST,,,
+E5a/network_task5_fsweep_calibrated_f3_seed2024,E5a,REUSE,True,NO_MANIFEST,,,
+E6/network_e6_full_seed42,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_full_seed123,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_full_seed456,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_full_seed789,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_full_seed2024,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_dponly_seed42,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_dponly_seed123,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_dponly_seed456,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_dponly_seed789,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_dponly_seed2024,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_heteroonly_seed42,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_heteroonly_seed123,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_heteroonly_seed456,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_heteroonly_seed789,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_heteroonly_seed2024,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_off_seed42,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_off_seed123,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_off_seed456,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_off_seed789,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E6/network_e6_off_seed2024,E6,NEW_RUN,False,NO_MANIFEST,,missing FINAL_TEST; missing per_client_scores; missing dp_final_epsilon,"Raw files not in upload; only E6_Results_Analysis.md (claims 20 runs, git f5ff72f2). Recover from VM."
+E7/fedavg_a1_eps1_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps1_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps1_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps1_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps1_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps1_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps5_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps5_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps5_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps5_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps5_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps5_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps10_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps10_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps10_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps10_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps10_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a1_eps10_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps1_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps1_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps1_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps1_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps1_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps1_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps5_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps5_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps5_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps5_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps5_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps5_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps10_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps10_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps10_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps10_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps10_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/fedavg_a0.3_eps10_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps1_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps1_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps1_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps1_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps1_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps1_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps5_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps5_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps5_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps5_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps5_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps5_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps10_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps10_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps10_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps10_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps10_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a1_eps10_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps1_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps1_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps1_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps1_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps1_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps1_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps5_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps5_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps5_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps5_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps5_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps5_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps10_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps10_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps10_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps10_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps10_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/adaptive_krum_a0.3_eps10_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps1_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps1_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps1_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps1_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps1_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps1_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps5_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps5_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps5_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps5_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps5_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps5_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps10_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps10_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps10_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps10_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps10_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a1_eps10_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps1_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps1_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps1_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps1_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps1_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps1_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps5_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps5_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps5_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps5_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps5_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps5_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps10_gaussian_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps10_gaussian_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps10_gaussian_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps10_minmax_seed42,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps10_minmax_seed123,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E7/calibrated_krum_a0.3_eps10_minmax_seed456,E7,NEW_RUN,False,N/A,,not run,Not run: no compute access; descoping requested from supervisor
+E8/fedavg_1.0vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/fedavg_0.5vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/adaptive_krum_1.0vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/adaptive_krum_0.5vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/calibrated_krum_1.0vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/calibrated_krum_0.5vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/dp_calibrated_krum_1.0vcpu,E8,REUSE,True,NO_MANIFEST,,,
+E8/dp_calibrated_krum_0.5vcpu,E8,REUSE,True,NO_MANIFEST,,,

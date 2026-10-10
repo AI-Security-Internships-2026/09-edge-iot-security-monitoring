@@ -23,10 +23,10 @@
   },
 
   "class_weight_multipliers_application": {
-    "Uploading": 1.3,
-    "XSS": 1.5,
-    "Fingerprinting": 1.3,
-    "validated_on_split": "UNVALIDATED -- see task.py:build_criterion_application() docstring history items 1-4. Originally chosen against what was, pre-DAT1, a test-adjacent metric (each client's own local held-out split, before a proper global TEST holdout existed). Must be re-derived against VALIDATION-split per-class F1 before being cited in the paper as deliberately tuned (DAT1 Task 2)."
+    "Uploading": 1.0,
+    "XSS": 1.0,
+    "Fingerprinting": 1.0,
+    "validated_on_split": "REMOVED -- no manual per-class multipliers are applied (all 1.0 = neutral). The pre-DAT1 values (Uploading 1.3, XSS 1.5, Fingerprinting 1.3) were chosen against a test-adjacent metric (each client's own local held-out split, before a global TEST holdout existed) and were not re-derived on the global VALIDATION split, so they were dropped rather than carried forward as unjustified tuning. The application criterion now uses only the inverse-sqrt class weights (clamped at a 5.0 max ratio) with FocalLoss gamma=2.0; none of these were tuned against TEST. The VALIDATION mu-sweep recorded under fedprox_mu was run with all three at 1.0 (VM config), so this file now matches the configuration that produced it. The keys are retained at 1.0 so config validation and task.py keep a single code path. See task.py:build_criterion_application() docstring, history item 5."
   },
 
   "trimmed_mean_beta": {

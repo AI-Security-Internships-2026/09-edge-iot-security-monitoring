@@ -32,9 +32,6 @@ experiments/
     requirements.txt         <- exact pinned dependencies
   configs/
     hyperparams.json         <- tunables with validated_on_split provenance
-    E1_baselines.json        <- baseline campaign definition
-    E2_aggregators.json      <- aggregator x attack campaign definition
-  docker_ram_latency_v2/     <- separate RAM/latency Docker test suite (own README)
 datasets/                    <- NOT committed; you download it (Step 4)
 docs/                        <- literature review, proposal, weekly progress
 ```
@@ -43,8 +40,9 @@ docs/                        <- literature review, proposal, weekly progress
 
 ## Quickstart (5 steps)
 
-Tested target: Python 3.11 on Linux / WSL2. The pinned versions in
-`requirements.txt` were frozen from a Python 3.11 virtualenv.
+Tested target: Linux / WSL2. The pinned versions in `requirements.txt` were
+frozen from a Python 3.11 virtualenv; if `pip install` fails on a different
+Python version, use 3.11.
 
 **1. Clone**
 
@@ -56,7 +54,7 @@ cd 09-edge-iot-security-monitoring
 **2. Create and activate a virtual environment**
 
 ```bash
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -100,6 +98,12 @@ slower than later runs.
 Use `application` instead of `network` to train the 52-feature application
 model.
 
+**Windows note:** if you redirect output to a file (e.g. `> run.log` or
+PowerShell's `*>`), set `PYTHONUTF8=1` first (`set PYTHONUTF8=1` in cmd,
+`$env:PYTHONUTF8="1"` in PowerShell). The training logs contain non-ASCII
+characters, and Python's default Windows encoding for redirected output will
+otherwise crash with a `UnicodeEncodeError`. Linux / WSL2 is unaffected.
+
 ---
 
 ## Dataset and checksum
@@ -118,7 +122,7 @@ md5sum "datasets/Edge-IIoTset dataset/Selected dataset for ML and DL/DNN-EdgeIIo
 
 | File | MD5 |
 |---|---|
-| `DNN-EdgeIIoT-dataset.csv` | `<FILL IN — md5sum of the copy the paper results were produced from>` |
+| `DNN-EdgeIIoT-dataset.csv` | `ee17d434bade0b980ab0d59764a67dfd` |
 
 Results are only comparable if this checksum matches the one recorded here.
 If the Kaggle copy is ever updated upstream, record the new checksum and note
@@ -158,8 +162,12 @@ full list and per-attack parameters.
 
 ## Reproducing the reported results
 
-- **E1 (baselines)** and **E2 (aggregators × attacks)** are defined in
-  `experiments/configs/E1_baselines.json` and `E2_aggregators.json`.
+- **E1 (baselines)** and **E2 (aggregators × attacks)** are run entirely
+  through CLI flags (`--ablation-mode`, `--aggregator`, `--attack-type`,
+  `--byzantine`, `--seed`, `--tag`); there are no per-experiment config
+  files. Only tunable hyperparameters live in
+  `experiments/configs/hyperparams.json`. See "Choosing an aggregator" above
+  for example commands.
 - E2's summary table is produced from the per-cell result CSVs by
   `analyze_e2.py`, which expects them under `e2_results_pull/` and writes
   `table2_full.csv` and `e2_all_cells_raw.csv`.
@@ -199,11 +207,12 @@ to that older name is a naming error, not a change in what the code does.
 
 ---
 
-## Docker RAM/latency suite
+## Docker RAM/latency benchmark
 
-`experiments/docker_ram_latency_v2/` is a separate harness that measures RAM
-and timing only (no accuracy claims). See its own `README.md`. Run
-`python verify_results.py results` there before exporting any results.
+The Docker RAM/latency benchmark (E8) is a separate harness that measures RAM
+and timing only (no accuracy claims). Its harness and result folders are **not
+part of this repository checkout**; the E8 results are reported in the paper.
+Nothing in the Quickstart or the experiments above depends on it.
 
 ---
 

@@ -1,0 +1,21 @@
+BAS1 / Issue #22 -- pytest, final run (output as pasted)
+Run from: C:\Users\Zarawar Khan\09-edge-iot-security-monitoring\experiments\Current model
+
+====================================================== test session starts =======================================================
+platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Zarawar Khan\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Zarawar Khan\09-edge-iot-security-monitoring\experiments\Current model
+collected 8 items
+
+tests/test_aggregators.py::test_fedavg_matches_hand_calculation PASSED                                                      [ 12%]
+tests/test_aggregators.py::test_legacy_fedprox_aggregate_matches_new_fedavg PASSED                                          [ 25%]
+tests/test_aggregators.py::test_coordinate_median_matches_hand_calculation PASSED                                           [ 37%]
+tests/test_aggregators.py::test_trimmed_mean_beta_0_2_matches_hand_calculation PASSED                                       [ 50%]
+tests/test_aggregators.py::test_trimmed_mean_beta_0_1_on_n5_is_a_noop PASSED                                                [ 62%]
+tests/test_aggregators.py::test_multi_krum_matches_hand_calculation PASSED                                                  [ 75%]
+tests/test_aggregators.py::test_multi_krum_drops_the_extreme_outlier_when_m_is_tight PASSED                                 [ 87%]
+tests/test_aggregators.py::test_adaptive_multi_krum_matches_hand_calculation PASSED                                         [100%]
+
+======================================================= 8 passed in 0.62s ========================================================
+
+Note: Python 3.14.5 (README states the pinned requirements were frozen on 3.11).

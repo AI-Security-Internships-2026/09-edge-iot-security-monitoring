@@ -1697,7 +1697,7 @@ def supplementary_guard_comparison(out_dir, bounded_directional_tpr_norm_guard=N
         return fmt(v) if v is not None else f"-- ({expected_note})"
 
     rows = [
-        ["zkFL (IEEE 2025)", "Cryptographic ZKP proof-of-update-norm",
+        ["zkFL (IEEE 2025)", "Cryptographic zero-knowledge proof of update norm",
          "TBD -- fill in from cited paper's own reported overhead",
          "No bounded-directional attack test cited in their paper; "
          "assumed undetected (0\\% TPR) absent evidence otherwise"],
@@ -1723,7 +1723,7 @@ def supplementary_guard_comparison(out_dir, bounded_directional_tpr_norm_guard=N
         header_cols=["Approach", "Mechanism", "Bounded-directional TPR",
                      "Note"],
         rows=tex_rows,
-        notes="Defuses the 'why not real ZKP?' reviewer question: the "
+        notes="Defuses the 'why not a real zero-knowledge proof?' reviewer question: the "
               "three approaches make different cost/coverage trade-offs, "
               "not a strict dominance ordering.",
     )

@@ -1,0 +1,16 @@
+BAS1 / Issue #22 -- ZKP naming audit (final, after fixes)
+Run from repo root: C:\Users\Zarawar Khan\09-edge-iot-security-monitoring
+
+> findstr /s /i /n /c:"zkp" *.py *.md *.json *.csv *.txt *.yml *.yaml *.toml
+experiments\Current model\defences\hmac_norm_guard.py:4:Historically misnamed "ZKP" throughout this codebase -- it is NOT a
+FINDSTR: Warning - input file experiments\Current model\missing_facts.txt is in Unicode format.
+
+> dir /s /b *zkp*
+File Not Found
+
+Supplementary check for the UTF-16 file findstr cannot search reliably:
+> powershell -Command "Select-String -Path 'experiments\Current model\missing_facts.txt' -Pattern 'zkp' -SimpleMatch"
+(no output -- no matches)
+
+Result: exactly 1 content hit (the permitted disclaimer, hmac_norm_guard.py:4);
+no filenames contain "zkp".

@@ -1,0 +1,18 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Zarawar Khan\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Zarawar Khan\09-edge-iot-security-monitoring\experiments\Current model
+collecting ... collected 1 item
+
+tests/test_dat1_real_smoke_subprocess.py::test_real_smoke_run_test_holdout_never_opened_during_training 
+=== DAT1 smoke-run audit ===
+python            : 3.14.5  torch 2.12.1+cpu
+platform          : win32
+main pid          : 18548
+worker pids seen  : [13148, 13648, 19452] (CPU pool)
+total open events : 14524
+worker opens of protected files : 0
+per-round log appends : 11; FINAL_TEST first opened at log line 14714 (last round append at 14711)
+PASSED
+
+============================= 1 passed in 34.88s ==============================

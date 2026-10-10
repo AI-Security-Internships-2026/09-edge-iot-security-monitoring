@@ -221,73 +221,10 @@ def _write_synthetic_edge_iiot_csv(csv_path, rows_per_class=50, n_numeric_featur
     df.to_csv(csv_path, index=False)
 
 
-def test_real_smoke_run_test_holdout_never_opened_during_training(
-    tmp_path, monkeypatch, isolated_splits_dir
-):
-    """
-    DAT1 (Mati86 review): a REAL 1-round, 10-client main.py invocation,
-    not the synthetic-cache stand-in above, using runtime file-access
-    instrumentation (sys.addaudithook) to record every file main.py
-    opens and confirm the global TEST-holdout split artifact is opened
-    at most once, matching the static call-site check
-    (test_main_py_calls_test_holdout_exactly_once_after_round_loop)
-    against ACTUAL runtime behavior rather than just source shape.
-
-    Mechanism:
-      - EDGE_IIOT_CSV_PATH env var (see data_loader.py) points main.py
-        at a tiny synthetic CSV instead of the real ~1.2GB dataset.
-      - sys.argv is set for --rounds 1 so this runs in seconds.
-      - runpy.run_path executes the REAL main.py source, not a
-        reimplementation of it.
-      - sys.addaudithook records every "open"/"os.open" event for the
-        lifetime of that run.
-
-    Known scope limitation (documented rather than hidden): main.py
-    uses ProcessPoolExecutor for USE_DP=False runs. sys.addaudithook
-    only auto-propagates to worker processes that are FORKED (the
-    default multiprocessing start method on Linux); it would NOT
-    propagate under a spawn-based start method (e.g. default Windows/
-    macOS). This test's guarantee is therefore scoped to fork-based
-    execution, matching this project's Linux CI. If the start method
-    ever changes to spawn, this test would need per-process
-    instrumentation instead (e.g. a sitecustomize.py injected into
-    worker processes) to keep the same guarantee.
-    """
-    import runpy
-
-    csv_path = tmp_path / "tiny_edge_iiot.csv"
-    _write_synthetic_edge_iiot_csv(csv_path)
-    monkeypatch.setenv("EDGE_IIOT_CSV_PATH", str(csv_path))
-    monkeypatch.setattr(
-        "sys.argv",
-        ["main.py", "--model-type", "network", "--seed", "42", "--rounds", "1"],
-    )
-
-    opened_paths = []
-
-    def _audit_hook(event, args):
-        if event in ("open", "os.open"):
-            opened_paths.append(str(args[0]))
-
-    sys.addaudithook(_audit_hook)
-
-    runpy.run_path(MAIN_PY_PATH, run_name="__main__")
-
-    test_npz_name = f"TVT_global_network_42.npz"
-    test_npz_opens = [p for p in opened_paths if os.path.basename(p) == test_npz_name]
-    # Loaded at most once: either "not yet built" (0 opens, if this is
-    # the very first build and it's written rather than opened-then-
-    # read) or "built once and read back for the final holdout eval"
-    # (1 open). More than 1 means it was opened again somewhere during
-    # client partitioning, which is the exact leak this test exists to
-    # catch.
-    assert len(test_npz_opens) <= 1, (
-        f"TVT_global_network_42.npz was opened {len(test_npz_opens)} "
-        f"times during a real 1-round/10-client run -- expected at "
-        f"most once (the single final-evaluation read). Extra opens "
-        f"indicate the TEST holdout is being touched somewhere during "
-        f"client local-train steps."
-    )
+# NOTE: test_real_smoke_run_test_holdout_never_opened_during_training now lives in
+# test_dat1_real_smoke_subprocess.py. The old runpy + audit-hook version was removed:
+# it passed `--model-type` (main.py takes the model type positionally), recorded opens
+# in a list forked workers cannot share, and only worked under fork.
 
 
 def test_test_holdout_matches_global_test_when_evaluated_separately(

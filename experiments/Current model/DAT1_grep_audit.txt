@@ -1,0 +1,92 @@
+DAT1 GREP AUDIT -- fit-transform call lineage
+======================================================================
+timestamp (UTC) : 2026-10-07T19:56:50+00:00
+directory       : C:\Users\Zarawar Khan\09-edge-iot-security-monitoring\experiments\Current model
+git commit      : 47c452d4c4f99d49314ae16e5cc29b92b1483874
+git working tree: HAS UNCOMMITTED CHANGES -> commit before posting this as evidence
+python          : 3.14.5
+equivalent cmd  : grep -n "\.fit_transform\(" *.py   (23 top-level .py files, + 24 in subfolders)
+
+Scanned files (SHA-256):
+  03c09bbe35d415b39a2afe68043b65546e1c9e153310eeb10c7145a37f056bc6  analysis_paper.py
+  1fb92cdf656287faa21db99de1bcd50d04d8da799f5cf246dfa381d1a78aa66a  apply_fedavg_attack_patch.py
+  dab6c0227796ed2a58717a50b6daad82067676b5bd06aea2078e5ed94e077965  audit_prv1.py
+  468fd8e005c4da2ff5fd07ffb6cbc2cd2133374816d142ad377bbf7cdfd388c0  bench_common.py
+  4a35e93af3d65434824baa1ae159456f184c434c3c324be594b1b110de130238  calibrate_minmax_attack.py
+  b306ed34520e9c24bcf9ba2d0b349e09628c85a480933403b2d38f4ab4a304ef  ciciot2023_loader.py
+  599d3a78d82258959eed16f7c7d154128a493fda93e9fd512e035953edf7b648  collect_missing_facts.py
+  0fa575df1a6ab0a9099c2ab5843c4eb2a0e135e02e8ac13266297c1e7ce24846  config_loader.py
+  f6286c775b6e082b905b8ce77bd87b0b81a60d00e60fd9c254c150582a9c7e01  dat1_grep_audit.py
+  6a835ed4a4f0b43719b9d9105c4fdab619e50266676d81eb778c244419650ca3  data_loader.py
+  978cb7418f96a16c72483aeb0e0c5a0ae554f326b9ff42f88543398269ab77f2  docker_bench_client.py
+  f1953df7e0c78ede5e1ddb824310c35fa1c04edd4afb23feb730ced2df86664e  docker_bench_server.py
+  2448918612a5565556960179ace4247e5d8a0891aff0e771d4babf9c53f79ab2  dp_persistent_client_state.py
+  6b8f4fd23ef44fa7eac3dba0ef585936bc9715d3ef578bbeaba7b36fae281849  dump_round_for_decomposition.py
+  ab48ccb86090a63d0db92a5020d1fe2344a707c63a31085ffbbbe1bc2dd8ebdd  main.py
+  c837b998e3408754e6b79548512a49bbb047e1d5b1cf3dc527c11829b21d3665  model_defs.py
+  78f3e1a83d7838905d912adcca933edffbf77faf64f03b24ef81e9b0557506b6  run_e7_campaign.py
+  b291a86ebdee237ea3da0191948b432e49a95e369f13f4f5d01bba73baccb33b  run_e8_local.py
+  b7ed130b619b4c7339bc9380a6a2647619761d9eb31d0280bccbc51a00c53f88  run_nodp_regression.py
+  f2c0f62d63f8b1db5e48a5aa89b994d456f31c71686139d5de8713f28ce58e2d  task.py
+  0710008337a3ae7f43e0668f73574d4b16ddc5fc10adb562e81a5dc1cbd65e35  test_calibrated_krum.py
+  91c84983193e8f65feb09060bfa586c9b791772c12f8cc8fecffd40b0e387bde  test_harness_offline.py
+  1bb4d19d4a3b8e7c080fd6e57682546477d3df903e3c8c7eaaa031df393c1795  tpr_fix_calibration_sweep_v2.py
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  defences\__init__.py
+  a717a144dad68145209462eb39551e74c20c37dd2279edd704f76b8cca621ec1  defences\byzantine.py
+  bd7a9a11b12fb4ba11c5ca0c9d788a098d0300b332c7a8b9b84b2c2c2ca4b2a1  defences\he_aggregation.py
+  185cc52310d62a1865aaa0608784220388a42be28727daffae38e8f0990235c5  defences\he_local.py
+  3b8dd18e9722b2ecb57f96ed1abbe2301cf34410d670b7c43d1e6dd23d4add2c  defences\hmac_norm_guard.py
+  0f70a8624a5a27c162c250730026601c7f4c3aeef8f23e3d14ff8fd7ca07f25f  defences\krum.py
+  468fd8e005c4da2ff5fd07ffb6cbc2cd2133374816d142ad377bbf7cdfd388c0  e8_harness\bench_common.py
+  978cb7418f96a16c72483aeb0e0c5a0ae554f326b9ff42f88543398269ab77f2  e8_harness\docker_bench_client.py
+  f1953df7e0c78ede5e1ddb824310c35fa1c04edd4afb23feb730ced2df86664e  e8_harness\docker_bench_server.py
+  b291a86ebdee237ea3da0191948b432e49a95e369f13f4f5d01bba73baccb33b  e8_harness\run_e8_local.py
+  91c84983193e8f65feb09060bfa586c9b791772c12f8cc8fecffd40b0e387bde  e8_harness\test_harness_offline.py
+  7eaa67ef21fbad03b740a8ea59d5f52b1a1e8f30cfb2131abcfa3c81b1bc0d83  scripts\aggregate_task4_results.py
+  f0eda790cd1a317b7d995f7116d7935c524e4d33804fd7768d22ff2143c4d796  scripts\aggregate_task5_results.py
+  fcf2848405bda22beeeb37f8c6f6dbeedd3875743433dfde2eaf4b8d22c00203  scripts\build_e2_campaign.py
+  091f69fa78787ed43f703cb862a86e7a29aab037c3b756b65d968481a6aec35e  scripts\check_attack_difficulty.py
+  a6674cdbca2d942156e14acf26194faedcddc278c7009824c2915b20c76ea32e  scripts\clean_e5.py
+  aef59281cfe48212758e148c2e20b12e284e3c7dacc20525857ee439ed2fd963  scripts\fit_hetero_variance.py
+  e2ef84f6467198cce245e7d4d48d833a35f0dce423f23cceecd1e3aff8eae35b  scripts\fit_hetero_variance_fixed.py
+  a7b27e03f65e0f39cf7a07ad0bb253d66d85acadd4821820e959f2570ea04ef6  scripts\freeze_bounded_tau.py
+  82118577f75e92861708e4175bf37f7c3998ddd9d0b760baf1a5d8977ca52b1e  scripts\refit_hetero_alpha0_7.py
+  4b2b9fa2509a535e62497dd6108f02c20d1cd1d67c679a57d526a0e5aeb5b904  scripts\run_e2_campaign.py
+  aa0ef4f8c6de497929231c95409e87ee6457568565b31bd247017ed719df59ec  scripts\run_e5.py
+  d2a8c6213aad6f91c1fcdf50689495a82c03ff174bd1757b6f28bcfe0c50592f  scripts\summarize_e6.py
+  e4ccc112f30a8a5ecbf0cb330920ae58ca19f82c45720553299d36e5108b53dd  scripts\train_centralized.py
+
+Raw hits (grep -n style):
+  ciciot2023_loader.py:298:X_train = scaler.fit_transform(X_train)
+  data_loader.py:517:X_vt = vt.fit_transform(X_train_raw)
+
+Classification:
+  [OK  ] ciciot2023_loader.py:298  in load_and_preprocess_ciciot2023()  arg=X_train
+           X_train = scaler.fit_transform(X_train)
+  [OK  ] data_loader.py:517  in _fit_or_load_scalers()  arg=X_train_raw
+           X_vt = vt.fit_transform(X_train_raw)
+
+AUDIT VERDICT: PASS
+
+Lineage proof for the allowed call sites (TRAIN-only) lives in:
+  data_loader.py        -> tests/test_data_pipeline_dat1.py (test_grep_audit_fit_transform_only_inside_scaler_helper, test_scaler_unaffected_by_test_only_outlier)
+  ciciot2023_loader.py  -> tests/test_dat1_ciciot_audit.py (static lineage + dynamic train-only scaler check)
+
+======================================================================
+Audit unit tests (pytest -v):
+$ python.exe -m pytest -v -p no:cacheprovider tests/test_data_pipeline_dat1.py::test_grep_audit_fit_transform_only_inside_scaler_helper tests/test_data_pipeline_dat1.py::test_grep_audit_fit_transform_repo_wide tests/test_data_pipeline_dat1.py::test_scaler_unaffected_by_test_only_outlier tests/test_dat1_ciciot_audit.py
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Zarawar Khan\AppData\Local\Python\pythoncore-3.14-64\python.exe
+rootdir: C:\Users\Zarawar Khan\09-edge-iot-security-monitoring\experiments\Current model
+collecting ... collected 5 items
+
+tests/test_data_pipeline_dat1.py::test_grep_audit_fit_transform_only_inside_scaler_helper PASSED [ 20%]
+tests/test_data_pipeline_dat1.py::test_grep_audit_fit_transform_repo_wide PASSED [ 40%]
+tests/test_data_pipeline_dat1.py::test_scaler_unaffected_by_test_only_outlier PASSED [ 60%]
+tests/test_dat1_ciciot_audit.py::test_ciciot_fit_transform_is_train_only_static PASSED [ 80%]
+tests/test_dat1_ciciot_audit.py::test_ciciot_scaler_fit_on_train_only_dynamic PASSED [100%]
+
+============================== 5 passed in 4.65s ==============================
+audit tests exit code: 0 -> PASS
+
+OVERALL: PASS

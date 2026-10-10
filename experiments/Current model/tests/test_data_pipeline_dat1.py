@@ -288,6 +288,11 @@ def test_grep_audit_fit_transform_repo_wide():
     for fname in py_files:
         if fname == "data_loader.py":
             continue  # covered by test_grep_audit_fit_transform_only_inside_scaler_helper
+        if fname == "ciciot2023_loader.py":
+            # Covered by test_dat1_ciciot_audit.py, which proves the single
+            # fit_transform call is TRAIN-only (static lineage + dynamic
+            # scaler-statistics check) rather than silently exempting it.
+            continue
         with open(os.path.join(dir_path, fname), encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
         hits = [(i + 1, l.strip()) for i, l in enumerate(lines) if ".fit_transform(" in l]

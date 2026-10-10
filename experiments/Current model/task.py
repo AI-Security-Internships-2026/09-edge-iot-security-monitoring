@@ -68,6 +68,15 @@ def build_criterion_application(seed=42):
          sweep (not client-local splits, not TEST) and this docstring
          updated to record that sweep's result, per DAT1 Task 2's
          no-tuning-on-test requirement.
+      5. RESOLVED by REMOVAL: rather than re-derive them, the manual
+         multipliers were dropped (all set to 1.0 in hyperparams.json,
+         so the three multiplications below are no-ops). Weighting is
+         now inverse-sqrt class frequency only. The VALIDATION fedprox
+         mu-sweep was run on the VM with these multipliers already at
+         1.0, so the committed config now matches what was actually
+         run. Any application-model result produced with the old
+         committed 1.3/1.5/1.3 values must not be mixed with results
+         produced with 1.0.
     """
     counts = get_class_counts_application(seed=seed)
     w = _inverse_sqrt_weights(counts)

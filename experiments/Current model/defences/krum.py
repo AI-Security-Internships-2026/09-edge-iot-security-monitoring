@@ -918,49 +918,23 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
     multi_krum() is explicitly required to stay UNCHANGED per Issue 3's
     constraint, and inserting a shared helper touches its file region).
 
-    Algorithm -- ONE DELIBERATE, FLAGGED CORRECTION to the ticket's
-    literal pseudocode, everything else matching it exactly (using
-    this file's established (all_params, weights, num_byzantine=)
-    parameter convention instead of the ticket's proposed one -- see
-    the module-level JUDGMENT CALL notes above):
+    Algorithm -- matches Issue 4's specified formula:
 
         for each client pair i, j (finite clients only):
-            raw_dist_ij = L2(flat_i, flat_j)   [SQUARED, matches multi_krum's
-                                                 and adaptive_multi_krum's own
-                                                 convention in this same file]
+            raw_dist_ij = L2(flat_i, flat_j)          [true (un-squared) L2]
             var_dp     = dp_variance(...)      if use_dp_calibration else 0
             var_hetero = hetero_variance(...)  if use_hetero_calibration else 0
-            expected_var_ij = var_dp + var_hetero
-                              + baseline_honest_std_from_prior_round**2
-            calibrated_dist_ij = raw_dist_ij / (expected_var_ij + EPS)
+            expected_std_ij = sqrt(var_dp + var_hetero
+                                   + baseline_honest_std_from_prior_round**2)
+            calibrated_dist_ij = raw_dist_ij / (expected_std_ij + EPS)
 
-    CORRECTION FLAGGED: the ticket's literal pseudocode divides
-    raw_dist_ij by expected_STD_ij (i.e. sqrt(var_dp + var_hetero +
-    baseline_std**2)), not expected_VARIANCE_ij. That is a units
-    mismatch given THIS codebase's established convention (confirmed
-    in multi_krum()/adaptive_multi_krum() above: `d = np.sum((flat[i]
-    - flat[j]) ** 2)` -- raw_dist is already a SQUARED distance, i.e.
-    variance-like units). Dividing a squared (variance-scale) quantity
-    by a std-scale quantity does not produce a dimensionless,
-    comparable-across-pairs ratio -- verified empirically against
-    tests/test_calibrated_krum.py's fixture: dividing by std left the
-    honest-heterogeneous clients' calibrated scores several times
-    larger than the honest cluster's own calibrated scores even with
-    the injected perturbation's variance EXACTLY matched by
-    dp_variance()'s prediction, because raw_dist and the divisor
-    weren't on comparable scales. Dividing by the VARIANCE instead
-    (as implemented below) is dimensionally consistent -- raw_dist
-    (variance-scale) / expected_var_ij (variance-scale) = a proper
-    dimensionless ratio -- and empirically collapses the honest-
-    heterogeneous clients' calibrated distances to the same order of
-    magnitude as the honest cluster's own, while leaving uncalibrated
-    (no injected noise) malicious distances clearly elevated, exactly
-    as the ticket's own stated intent describes. If a future
-    empirical validation against Task 1's real logged data finds THIS
-    correction wrong instead, revisit -- but leaving the literal std-
-    division in was verified to not work at all on a controlled
-    synthetic fixture where the ground truth is known exactly, so it
-    was not left in silently.
+    i.e. NormalizedDistance = RawDistance / sqrt(Expected_DPNoise^2 +
+    ClientSizeExpectedDispersion^2 + BaselineHonestStd^2), as written in
+    the issue. The numerator is the un-squared L2 distance; the squared
+    distance matrix is still built because plain Adaptive Krum scoring
+    (used for the round-1 bootstrap and the raw_scores diagnostic) is
+    defined on squared distances. baseline_honest_std_from_prior_round is
+    the std of pairwise L2 distances inside the honest cluster.
 
         per-client calibrated_scores = sum of each client's
             (n - f - 2) smallest CALIBRATED distances (identical
@@ -1097,6 +1071,7 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
             d = float(np.sum((flat[i] - flat[j]) ** 2))
             raw_dist[i][j] = d
             raw_dist[j][i] = d
+    l2_dist = np.sqrt(raw_dist)   # true L2, numerator of the issue's formula
 
     # ── Round-1 bootstrap: plain (uncalibrated) neighbour-sum scores ───
     def _neighbour_sum_scores(dist_matrix):
@@ -1141,7 +1116,7 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
             b_spread = float(np.std(finite_raw_scores))
         b_threshold = b_center + k * b_spread if b_spread > 0 else b_center + EPS
         bootstrap_kept = [i for i in finite_clients if raw_scores_bootstrap[i] <= b_threshold]
-        pairwise_std = _pairwise_std_within(bootstrap_kept, raw_dist)
+        pairwise_std = _pairwise_std_within(bootstrap_kept, l2_dist)
         baseline_honest_std_from_prior_round = (
             pairwise_std if pairwise_std is not None
             # Fallback if bootstrap_kept has <2 members (degenerate):
@@ -1150,7 +1125,7 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
             # scale (sum of `theoretical_neighbours` roughly-iid terms
             # has std ~ sqrt(theoretical_neighbours) times a single
             # term's std, for the variances actually in play here).
-            else float(b_spread) / np.sqrt(max(theoretical_neighbours, 1))
+            else float(np.sqrt(max(b_spread, 0.0) / max(theoretical_neighbours, 1)))
         )
         print(f"  [Calibrated Krum] Round-1 bootstrap: baseline_honest_std "
               f"(pairwise-distance scale) = "
@@ -1180,10 +1155,10 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
                     meta_i, meta_j, alpha_dirichlet, fit_coeffs=hetero_fit_coeffs
                 )
 
-            expected_var_ij = (
+            expected_std_ij = math.sqrt(
                 var_dp + var_hetero + baseline_honest_std_from_prior_round ** 2
             )
-            calibrated_dist[i][j] = raw_dist[i][j] / (expected_var_ij + EPS)
+            calibrated_dist[i][j] = l2_dist[i][j] / (expected_std_ij + EPS)
             calibrated_dist[j][i] = calibrated_dist[i][j]
 
     calibrated_scores = _neighbour_sum_scores(calibrated_dist)
@@ -1234,7 +1209,7 @@ def calibrated_adaptive_multi_krum(all_params, weights, per_client_metadata,
     # caller carries forward as next round's baseline_honest_std_from_
     # prior_round (see the off-by-one judgment call in the docstring
     # above).
-    new_baseline_honest_std = _pairwise_std_within(kept, raw_dist)
+    new_baseline_honest_std = _pairwise_std_within(kept, l2_dist)
     if new_baseline_honest_std is None:
         new_baseline_honest_std = baseline_honest_std_from_prior_round
     raw_scores_this_round = _neighbour_sum_scores(raw_dist)
